@@ -72,11 +72,13 @@ function model(kind, variant, direction) {
   }
   function bulb(x, y, z, rx, ry, rz, color, sides = 9) {
     const rings = [
-      [-0.96, 0.23],
-      [-0.58, 0.82],
+      [-0.98, 0.20],
+      [-0.78, 0.62],
+      [-0.44, 0.90],
       [0.04, 1],
-      [0.64, 0.77],
-      [0.98, 0.2],
+      [0.48, 0.87],
+      [0.79, 0.61],
+      [0.98, 0.20],
     ].map(([height, r]) =>
       Array.from({ length: sides }, (_, i) => {
         const a = (i * 2 * Math.PI) / sides + 0.17;
@@ -259,6 +261,14 @@ export function stamp(kind, variant = 0, direction = 1) {
     g.fill();
     g.stroke();
   }
+  // Bake soft skylight and bounce light into the sprite once, including its bevels.
+  g.globalCompositeOperation = 'source-atop';
+  const light = g.createLinearGradient(left, top, right, bottom);
+  light.addColorStop(0, 'rgba(255,247,205,.23)');
+  light.addColorStop(.50, 'rgba(255,246,219,0)');
+  light.addColorStop(1, 'rgba(38,66,97,.18)');
+  g.fillStyle = light;
+  g.fillRect(left, top, right - left, bottom - top);
   // Project the mesh onto the ground along the sunlight and retain its convex silhouette.
   const cast = points.map(([x, y, z]) => [x + 0.43 * z, y - 0.36 * z]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   function boundary(vertices) {
@@ -274,7 +284,10 @@ export function stamp(kind, variant = 0, direction = 1) {
     }
     return edge.slice(0, -1);
   }
-  const shadow = boundary(cast).concat(boundary(cast.reverse()));
+  const outline = boundary(cast).concat(boundary(cast.reverse()));
+  const shadow = new Path2D();
+  outline.forEach(([x, y], i) => i ? shadow.lineTo(x, y) : shadow.moveTo(x, y));
+  shadow.closePath();
   const result = { image, shadow, left, top, width: image.width / resolution, height: image.height / resolution };
   cache.set(key, result);
   return result;

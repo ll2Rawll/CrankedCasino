@@ -39,6 +39,7 @@ export function landscape(ctx) {
     vr,
     vc,
     hop,
+    squash,
     facing,
     death,
     banked,
@@ -161,8 +162,17 @@ export function landscape(ctx) {
         }
         const spacing = L.period,
           firstCenter = (L.offset || 0) + (L.speed || 0) * t;
-        for (let i = Math.floor((minX - firstCenter) / spacing); i * spacing + firstCenter < maxX; i++)
-          add(L.pads ? 'pad' : 'log', firstCenter + i * spacing, r, L.pads ? variation(seed, r, i) % 5 : 0);
+        for (let i = Math.floor((minX - firstCenter) / spacing); i * spacing + firstCenter < maxX; i++) {
+          const x = firstCenter + i * spacing;
+          const wave = Math.sin(2.4 * t + i + r);
+          if (!L.pads) {
+            const stern = x - Math.sign(L.speed) * L.width / 2;
+            for (const side of [-1, 1]) {
+              strip(stern - .16, r + side * (.22 + .025 * wave), .32 + .06 * wave, .023, '#a2dfeb');
+            }
+          }
+          add(L.pads ? 'pad' : 'log', x, r, L.pads ? variation(seed, r, i) % 5 : 0, 1, 1, .016 * wave);
+        }
       } else if (kind === 'train') {
         for (let x = 0.39 * Math.floor(minX / 0.39); x < maxX; x += 0.39) strip(x, r - 0.43, 0.15, 0.86, '#806044');
         for (const side of [-0.3, 0.3]) {
@@ -214,17 +224,13 @@ export function landscape(ctx) {
     actors.sort((a, b) => a.p.y - b.p.y);
     for (const a of actors) {
       if (a.kind === 'egg' || a.kind === 'hawk') continue;
-      const { shadow } = stamp(a.kind, a.variant, a.dir);
+      a.sprite = stamp(a.kind, a.variant, a.dir);
+      ctx.save();
+      ctx.translate(a.x + .43 * a.lift, a.r - .36 * a.lift);
+      ctx.scale(a.size * a.stretch, a.size);
       ctx.fillStyle = '#243e464a';
-      ctx.beginPath();
-      shadow.forEach(([x, y], i) => {
-        const xx = a.x + x * a.size * a.stretch + 0.43 * a.lift;
-        const yy = a.r + y * a.size - 0.36 * a.lift;
-        if (i) ctx.lineTo(xx, yy);
-        else ctx.moveTo(xx, yy);
-      });
-      ctx.closePath();
-      ctx.fill();
+      ctx.fill(a.sprite.shadow);
+      ctx.restore();
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (const a of actors) {
@@ -235,11 +241,12 @@ export function landscape(ctx) {
         if (img) ctx.drawImage(img, x - scale * 0.6, y - scale, scale * 1.2, scale);
         continue;
       }
-      const s = stamp(a.kind, a.variant, a.dir);
+      const s = a.sprite;
       const u = scale * a.size;
       // Stretch along the projected traffic axis so the front stays on its replay hitbox.
       ctx.save();
       ctx.translate(x, y);
+      if (a.kind === 'hen' && !death) ctx.scale(1 + squash, 1 - squash);
       if (a.stretch !== 1) {
         const angle = Math.atan2(plane.xy, plane.xx);
         ctx.rotate(angle);

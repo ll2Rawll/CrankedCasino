@@ -329,20 +329,14 @@ html.rr-playing, html.rr-playing body { overflow: hidden; overscroll-behavior: n
 .rr-dialog .rr-view { grid-area: 1 / 1; }
 .rr-dialog .rr-view { height: 100%; max-height: none; aspect-ratio: auto; }
 .rr-toolbar { position: absolute; z-index: 5; right: max(12px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top)); }
-.rr-toolbar button, .rr-dialog .rr-pad button {
+.rr-toolbar button {
   min-height: 44px; color: #fff8df; background: #203132e8; border: 1px solid #e9e6be9c;
   box-shadow: inset 0 1px #ffffff30, 0 2px 0 #20313270; border-radius: 14px;
 }
 .rr-toolbar button { padding: 0 15px; font-weight: 800; }
-.rr-dialog .rr-pad {
-  position: absolute; z-index: 4; bottom: max(12px, env(safe-area-inset-bottom)); left: max(10px, env(safe-area-inset-left));
-  grid-template-columns: repeat(4,44px); gap: 4px;
-}
-.rr-dialog .rr-pad button { height: 44px; }
-.rr-dialog .rr-fab { bottom: max(66px, calc(55px + env(safe-area-inset-bottom))); }
-.rr-dialog .rr-fab.is-cash { bottom: max(16px, env(safe-area-inset-bottom)); }
+.rr-dialog .rr-fab { bottom: max(16px, env(safe-area-inset-bottom)); }
 .rr-pad button, .rr-fab { touch-action: manipulation; }
-.rr-dialog .rr-pad button, .rr-dialog .rr-fab { touch-action: none; }
+.rr-dialog .rr-fab { touch-action: none; }
 .rr-fab.is-cash { left: auto; right: 12px; transform: none; overflow: hidden; }
 .rr-fab.is-cash:active { transform: scale(.97); }
 .rr-fab.is-holding::after {

@@ -17,7 +17,8 @@ import { scoreLane, onPlatform } from './rooster-course.js';
 import { landscape } from './rooster-landscape.js';
 import { loadArt } from './rooster-art.js';
 
-const HOP_MS = 120;
+const HOP_MS = 110;
+const SWIPE_PX = 10;
 const COUNTDOWN_MS = 1500;
 const BANK_HOLD_MS = 450;
 const MILESTONES = [10, 20, 30, 40, 50, 60, 75];
@@ -51,7 +52,7 @@ export default {
     stage.classList.add('rr-stage');
     stage.innerHTML = `
       <div class="rr-view">
-        <canvas aria-label="Road Rooster. Tap to hop forward, swipe to dodge."></canvas>
+        <canvas aria-label="Road Rooster. Tap anywhere to hop forward. Swipe left, right, or down to move."></canvas>
         <div class="rr-hud">
           <div class="rr-score"><b class="tnum" data-score>0</b><span>rows</span></div>
           <div class="rr-mult tnum" data-mult>×0.00</div>
@@ -93,7 +94,7 @@ export default {
     }
     function enterGameView() {
       if (gameDialog.open || !matchMedia('(any-pointer: coarse)').matches) return;
-      gameDialog.append(viewEl, pad);
+      gameDialog.append(viewEl);
       gameDialog.showModal();
       document.documentElement.classList.add('rr-playing');
     }
@@ -101,7 +102,7 @@ export default {
       if (!gameDialog.open) return;
       gameDialog.close();
       stage.append(viewEl);
-      playBtn.after(pad);
+      clearGesture();
       document.documentElement.classList.remove('rr-playing');
       stopHold();
       if (!destroyed) renderControls();
@@ -134,7 +135,7 @@ export default {
     let lastCheck = 0;
     let deathAt = null; // { t, cause, x, y }
     let cashedAt = null; // { t, mult, pay }
-    const chick = { fromRow: 0, fromCol: RR.START_COL, hopT0: -1e9, face: 1, bumpT0: -1e9, bumpDir: 0 };
+    const chick = { fromRow: 0, fromCol: RR.START_COL, fromLift: 0, hopT0: -1e9, face: 1, bumpT0: -1e9, bumpDir: 0 };
     const scene = landscape(ctx);
     const particles = [];
     const floats = []; // canvas float texts
@@ -157,6 +158,8 @@ export default {
       chick.fromCol = RR.START_COL;
       chick.hopT0 = -1e9;
       chick.face = 1;
+      chick.fromLift = 0;
+      clearGesture();
       particles.length = 0;
       floats.length = 0;
       trainsWarned.clear();
@@ -180,11 +183,14 @@ export default {
     resize();
 
     // ---------------------------------------------------------- HUD + controls
+    function bankLabel() {
+      return scoreMode ? `${best} ${best === 1 ? 'pt' : 'pts'}` : fmt(round2((ticket?.amount || 0) * rrMult(best)));
+    }
     function renderControls() {
       viewEl.classList.toggle('rr-score-mode', scoreMode);
       modePicker.disabled = phase !== 'idle' && phase !== 'over';
       for (const field of [bet.el, ladder, readout]) field.hidden = scoreMode;
-      const bankValue = scoreMode ? `${best} ${best === 1 ? 'pt' : 'pts'}` : fmt(round2((ticket?.amount || 0) * rrMult(best)));
+      const bankValue = bankLabel();
       viewEl.classList.toggle('rr-result', phase === 'over');
       if (phase !== 'run') stopHold();
       const live = phase === 'run' || phase === 'countdown';
@@ -325,6 +331,7 @@ export default {
       if (!scoreMode) moves.push([Math.round(t * 1000), m]);
       chick.fromRow = visRow(now);
       chick.fromCol = visCol(now);
+      chick.fromLift = hopHeight(now);
       chick.hopT0 = now;
       row = nr;
       col = nc;
@@ -340,7 +347,12 @@ export default {
           for (const cachedRow of lanes.keys()) if (cachedRow < best - 64) lanes.delete(cachedRow);
         }
         renderHud();
-        renderControls();
+        if (best === 1) renderControls();
+        else {
+          const label = bankLabel();
+          fab.lastElementChild.textContent = label;
+          playBtn.lastElementChild.textContent = label;
+        }
         floats.push({ text: '+1', r: row, c: col, t0: now, color: '#ffd979' });
         if (!scoreMode && MILESTONES.includes(best)) milestone(best);
       }
@@ -539,42 +551,62 @@ export default {
     };
     document.addEventListener('keydown', onKey);
     let touch = null;
+    function clearGesture(event) {
+      if (event?.pointerId == null || event.pointerId === touch?.id) touch = null;
+    }
     const cancelMultiTouch = (event) => {
       if (event.pointerType === 'touch' && !event.isPrimary) {
-        touch = null;
+        clearGesture();
         stopHold();
       }
     };
     view.addEventListener('pointerdown', cancelMultiTouch, true);
-    canvas.addEventListener('pointerdown', (e) => {
-      if (phase !== 'run' || !e.isPrimary || e.button !== 0) return;
-      canvas.setPointerCapture(e.pointerId);
-      touch = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    // The dialog includes the safe-area margins. Inline play owns only its board.
+    view.addEventListener('pointerdown', (event) => {
+      if (phase !== 'run' || !event.isPrimary || event.button !== 0) return;
+      const surface = gameDialog.open ? gameDialog : viewEl;
+      if (!surface.contains(event.target) || event.target.closest('button')) return;
+      surface.setPointerCapture(event.pointerId);
+      touch = { x: event.clientX, y: event.clientY, id: event.pointerId, at: performance.now() };
     });
-    canvas.addEventListener('pointerup', (e) => {
-      if (!touch || touch.id !== e.pointerId) return;
-      const dx = e.clientX - touch.x;
-      const dy = e.clientY - touch.y;
-      touch = null;
-      if (phase === 'idle' || phase === 'over') return;
-      if (Math.hypot(dx, dy) < 22) return move(0);
-      if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 3 : 2);
-      else move(dy < 0 ? 0 : 1);
-    });
-    canvas.addEventListener('lostpointercapture', (event) => {
-      if (touch?.id === event.pointerId) touch = null;
-    });
+    function recognizeMove(event) {
+      if (!touch || touch.id !== event.pointerId) return;
+      const dx = event.clientX - touch.x;
+      const dy = event.clientY - touch.y;
+      const horizontal = Math.abs(dx) > Math.abs(dy);
+      const swipe = Math.max(Math.abs(dx), Math.abs(dy)) >= SWIPE_PX;
+      if (!swipe && event.type !== 'pointerup') return;
+      clearGesture();
+      if (!swipe) move(0);
+      else if (horizontal) move(dx > 0 ? 3 : 2);
+      else move(dy > 0 ? 1 : 0);
+    }
+    view.addEventListener('pointermove', recognizeMove);
+    view.addEventListener('pointerup', recognizeMove);
+    view.addEventListener('pointercancel', clearGesture);
+    view.addEventListener('lostpointercapture', clearGesture);
+    window.addEventListener('blur', clearGesture);
 
     // ---------------------------------------------------------- chicken position (with hop easing)
     function hopU(now) {
       return clamp((now - chick.hopT0) / (reducedMotion() ? 40 : HOP_MS), 0, 1);
     }
-    function visRow(now) {
+    function hopHeight(now) {
       const u = hopU(now);
+      const peak = reducedMotion() ? 0.04 : 0.32;
+      const arc = 4 * u * (1 - u);
+      return peak * arc + (u < 0.5 ? chick.fromLift * (1 - arc) : 0);
+    }
+    function travel(now) {
+      const u = hopU(now);
+      return u * (2 - u);
+    }
+    function visRow(now) {
+      const u = travel(now);
       return chick.fromRow + (row - chick.fromRow) * u;
     }
     function visCol(now) {
-      const u = hopU(now);
+      const u = travel(now);
       return chick.fromCol + (ridingCol(endT ?? worldT(now)) - chick.fromCol) * u;
     }
     function chickScreen(now) {
@@ -594,15 +626,16 @@ export default {
       return soon;
     }
 
-    function drawParticles() {
+    function drawParticles(dt) {
+      const step = dt * 60;
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vx *= 0.96;
-        p.vy = p.vy * 0.96 + 0.12;
-        p.rot += p.vr;
-        p.life--;
+        p.x += p.vx * step;
+        p.y += p.vy * step;
+        p.vx *= 0.96 ** step;
+        p.vy = p.vy * 0.96 ** step + 0.12 * step;
+        p.rot += p.vr * step;
+        p.life -= step;
         if (p.life <= 0) {
           particles.splice(i, 1);
           continue;
@@ -654,9 +687,12 @@ export default {
       const nudge = Math.sin(bump * Math.PI) * .12;
       const vr = visRow(now) + (chick.bumpDir === 0 ? nudge : chick.bumpDir === 1 ? -nudge : 0);
       const vc = visCol(now) + (chick.bumpDir === 3 ? nudge : chick.bumpDir === 2 ? -nudge : 0);
-      scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: Math.sin(Math.PI * hopU(now)) * .30,
+      const landing = clamp((now - chick.hopT0 - HOP_MS) / 75, 0, 1);
+      const press = touch && phase === 'run' ? Math.min(1, (now - touch.at) / 38) : 0;
+      const squash = reducedMotion() ? 0 : 0.10 * Math.max(press, Math.sin(Math.PI * landing));
+      scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: hopHeight(now), squash,
         facing: chick.face, death: deathAt, banked: cashedAt, score: scoreMode, phase, line, art, trainWarning });
-      drawParticles();
+      drawParticles(dt);
     }
     let raf = requestAnimationFrame(tick);
 
@@ -688,7 +724,7 @@ export default {
     globalThis.__ccRooster = () => ({ seed, row, col, best, phase, t: worldT(performance.now()) });
     renderControls();
     renderHud();
-    center('<b>Road Rooster</b><small>Tap Start run, then tap the road to hop</small>', 'intro');
+    center('<b>Road Rooster</b><small>Tap to hop · swipe left, right or back</small>', 'intro');
     bet.el.addEventListener('change', () => (renderHud(), renderControls()));
 
     return () => {
@@ -698,6 +734,7 @@ export default {
       stopHold();
       leaveGameView();
       window.removeEventListener('blur', stopHold);
+      window.removeEventListener('blur', clearGesture);
       cancelAnimationFrame(raf);
       ro.disconnect();
       document.removeEventListener('keydown', onKey);
