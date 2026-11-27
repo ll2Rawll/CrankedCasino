@@ -1,75 +1,35 @@
-// Player state: balance, stats, history. Saved to localStorage, and mirrored to the
-// cloud (GitHub sign-in) by cloud.js via the 'persist' event.
+// The player's chips and stats, as the player sees them.
 //
-// Money flow for every game:
-//   const t = store.placeBet('plinko', 10, { payout: 26 })  // chips leave the balance now
+// The casino server (engine.js) owns the real balance. This keeps the copy on
+// screen, which trails the server while animations play so a win isn't spoiled
+// before the ball lands:
+//
+//   const t = store.placeBet('plinko', 10)          // chips leave the shown balance at once
+//   const r = await engine.plinko(10, 'low', 8)     // the server settles the bet
+//   store.confirm(t, r, { paid: r.payout })         // server balance known; the win stays hidden
 //   ...animation...
-//   store.finish(t)                                         // payout lands when the player sees it
-// If the payout is already known at bet time it is counted in the *saved* balance
-// immediately, so a reload mid-animation never loses a win.
+//   store.finish(t, r.entry)                        // the win lands as the player sees it
+//
+// Shown balance = server balance − chips the server hasn't taken yet − wins not yet revealed.
 
-import { storage, round2 } from './util.js';
+import { round2 } from './util.js';
+import { engine } from './engine.js';
 
-export const START_BALANCE = 1000;
-export const DAILY_BONUS = 1000;
-export const DAILY_MS = 24 * 60 * 60 * 1000;
-export const REFILL_BELOW = 1;
-export const GAMES = ['blackjack', 'roulette', 'slots', 'crash', 'plinko', 'mines'];
-
-// Promo codes (case-insensitive). Each can be redeemed once per player profile.
-export const PROMOS = {
-  MAXWIN: { chips: 1000, note: 'MaxWin bonus' },
-};
+export const GAMES = ['blackjack', 'roulette', 'slots', 'crash', 'plinko', 'mines', 'rooster'];
 const HISTORY_MAX = 40;
-const VERSION = 1;
-
-const GUEST_KEY = 'cc:v1:guest';
-const userKey = (id) => `cc:v1:user:${id}`;
 
 export class BetError extends Error {}
 
-function freshState() {
-  const now = Date.now();
-  return {
-    v: VERSION,
-    balance: START_BALANCE,
-    stats: { bets: 0, wins: 0, wagered: 0, profit: 0, biggestWin: 0, bestMulti: 0, games: {} },
-    history: [],
-    dailyAt: 0,
-    refills: 0,
-    promos: [],
-    createdAt: now,
-    savedAt: now,
-    mines: null,
-  };
-}
+const blankStats = () => ({ bets: 0, wins: 0, wagered: 0, profit: 0, biggestWin: 0, bestMulti: 0, games: {} });
+const blank = () => ({ username: null, balance: 0, stats: blankStats(), history: [], promos: [], ads: null, created: 0, rounds: {} });
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
-
-/** Merge anything we load (local or cloud) onto safe defaults. */
-export function sanitize(raw) {
-  const base = freshState();
-  if (!raw || typeof raw !== 'object') return base;
-  const s = { ...base, ...raw };
-  s.balance = Math.max(0, round2(num(raw.balance, START_BALANCE)));
-  const st = raw.stats && typeof raw.stats === 'object' ? raw.stats : {};
-  s.stats = {
-    bets: num(st.bets),
-    wins: num(st.wins),
-    wagered: round2(num(st.wagered)),
-    profit: round2(num(st.profit)),
-    biggestWin: round2(num(st.biggestWin)),
-    bestMulti: num(st.bestMulti),
-    games: st.games && typeof st.games === 'object' ? st.games : {},
-  };
-  s.history = Array.isArray(raw.history) ? raw.history.slice(0, HISTORY_MAX) : [];
-  s.dailyAt = num(raw.dailyAt);
-  s.refills = num(raw.refills);
-  s.promos = Array.isArray(raw.promos) ? raw.promos.filter((x) => typeof x === 'string').slice(0, 50) : [];
-  s.createdAt = num(raw.createdAt, base.createdAt);
-  s.savedAt = num(raw.savedAt, 0);
-  s.mines = raw.mines && typeof raw.mines === 'object' ? raw.mines : null;
-  return s;
+function normStats(raw) {
+  const st = raw && typeof raw === 'object' ? raw : {};
+  const one = (o = {}) => ({ bets: num(o.bets), wins: num(o.wins), wagered: num(o.wagered), profit: num(o.profit), bestMulti: num(o.bestMulti), biggestWin: num(o.biggestWin) });
+  const games = {};
+  for (const [g, v] of Object.entries(st.games && typeof st.games === 'object' ? st.games : {})) games[g] = one(v);
+  return { ...one(st), games };
 }
 
 // ---------------------------------------------------------------- events
@@ -90,34 +50,49 @@ function emit(evt, data) {
 }
 
 // ---------------------------------------------------------------- state
-let owner = null; // null = guest, otherwise the signed-in user's id
-let state = sanitize(storage.get(GUEST_KEY));
+let state = blank();
+let serverBal = 0;
+let seq = -1;
 const open = new Map(); // live tickets
-let seq = 0;
+let tid = 0;
+let profileWaiting = false; // a fresh profile arrived mid-animation
 
-const storageKey = () => (owner ? userKey(owner) : GUEST_KEY);
-
-function pendingTotal() {
-  let sum = 0;
-  for (const t of open.values()) if (t.payout != null) sum += t.payout - t.credited;
-  return round2(sum);
+function unseen() {
+  let s = 0;
+  for (const t of open.values()) s += t.amount - t.debited + (t.paid - t.shown);
+  return s;
 }
-
-/** The state as it should be saved: includes wins that are still animating. */
-export function snapshot() {
-  return { ...state, balance: round2(state.balance + pendingTotal()) };
+function show(silent = false) {
+  const prev = state.balance;
+  state.balance = Math.max(0, round2(serverBal - unseen()));
+  const delta = round2(state.balance - prev);
+  if (delta || silent) emit('balance', { delta, balance: state.balance, silent });
 }
-
-function persist() {
-  state.savedAt = Date.now();
-  const snap = snapshot();
-  storage.set(storageKey(), snap);
-  emit('persist', snap);
+function syncFrom(r) {
+  if (!r) return;
+  if (typeof r.balance === 'number' && typeof r.seq === 'number' && r.seq >= seq) {
+    serverBal = r.balance;
+    seq = r.seq;
+  }
+  if (r.ads && typeof r.ads === 'object') {
+    state.ads = { ...r.ads, at: Date.now() };
+    emit('ads', state.ads);
+  }
 }
-
-function gameStats(game) {
-  const g = (state.stats.games[game] ||= { bets: 0, wins: 0, wagered: 0, profit: 0, bestMulti: 0, biggestWin: 0 });
-  return g;
+function applyEntry(e) {
+  state.history.unshift(e);
+  if (state.history.length > HISTORY_MAX) state.history.length = HISTORY_MAX;
+  const st = state.stats;
+  const g = (st.games[e.g] ||= { bets: 0, wins: 0, wagered: 0, profit: 0, bestMulti: 0, biggestWin: 0 });
+  const won = e.p > e.a ? 1 : 0;
+  for (const o of [st, g]) {
+    o.bets += 1;
+    o.wins += won;
+    o.wagered = round2(o.wagered + e.a);
+    o.profit = round2(o.profit + e.p - e.a);
+    o.bestMulti = Math.max(o.bestMulti, round2(e.m));
+    o.biggestWin = Math.max(o.biggestWin, e.p);
+  }
 }
 
 export const store = {
@@ -128,232 +103,179 @@ export const store = {
   get balance() {
     return state.balance;
   },
-  get owner() {
-    return owner;
+  get username() {
+    return state.username;
+  },
+  get signedIn() {
+    return !!state.username;
   },
   get busy() {
     return open.size > 0;
   },
-
-  snapshot,
+  get ads() {
+    return state.ads;
+  },
 
   canAfford(amount) {
     return round2(amount) <= state.balance + 1e-9;
   },
 
-  placeBet(game, amount, { payout = null } = {}) {
+  /** Take chips off the shown balance for a bet that's about to go to the server. */
+  placeBet(game, amount) {
     amount = round2(amount);
+    if (!state.username) throw new BetError('Make a username to start playing.');
     if (!(amount > 0)) throw new BetError('Enter a bet amount above zero.');
     if (amount > state.balance + 1e-9) throw new BetError('Not enough chips for that bet.');
-    state.balance = round2(state.balance - amount);
-    const t = { id: ++seq, game, amount, payout: payout == null ? null : round2(payout), credited: 0, done: false };
+    const t = { id: ++tid, game, amount, debited: 0, paid: 0, shown: 0, done: false };
     open.set(t.id, t);
-    emit('balance', { delta: -amount, balance: state.balance });
-    persist();
+    show();
     return t;
   },
 
-  /** Put more chips on a live bet (Blackjack double, split, insurance). */
+  /** More chips on a live bet (Blackjack double, split, insurance). */
   addToBet(t, amount) {
     amount = round2(amount);
     if (!t || t.done || !(amount > 0)) return false;
     if (amount > state.balance + 1e-9) throw new BetError('Not enough chips for that.');
-    state.balance = round2(state.balance - amount);
     t.amount = round2(t.amount + amount);
-    emit('balance', { delta: -amount, balance: state.balance });
-    persist();
+    show();
     return true;
   },
 
-  /** Re-attach to a bet whose chips were already taken (e.g. a Mines round restored after reload). */
+  /** A round the server already took the chips for (restored after a reload). */
   resume(game, amount) {
-    const t = { id: ++seq, game, amount: round2(amount), payout: null, credited: 0, done: false };
+    amount = round2(amount);
+    const t = { id: ++tid, game, amount, debited: amount, paid: 0, shown: 0, done: false };
     open.set(t.id, t);
     return t;
   },
 
-  /** Tell the store the final payout early (keeps the saved balance safe). */
-  setPayout(t, payout) {
-    t.payout = round2(payout);
-    persist();
+  /** The server answered: record what it took and paid for this ticket, and its new balance. */
+  confirm(t, r, { debited, paid } = {}) {
+    if (t && !t.done) {
+      if (debited != null) t.debited = round2(debited);
+      if (paid != null) t.paid = round2(paid);
+    }
+    syncFrom(r);
+    show();
   },
 
-  /** Pay part of a ticket now (e.g. a slot's base win before free spins play out). */
+  /** A server reply that moved chips outside any bet (promo code, ad reward). */
+  sync(r) {
+    syncFrom(r);
+    show();
+  },
+
+  /** Reveal part of a win early (e.g. a slot's base win before free spins play out). */
   credit(t, amount) {
     amount = round2(amount);
-    if (t.done || !(amount > 0)) return;
-    t.credited = round2(t.credited + amount);
-    state.balance = round2(state.balance + amount);
-    emit('balance', { delta: amount, balance: state.balance });
-    persist();
+    if (!t || t.done || !(amount > 0)) return;
+    t.shown = round2(Math.min(t.paid, t.shown + amount));
+    show();
   },
 
-  /** Settle a ticket. Records stats + history and credits whatever is still owed. */
-  finish(t, payout = t.payout, extra = {}) {
-    if (!t || t.done) return null;
-    t.done = true;
-    open.delete(t.id);
-    payout = round2(payout ?? 0);
-    const owed = round2(payout - t.credited);
-    if (owed) state.balance = round2(state.balance + owed);
-
-    const profit = round2(payout - t.amount);
-    const mult = t.amount > 0 ? payout / t.amount : 0;
-    const st = state.stats;
-    const g = gameStats(t.game);
-    st.bets++;
-    g.bets++;
-    st.wagered = round2(st.wagered + t.amount);
-    g.wagered = round2(g.wagered + t.amount);
-    st.profit = round2(st.profit + profit);
-    g.profit = round2(g.profit + profit);
-    if (payout > t.amount) {
-      st.wins++;
-      g.wins++;
-    }
-    st.biggestWin = Math.max(st.biggestWin, payout);
-    g.biggestWin = Math.max(g.biggestWin, payout);
-    st.bestMulti = Math.max(st.bestMulti, round2(mult));
-    g.bestMulti = Math.max(g.bestMulti, round2(mult));
-
-    const entry = { g: t.game, a: t.amount, m: Math.round(mult * 10000) / 10000, p: payout, t: Date.now(), ...extra };
-    state.history.unshift(entry);
-    if (state.history.length > HISTORY_MAX) state.history.length = HISTORY_MAX;
-
-    if (owed) emit('balance', { delta: owed, balance: state.balance });
-    emit('bet', entry);
-    persist();
-    return entry;
-  },
-
-  /** Give the chips back without recording a bet (e.g. a Crash bet cancelled before take-off). */
-  refund(t) {
+  /** Close a ticket: whatever it won lands, and the bet goes into stats and history. */
+  finish(t, entry) {
     if (!t || t.done) return;
     t.done = true;
     open.delete(t.id);
-    const back = round2(t.amount - t.credited);
-    state.balance = round2(state.balance + back);
-    emit('balance', { delta: back, balance: state.balance });
-    persist();
+    if (entry) {
+      applyEntry(entry);
+      emit('bet', entry);
+    }
+    show();
+    if (!open.size && profileWaiting) {
+      profileWaiting = false;
+      this.refresh();
+    }
   },
 
-  /** Settle everything still in flight for a game (used when leaving a page). */
-  finishAll(game) {
-    for (const t of [...open.values()]) if (!game || t.game === game) if (t.payout != null) this.finish(t);
+  /** Close a ticket the server refused or refunded. */
+  cancel(t) {
+    if (!t || t.done) return;
+    t.done = true;
+    open.delete(t.id);
+    show();
   },
 
-  setMinesRound(round) {
-    state.mines = round;
-    persist();
+  /** Load a full profile from the server (sign-in, reload, coming back to the tab). */
+  load(me, { silent = false } = {}) {
+    if (!me || !me.ok) return;
+    const fresh = state.username !== me.username;
+    if (fresh) {
+      open.clear();
+      seq = -1;
+    }
+    if (me.seq >= seq) {
+      serverBal = num(me.balance);
+      seq = me.seq;
+    }
+    state.username = me.username;
+    state.promos = Array.isArray(me.promos) ? me.promos : [];
+    state.created = num(me.created);
+    state.rounds = me.rounds && typeof me.rounds === 'object' ? { ...me.rounds } : {};
+    if (me.ads) state.ads = { ...me.ads, at: Date.now() };
+    // Mid-animation the server's history already includes bets still playing out on screen.
+    if (fresh || !open.size) {
+      state.stats = normStats(me.stats);
+      state.history = Array.isArray(me.history) ? me.history.slice(0, HISTORY_MAX) : [];
+    } else profileWaiting = true;
+    show(silent);
+    if (fresh) emit('account', state);
+    emit('reset', state);
+    if (me.ads) emit('ads', state.ads);
   },
 
-  dailyReadyIn() {
-    return Math.max(0, state.dailyAt + DAILY_MS - Date.now());
+  async refresh() {
+    if (!engine.signedIn) return null;
+    const r = await engine.me();
+    if (r?.ok) this.load(r);
+    return r;
   },
 
-  claimDaily() {
-    if (this.dailyReadyIn() > 0) return false;
-    state.dailyAt = Date.now();
-    state.balance = round2(state.balance + DAILY_BONUS);
-    emit('balance', { delta: DAILY_BONUS, balance: state.balance });
-    persist();
-    return true;
-  },
-
-  /**
-   * Redeem a promo code. Returns { ok, chips, code } or { ok: false, reason }.
-   * reason: 'empty' | 'invalid' | 'used'
-   */
-  redeemPromo(input) {
-    const code = String(input || '').trim().toUpperCase().replace(/\s+/g, '');
-    if (!code) return { ok: false, reason: 'empty' };
-    const promo = PROMOS[code];
-    if (!promo) return { ok: false, reason: 'invalid', code };
-    if (state.promos.includes(code)) return { ok: false, reason: 'used', code };
-    state.promos.push(code);
-    state.balance = round2(state.balance + promo.chips);
-    emit('balance', { delta: promo.chips, balance: state.balance });
-    emit('promo', { code, chips: promo.chips });
-    persist();
-    return { ok: true, code, chips: promo.chips, note: promo.note };
+  signOut() {
+    open.clear();
+    state = blank();
+    serverBal = 0;
+    seq = -1;
+    show(true);
+    emit('account', state);
+    emit('reset', state);
   },
 
   hasPromo(code) {
     return state.promos.includes(String(code).toUpperCase());
   },
 
-  canRefill() {
-    return state.balance < REFILL_BELOW && open.size === 0 && !state.mines;
-  },
-
-  refill() {
-    if (!this.canRefill()) return false;
-    const delta = round2(START_BALANCE - state.balance);
-    state.balance = START_BALANCE;
-    state.refills++;
-    emit('balance', { delta, balance: state.balance });
-    persist();
-    return true;
-  },
-
-  reset() {
-    open.clear();
-    state = freshState();
-    emit('reset', state);
-    emit('balance', { delta: 0, balance: state.balance });
-    persist();
-  },
-
-  /** Switch to the guest profile or a signed-in user's profile. */
-  useProfile(userId, initial) {
-    // Anything still animating gets paid out to the profile that bet it.
-    this.finishAll();
-    open.clear();
-    owner = userId || null;
-    state = sanitize(initial ?? storage.get(storageKey()));
-    storage.set(storageKey(), state);
-    emit('reset', state);
-    emit('balance', { delta: 0, balance: state.balance, silent: true });
-  },
-
-  /** Replace the current profile's state with a newer copy (from the cloud). */
-  adopt(remote) {
-    if (open.size) return false;
-    state = sanitize(remote);
-    storage.set(storageKey(), state);
-    emit('reset', state);
-    emit('balance', { delta: 0, balance: state.balance, silent: true });
-    return true;
-  },
-
-  /** Local copy for a user (used to compare against the cloud copy). */
-  localFor(userId) {
-    const raw = storage.get(userKey(userId));
-    return raw ? sanitize(raw) : null;
-  },
-
-  guestState() {
-    return sanitize(storage.get(GUEST_KEY));
-  },
-
-  clearGuest() {
-    storage.set(GUEST_KEY, freshState());
-  },
-
-  save: persist,
-};
-
-// Keep two tabs in sync for guests and signed-in users alike.
-window.addEventListener('storage', (e) => {
-  if (e.key !== storageKey() || !e.newValue || open.size) return;
-  try {
-    const remote = sanitize(JSON.parse(e.newValue));
-    if (remote.savedAt > state.savedAt) {
-      state = remote;
-      emit('reset', state);
-      emit('balance', { delta: 0, balance: state.balance, silent: true });
+  /** Redeem a promo code on the server. Each code works once per account, ever. */
+  async redeem(input) {
+    const code = String(input || '').replace(/\s+/g, '').toUpperCase();
+    if (!code) return { ok: false, error: 'empty' };
+    const r = await engine.redeem(code);
+    if (r?.ok) {
+      syncFrom(r);
+      if (!state.promos.includes(r.code)) state.promos.push(r.code);
+      show();
+      emit('promo', r);
+    } else if (r?.error === 'used' && !state.promos.includes(code)) {
+      state.promos.push(code);
+      emit('promo', r);
     }
-  } catch {
-    /* ignore */
-  }
-});
+    return r;
+  },
+
+  /** Hand an unfinished round from the last profile load to its game (once). */
+  takeRound(game) {
+    const r = state.rounds?.[game] || null;
+    if (state.rounds) state.rounds[game] = null;
+    return r;
+  },
+
+  /** Seconds until the next rewarded ad, and how many are left today. */
+  adStatus() {
+    const a = state.ads;
+    if (!a) return { reward: 250, left: 1, wait: 0 };
+    const wait = Math.max(0, Math.ceil(a.wait - (Date.now() - (a.at || 0)) / 1000));
+    return { reward: a.reward, left: a.left, wait, cooldown: a.cooldown };
+  },
+};

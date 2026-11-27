@@ -2,40 +2,41 @@
 // Crash point = 0.99 / (1 − U), floored to 2 decimals, so P(crash ≥ x) = 0.99 / x
 // and every cash-out target has the same 1% house edge.
 //
+// Rounds you bet on are run by the server: it picks the crash point, keeps it secret
+// and decides every cash-out by its own clock, so it can't be predicted or replayed.
+// Rounds without a bet are just for show and run in the browser.
+//
 // The engine lives outside the page so a live bet still resolves (and auto cash-out
 // still fires) if you wander off to another game mid-flight.
 
 import { h, fmt, fmtMult, round2, signed, storage, clamp, reducedMotion } from '../util.js';
 import { icon } from '../icons.js';
 import { store, BetError } from '../store.js';
+import { engine, errorText } from '../engine.js';
+import { needAccount } from '../account.js';
 import { random } from '../rng.js';
+import { CRASH_K as K, crashAt as at, crashTimeFor as timeFor, crashPoint } from '../math.js';
 import { sfx, engine as hum, haptic } from '../sound.js';
 import { burstAt, celebrate, PALETTES, shake } from '../fx.js';
-import { gameFrame, betInput, toast } from '../ui.js';
+import { gameFrame, betInput, toast, betError, serverRefused } from '../ui.js';
 
-const K = 0.00009; // growth per ms → 2× ≈ 7.7s, 10× ≈ 25.6s
 const BETTING_MS = 5000;
 const CRASHED_MS = 3200;
-const MAX = 10000;
-
-const at = (ms) => Math.floor(Math.exp(K * Math.max(0, ms)) * 100) / 100;
-const timeFor = (m) => Math.log(m) / K;
-
-function genCrash() {
-  const x = 0.99 / (1 - random());
-  return clamp(Math.floor(x * 100) / 100, 1, MAX);
-}
+const POLL_MS = 220;
 
 // ------------------------------------------------------------------ engine
 const E = {
   phase: 'idle',
   start: 0,
   crashAt: 1,
+  known: true, // is the crash point known yet? (not while a real bet is in the air)
   history: storage.get('cc:crash:hist', []).slice(0, 24),
-  bet: null, // { t, amount, auto, cashed }
+  bet: null, // { t, amount, auto, cashed, state: 'sending' | 'live' | 'cashing' | 'cancelling' | 'done', runAt }
   queued: null, // { amount, auto }
   viewers: 0,
   timer: 0,
+  lastPoll: 0,
+  polling: false,
   subs: new Set(),
 };
 
@@ -43,24 +44,77 @@ function emit(type, data) {
   E.subs.forEach((fn) => fn(type, data));
 }
 
-function placeNow(amount, auto) {
+/** Place a bet on the round that's counting down. */
+async function placeNow(amount, auto) {
+  if (!needAccount()) return false;
+  let t;
   try {
-    const t = store.placeBet('crash', amount);
-    E.bet = { t, amount: t.amount, auto, cashed: null };
-    sfx.bet();
-    emit('bet');
-    return true;
+    t = store.placeBet('crash', amount);
   } catch (e) {
-    if (e instanceof BetError) toast(e.message, { type: 'loss' });
+    if (e instanceof BetError) betError(e.message);
     else throw e;
     return false;
   }
+  sfx.bet();
+  const b = { t, amount: t.amount, auto, cashed: null, state: 'sending', runAt: null };
+  E.bet = b;
+  emit('bet');
+  const left = Math.max(0, BETTING_MS - (performance.now() - E.start));
+  const t0 = performance.now();
+  const r = await engine.crashStart(t.amount, auto, left);
+  const t1 = performance.now();
+  if (!r?.ok) {
+    if (E.bet === b) E.bet = null;
+    serverRefused(t, r);
+    emit('bet');
+    return false;
+  }
+  store.confirm(t, r, { debited: t.amount });
+  // Line our clock up with the server's: it launches at started_at on its clock.
+  b.runAt = t1 - (t1 - t0) / 2 + (r.started_at - r.server_now);
+  b.state = 'live';
+  emit('bet');
+  if (b.cancel) cancelBet();
+  return true;
+}
+
+/** Take back a bet before take-off. */
+async function cancelBet() {
+  const b = E.bet;
+  if (!b) return;
+  if (b.state === 'sending') {
+    b.cancel = true; // as soon as the server confirms it
+    return;
+  }
+  if (b.state !== 'live' || E.phase !== 'betting') return;
+  b.state = 'cancelling';
+  emit('bet');
+  const r = await engine.crashCashout(null);
+  if (r?.ok && r.state === 'cancelled') {
+    store.confirm(b.t, r, { debited: 0 });
+    store.cancel(b.t);
+  } else if (r?.ok && r.state === 'cashed') {
+    // It had just taken off: cashed at about 1.00×.
+    store.confirm(b.t, r, { paid: r.payout });
+    store.finish(b.t, r.entry);
+  } else if (r?.ok && r.state === 'crashed') {
+    store.confirm(b.t, r, { paid: 0 });
+    store.finish(b.t, r.entry);
+  } else {
+    b.state = 'live';
+    if (r?.error !== 'auth') toast(errorText(r), { type: 'loss' });
+    emit('bet');
+    return;
+  }
+  if (E.bet === b) E.bet = null;
+  emit('bet');
 }
 
 function startBetting() {
   E.phase = 'betting';
   E.start = performance.now();
   E.bet = null;
+  E.known = true;
   if (E.queued) {
     const q = E.queued;
     E.queued = null;
@@ -71,46 +125,109 @@ function startBetting() {
 
 function startRun() {
   E.phase = 'running';
-  E.start = performance.now();
-  E.crashAt = genCrash();
+  const live = E.bet && E.bet.state === 'live';
+  E.start = live ? E.bet.runAt : performance.now();
+  E.known = !live;
+  E.crashAt = live ? Infinity : crashPoint(random());
+  E.lastPoll = 0;
   emit('phase');
 }
 
 function crash() {
   E.phase = 'crashed';
   E.start = performance.now();
+  E.known = true;
   E.history.unshift(E.crashAt);
   E.history.length = Math.min(E.history.length, 24);
   storage.set('cc:crash:hist', E.history);
-  if (E.bet && !E.bet.cashed) store.finish(E.bet.t, 0, { info: `crashed @ ${E.crashAt.toFixed(2)}×` });
   emit('crash');
 }
 
-export function cashOut(target) {
-  if (E.phase !== 'running' || !E.bet || E.bet.cashed) return false;
-  const now = performance.now();
-  const m = target ?? at(now - E.start);
-  if (m > E.crashAt || (target == null && m >= E.crashAt)) {
-    if (target == null) {
-      crash();
+/** Apply the server's word on the live bet: cashed out, or crashed. */
+function settle(r) {
+  const b = E.bet;
+  if (!b || b.state === 'done') return;
+  if (r.state === 'cashed') {
+    b.state = 'done';
+    b.cashed = r.mult;
+    store.confirm(b.t, r, { paid: r.payout });
+    store.finish(b.t, r.entry);
+    E.crashAt = r.crash_point;
+    E.known = true;
+    emit('cashout', { m: r.mult, pay: r.payout });
+    if (Math.exp(K * (performance.now() - E.start)) >= E.crashAt) crash();
+  } else if (r.state === 'crashed') {
+    b.state = 'done';
+    store.confirm(b.t, r, { paid: 0 });
+    store.finish(b.t, r.entry);
+    E.crashAt = r.crash_point;
+    E.known = true;
+    if (E.phase === 'running') crash();
+  } else if (r.state === 'none') {
+    // Settled somewhere else (another tab): reload the truth.
+    b.state = 'done';
+    store.cancel(b.t);
+    store.refresh();
+    E.crashAt = Math.max(1, at(performance.now() - E.start));
+    E.known = true;
+    if (E.phase === 'running') crash();
+  }
+}
+
+async function poll() {
+  const b = E.bet;
+  if (E.polling || !b || b.state !== 'live') return;
+  E.polling = true;
+  const r = await engine.crashPoll();
+  E.polling = false;
+  if (E.bet !== b || b.state !== 'live' || !r?.ok) return;
+  settle(r);
+}
+
+export async function cashOut() {
+  const b = E.bet;
+  if (E.phase !== 'running' || !b || b.state !== 'live') return false;
+  b.state = 'cashing';
+  const m = at(performance.now() - E.start);
+  emit('bet');
+  const r = await engine.crashCashout(m);
+  if (E.bet !== b) return false;
+  if (!r?.ok) {
+    if (r?.error === 'no_round') settle({ state: 'none' });
+    else {
+      b.state = 'live';
+      if (r?.error !== 'auth') toast(errorText(r), { type: 'loss' });
     }
+    emit('bet');
     return false;
   }
-  E.bet.cashed = m;
-  const pay = round2(E.bet.amount * m);
-  store.finish(E.bet.t, pay, { info: `cashed @ ${m.toFixed(2)}×` });
-  emit('cashout', { m, pay });
-  return true;
+  b.state = 'live';
+  settle(r);
+  return r.state === 'cashed';
 }
 
 function tick() {
   const now = performance.now();
   const el = now - E.start;
-  if (E.phase === 'betting' && el >= BETTING_MS) startRun();
-  else if (E.phase === 'running') {
+  const b = E.bet;
+  if (E.phase === 'betting') {
+    // Hold the launch while the server is still answering.
+    if (b && (b.state === 'sending' || b.state === 'cancelling')) return;
+    if (b && b.state === 'live' ? now >= b.runAt : el >= BETTING_MS) startRun();
+  } else if (E.phase === 'running') {
     const m = Math.exp(K * el);
-    if (E.bet && !E.bet.cashed && E.bet.auto && m >= E.bet.auto && E.bet.auto <= E.crashAt) cashOut(E.bet.auto);
-    if (m >= E.crashAt) crash();
+    if (b && b.state === 'live') {
+      // Ask the server often; ask right away when the auto cash-out target is reached.
+      if (b.auto && m >= b.auto && !b.autoAsked) {
+        b.autoAsked = true;
+        E.lastPoll = now;
+        poll();
+      } else if (now - E.lastPoll >= POLL_MS) {
+        E.lastPoll = now;
+        poll();
+      }
+    }
+    if (E.known && m >= E.crashAt) crash();
   } else if (E.phase === 'crashed' && el >= CRASHED_MS) {
     if (E.viewers > 0 || E.queued) startBetting();
     else stopEngine();
@@ -125,6 +242,27 @@ function stopEngine() {
   clearInterval(E.timer);
   E.timer = 0;
   E.phase = 'idle';
+  emit('phase');
+}
+
+/** A round still in the air after a reload: rejoin it. */
+function resumeRound(rd) {
+  if (!rd || E.bet) return;
+  const t = store.resume('crash', rd.wager);
+  const runAt = performance.now() - rd.elapsed;
+  E.bet = { t, amount: rd.wager, auto: rd.auto, cashed: null, state: 'live', runAt };
+  if (rd.state === 'waiting') {
+    E.phase = 'betting';
+    E.start = runAt - BETTING_MS;
+    E.known = true;
+  } else {
+    E.phase = 'running';
+    E.start = runAt;
+    E.known = false;
+    E.crashAt = Infinity;
+    E.lastPoll = 0;
+  }
+  if (!E.timer) E.timer = setInterval(tick, 40);
   emit('phase');
 }
 
@@ -146,6 +284,7 @@ export default {
     let destroyed = false;
     let lastLoss = 0;
     E.viewers++;
+    resumeRound(store.takeRound('crash'));
     ensureEngine();
 
     // ---------------------------------------------------------- stage
@@ -205,16 +344,14 @@ export default {
       storage.set('cc:crash:autoOn', autoOn);
       readAuto();
       renderChance();
-      if (E.bet && !E.bet.cashed) E.bet.auto = autoOn ? autoVal : null;
     });
     autoInput.addEventListener('change', () => {
       readAuto();
       renderChance();
-      if (E.bet && !E.bet.cashed && autoOn) E.bet.auto = autoVal;
     });
     autoField.addEventListener('click', (e) => {
       const b = e.target.closest('[data-a]');
-      if (!b) return;
+      if (!b || b.disabled) return;
       sfx.click();
       autoInput.value = b.dataset.a;
       autoOn = true;
@@ -222,38 +359,39 @@ export default {
       storage.set('cc:crash:autoOn', true);
       readAuto();
       renderChance();
-      if (E.bet && !E.bet.cashed) E.bet.auto = autoVal;
     });
     bet.el.querySelector('input').addEventListener('change', renderChance);
     bet.el.addEventListener('click', () => setTimeout(renderChance));
     renderChance();
 
     function act() {
-      if (E.phase === 'running' && E.bet && !E.bet.cashed) {
-        if (!cashOut()) sfx.lose();
+      const b = E.bet;
+      if (E.phase === 'running' && b && b.state === 'live') {
+        cashOut().then((ok) => !ok && E.bet === b && b.state === 'done' && !b.cashed && sfx.lose());
         return;
       }
-      if (E.phase === 'betting' && !E.bet) {
+      if (b && (b.state === 'sending' || b.state === 'cashing' || b.state === 'cancelling')) return;
+      if (E.phase === 'betting' && !b) {
         readAuto();
         placeNow(bet.value, autoOn ? autoVal : null);
         renderControls();
         return;
       }
-      if (E.phase === 'betting' && E.bet && !E.bet.cashed) {
+      if (E.phase === 'betting' && b && b.state === 'live') {
         // Cancel before take-off: refund.
-        const b = E.bet;
-        E.bet = null;
-        store.refund(b.t);
         sfx.click();
+        cancelBet();
         renderControls();
         return;
       }
       // Running/crashed without a live bet: queue for next round.
       if (E.queued) E.queued = null;
       else {
+        if (!needAccount()) return;
         if (!store.canAfford(bet.value) || !(bet.value > 0)) {
           bet.error();
-          toast(bet.value > 0 ? 'Not enough chips for that bet.' : 'Enter a bet amount above zero.', { type: 'loss' });
+          if (bet.value > 0) betError();
+          else toast('Enter a bet amount above zero.', { type: 'loss' });
           return;
         }
         readAuto();
@@ -266,34 +404,47 @@ export default {
 
     function renderControls() {
       const p = E.phase;
-      const live = E.bet && !E.bet.cashed;
+      const b = E.bet;
+      const live = b && !b.cashed && b.state !== 'done';
       let cls = 'btn btn-primary btn-play';
       let html = '<span>Place bet</span>';
-      if (p === 'running' && live) {
+      if (b && b.state === 'sending') {
+        cls = 'btn btn-outline btn-play';
+        html = `<span>Placing bet…</span><span class="sub">${fmt(b.amount)}</span>`;
+      } else if (b && b.state === 'cashing') {
         cls = 'btn btn-play is-cash';
-        html = `<span>Cash out</span><span class="sub" data-live>${fmt(E.bet.amount)}</span>`;
+        html = '<span>Cashing out…</span>';
+      } else if (b && b.state === 'cancelling') {
+        cls = 'btn btn-outline btn-play';
+        html = '<span>Cancelling…</span>';
+      } else if (p === 'running' && live) {
+        cls = 'btn btn-play is-cash';
+        html = `<span>Cash out</span><span class="sub" data-live>${fmt(b.amount)}</span>`;
       } else if (p === 'betting' && live) {
         cls = 'btn btn-outline btn-play';
-        html = `<span>Cancel bet</span><span class="sub">${fmt(E.bet.amount)}</span>`;
+        html = `<span>Cancel bet</span><span class="sub">${fmt(b.amount)}</span>`;
       } else if (p !== 'betting') {
         cls = E.queued ? 'btn btn-outline btn-play' : 'btn btn-primary btn-play';
         html = E.queued ? `<span>Cancel next bet</span><span class="sub">${fmt(E.queued.amount)}</span>` : '<span>Bet next round</span>';
-      } else if (E.bet && E.bet.cashed) {
+      } else if (b && b.cashed) {
         cls = 'btn btn-outline btn-play';
         html = '<span>Waiting…</span>';
       }
       playBtn.className = cls;
       playBtn.innerHTML = html;
       bet.disable(!!live || !!E.queued);
+      // The server holds the auto target once a bet is placed.
+      autoField.querySelectorAll('input, button').forEach((x) => (x.disabled = !!live));
       // status line
+      const liveBet = E.bet && !E.bet.cashed && E.bet.state !== 'done' ? E.bet : null;
       if (E.bet?.cashed) {
         myBet.hidden = false;
         myBet.className = 'my-bet win';
         myBet.innerHTML = `<span>Cashed out @ ${fmtMult(E.bet.cashed)}</span><strong>${signed(round2(E.bet.amount * E.bet.cashed) - E.bet.amount)}</strong>`;
-      } else if (live) {
+      } else if (liveBet) {
         myBet.hidden = false;
         myBet.className = 'my-bet';
-        myBet.innerHTML = `<span>In play${E.bet.auto ? ` · auto @ ${fmtMult(E.bet.auto)}` : ''}</span><strong>${fmt(E.bet.amount)}</strong>`;
+        myBet.innerHTML = `<span>In play${liveBet.auto ? ` · auto @ ${fmtMult(liveBet.auto)}` : ''}</span><strong>${fmt(liveBet.amount)}</strong>`;
       } else if (p === 'crashed' && lastLoss) {
         myBet.hidden = false;
         myBet.className = 'my-bet loss';
@@ -574,11 +725,13 @@ export default {
         multEl.className = 'crash-mult tnum';
         multEl.style.setProperty('--neon', m >= 10 ? '#ffc94d' : m >= 2 ? '#4dffc3' : '#4dd2ff');
         subEl.className = 'crash-sub';
-        subEl.textContent = E.bet && !E.bet.cashed ? `Cash out ${fmt(round2(E.bet.amount * at(el)))}` : E.bet?.cashed ? `Cashed @ ${fmtMult(E.bet.cashed)}` : 'In flight';
-        if (E.bet?.cashed) subEl.className = 'crash-sub win';
+        const b = E.bet;
+        const inAir = b && !b.cashed && b.state !== 'done';
+        subEl.textContent = b?.state === 'cashing' ? 'Cashing out…' : inAir ? `Cash out ${fmt(round2(b.amount * at(el)))}` : b?.cashed ? `Cashed @ ${fmtMult(b.cashed)}` : 'In flight';
+        if (b?.cashed) subEl.className = 'crash-sub win';
         barEl.hidden = true;
         const live = playBtn.querySelector('[data-live]');
-        if (live) live.textContent = fmt(round2(E.bet.amount * at(el)));
+        if (live && inAir) live.textContent = fmt(round2(b.amount * at(el)));
         hum.set(m);
       } else if (phase === 'betting') {
         const left = Math.max(0, BETTING_MS - el);
@@ -586,7 +739,7 @@ export default {
         multEl.className = 'crash-mult tnum';
         multEl.style.setProperty('--neon', '#ffc94d');
         subEl.className = 'crash-sub';
-        subEl.textContent = E.bet ? 'You’re in. Get ready…' : 'Place your bets';
+        subEl.textContent = E.bet ? (E.bet.state === 'sending' ? 'Placing your bet…' : 'You’re in. Get ready…') : 'Place your bets';
         barEl.hidden = false;
         barFill.style.transform = `scaleX(${left / BETTING_MS})`;
       }
@@ -677,12 +830,10 @@ export default {
       // Bets that haven't taken off yet are refunded; a bet already flying keeps the
       // engine running in the background so it can still be cashed out or auto-cash.
       E.queued = null;
-      if (E.phase === 'betting' && E.bet && !E.bet.cashed) {
-        store.refund(E.bet.t);
-        E.bet = null;
-      }
-      if (E.phase === 'betting') stopEngine();
-      if (E.bet && !E.bet.cashed && E.phase !== 'crashed') toast('Your Crash bet is still flying. Head back to cash out.', { iconName: 'rocket', timeout: 4500 });
+      const b = E.bet;
+      if (E.phase === 'betting' && b && (b.state === 'live' || b.state === 'sending')) cancelBet();
+      if (E.phase === 'betting' && !b) stopEngine();
+      if (E.phase === 'running' && b && !b.cashed && b.state !== 'done') toast('Your Crash bet is still flying. Head back to cash out.', { iconName: 'rocket', timeout: 4500 });
       document.removeEventListener('keydown', onKey);
       frame.destroy();
     };

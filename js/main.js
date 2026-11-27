@@ -1,13 +1,15 @@
 // App shell: header, cashier, drawer, theme, footer and the hash router.
 
-import { $, $$, esc, fmt, signed, storage, countdown } from './util.js';
+import { $, $$, esc, fmt, signed, storage } from './util.js';
 import { icon } from './icons.js';
-import { store, on, DAILY_BONUS } from './store.js';
-import { cloud, syncLabel } from './cloud.js';
+import { store, on } from './store.js';
+import { engine, MODE } from './engine.js';
 import { CONFIG } from './config.js';
 import { sfx, unlockAudio, setSound, soundOn } from './sound.js';
-import { countTo, floatFrom, burstAt, PALETTES } from './fx.js';
+import { countTo, floatFrom } from './fx.js';
 import { toast, confirmDialog, promoTicket } from './ui.js';
+import { openAccount, signOut } from './account.js';
+import { adButton } from './ads.js';
 
 const app = $('#app');
 const root = document.documentElement;
@@ -29,19 +31,52 @@ function applyTheme(theme) {
 }
 applyTheme(root.dataset.theme === 'light' ? 'light' : 'dark');
 
+// ---------------------------------------------------------------- connection status
+let online = true;
+function statusLine() {
+  if (!store.signedIn) return { icon: 'user', text: 'Not signed in' };
+  if (MODE === 'device') return { icon: 'device', text: 'Saved on this device (offline mode)' };
+  if (!online) return { icon: 'info', text: 'Can’t reach the casino. Retrying…' };
+  return { icon: 'cloud', text: 'Saved to your account · any browser' };
+}
+engine.on((type) => {
+  if (type === 'offline' && online) {
+    online = false;
+    renderAuth();
+  }
+  if (type === 'online' && !online) {
+    online = true;
+    renderAuth();
+  }
+  if (type === 'signedout') {
+    // handled below (session expired or signed out elsewhere)
+  }
+});
+
 // ---------------------------------------------------------------- balance pill
 const balBtn = $('#balanceBtn');
 const balNum = $('#balanceNum');
 let shownBalance = store.balance;
 let stopCount = () => {};
 let flashTimer = 0;
-balNum.textContent = fmt(shownBalance);
 
+function renderPill() {
+  const inn = store.signedIn;
+  balBtn.classList.toggle('is-out', !inn);
+  balBtn.setAttribute('aria-label', inn ? 'Open cashier' : 'Create an account to play');
+  if (!inn) {
+    stopCount();
+    balNum.textContent = 'Join';
+    shownBalance = 0;
+  }
+}
 on('balance', ({ delta, balance, silent }) => {
+  if (!store.signedIn) return renderPill();
   stopCount();
-  const from = shownBalance;
+  const from = balNum.textContent === 'Join' ? 0 : shownBalance;
   shownBalance = balance;
   stopCount = countTo(balNum, from, balance, { duration: silent ? 1 : 650 });
+  if (!wallet.hidden) renderWalletNumbers();
   if (silent || !delta) return;
   balBtn.classList.remove('is-up', 'is-down');
   void balBtn.offsetWidth;
@@ -49,30 +84,25 @@ on('balance', ({ delta, balance, silent }) => {
   clearTimeout(flashTimer);
   flashTimer = setTimeout(() => balBtn.classList.remove('is-up', 'is-down'), 700);
   if (delta > 0) floatFrom(balBtn, signed(delta), 'var(--win)');
-  if (!wallet.hidden) renderWalletNumbers();
 });
 
 // ---------------------------------------------------------------- cashier popover
 const wallet = $('#wallet');
-let walletTimer = 0;
+let walletAd = null;
 function renderWallet() {
-  const wait = store.dailyReadyIn();
+  walletAd?.destroy();
+  const s = statusLine();
   wallet.innerHTML = `
     <div class="wallet-head"><span class="kicker">Cashier</span><button class="icon-btn" type="button" data-act="close" aria-label="Close cashier">${icon('close')}</button></div>
-    <div class="wallet-bal"><span class="chip-ico lg"></span><div><div class="dim" style="font-size:11px;font-weight:750;letter-spacing:.14em;text-transform:uppercase">Your stack</div><div class="big neon tnum" data-w="bal">${fmt(store.balance)}</div></div></div>
-    ${
-      store.canRefill()
-        ? `<button class="btn btn-primary btn-block" data-act="refill">${icon('refresh')}<span>Out of chips? Refill to 1,000</span></button>`
-        : ''
-    }
-    <button class="btn ${wait ? 'btn-outline' : 'btn-primary'} btn-block" data-act="daily" ${wait ? 'disabled' : ''}>
-      ${icon('gift')}<span data-w="daily">${wait ? `Daily bonus in ${countdown(wait)}` : `Claim daily +${fmt(DAILY_BONUS).replace('.00', '')}`}</span>
-    </button>
+    <div class="wallet-bal"><span class="chip-ico lg"></span><div><div class="dim" style="font-size:11px;font-weight:750;letter-spacing:.14em;text-transform:uppercase">${esc(store.username)}’s stack</div><div class="big neon tnum" data-w="bal">${fmt(store.balance)}</div></div></div>
+    <div data-w="ad"></div>
     <div class="ticket-glow" data-w="promo"></div>
     <div class="wallet-meta" data-w="meta"></div>
-    <div class="wallet-sync" data-w="sync"></div>
+    <div class="wallet-sync" data-w="sync">${icon(s.icon)}<span>${esc(s.text)}</span></div>
     <a class="link-arrow" href="#/profile" data-act="profile">Your profile & stats ${icon('arrowRight')}</a>`;
-  wallet.querySelector('[data-w="promo"]').append(promoTicket({ title: 'Promo code', sub: 'Redeem a code for free chips' }));
+  walletAd = adButton();
+  wallet.querySelector('[data-w="ad"]').append(walletAd.el);
+  wallet.querySelector('[data-w="promo"]').append(promoTicket({ title: 'Promo code', sub: 'One-time bonus chips' }));
   renderWalletNumbers();
 }
 function renderWalletNumbers() {
@@ -86,30 +116,25 @@ function renderWalletNumbers() {
       <div><span>Net profit</span><strong class="${st.profit >= 0 ? 'win-text' : 'loss-text'}">${signed(st.profit)}</strong></div>
       <div><span>Biggest win</span><strong>${fmt(st.biggestWin)}</strong></div>
       <div><span>Bets played</span><strong>${st.bets.toLocaleString('en-US')}</strong></div>`;
-  const sync = wallet.querySelector('[data-w="sync"]');
-  if (sync) {
-    const s = syncLabel();
-    sync.innerHTML = `${icon(s.icon)}<span>${s.text}</span>`;
-  }
 }
 function openWallet({ focusPromo = false } = {}) {
+  if (!store.signedIn) {
+    openAccount();
+    return;
+  }
   renderWallet();
   wallet.hidden = false;
-  clearInterval(walletTimer);
-  walletTimer = setInterval(() => {
-    const wait = store.dailyReadyIn();
-    const d = wallet.querySelector('[data-w="daily"]');
-    if (d && wait) d.textContent = `Daily bonus in ${countdown(wait)}`;
-  }, 1000);
   if (focusPromo) setTimeout(() => wallet.querySelector('.ticket input')?.focus(), 80);
 }
 function closeWallet() {
   wallet.hidden = true;
-  clearInterval(walletTimer);
+  walletAd?.destroy();
+  walletAd = null;
 }
 balBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   sfx.chip();
+  if (!store.signedIn) return openAccount();
   wallet.hidden ? openWallet() : closeWallet();
 });
 const promoBtn = $('#promoBtn');
@@ -117,6 +142,7 @@ promoBtn.innerHTML = icon('ticket');
 promoBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   sfx.click();
+  if (!store.signedIn) return openAccount({ reason: 'Make a username first, then your promo code pays out to your account.' });
   if (wallet.hidden) openWallet({ focusPromo: true });
   else wallet.querySelector('.ticket input')?.focus();
 });
@@ -124,17 +150,6 @@ wallet.addEventListener('click', (e) => {
   e.stopPropagation();
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'close') closeWallet();
-  if (act === 'daily' && store.claimDaily()) {
-    sfx.win(2);
-    burstAt(e.target.closest('button'), { count: 70, colors: PALETTES.gold });
-    toast(`+${fmt(DAILY_BONUS)} chips. See you tomorrow!`, { type: 'win', iconName: 'gift' });
-    renderWallet();
-  }
-  if (act === 'refill' && store.refill()) {
-    sfx.cashout();
-    toast('Topped back up to 1,000 chips.', { type: 'win', iconName: 'coins' });
-    renderWallet();
-  }
   if (act === 'profile') closeWallet();
 });
 document.addEventListener('click', (e) => {
@@ -148,29 +163,33 @@ updatePromoBadge();
 on('promo', updatePromoBadge);
 on('reset', updatePromoBadge);
 
-// ---------------------------------------------------------------- github button
+// ---------------------------------------------------------------- account button
 const ghBtn = $('#ghBtn');
 const syncDot = $('#syncDot');
+const initial = () => esc((store.username || '?').slice(0, 1));
 function renderAuth() {
-  const u = cloud.user;
-  if (u) {
-    ghBtn.innerHTML = u.avatar ? `<img class="avatar" src="${esc(u.avatar)}" alt="" referrerpolicy="no-referrer">` : icon('user');
-    ghBtn.setAttribute('aria-label', `Signed in as @${u.login}. Open menu`);
+  if (store.signedIn) {
+    ghBtn.innerHTML = `<span class="initial">${initial()}</span>`;
+    ghBtn.setAttribute('aria-label', `Signed in as ${store.username}. Open menu`);
   } else {
-    ghBtn.innerHTML = icon('github');
-    ghBtn.setAttribute('aria-label', 'Sign in with GitHub');
+    ghBtn.innerHTML = icon('user');
+    ghBtn.setAttribute('aria-label', 'Create an account or log in');
   }
-  syncDot.dataset.state = u ? cloud.status : '';
-  syncDot.title = syncLabel().text.replace(/<[^>]+>/g, '');
-  if (!wallet.hidden) renderWalletNumbers();
+  syncDot.dataset.state = !store.signedIn ? '' : MODE === 'device' ? 'device' : online ? 'synced' : 'offline';
+  syncDot.title = statusLine().text;
+  renderPill();
+  if (!wallet.hidden) {
+    if (store.signedIn) renderWallet();
+    else closeWallet();
+  }
   renderDrawer();
 }
 ghBtn.addEventListener('click', () => {
   sfx.click();
-  if (cloud.user) openDrawer();
-  else cloud.signIn();
+  if (store.signedIn) openDrawer();
+  else openAccount();
 });
-cloud.onChange(renderAuth);
+on('account', renderAuth);
 
 // ---------------------------------------------------------------- drawer
 const drawer = $('#drawer');
@@ -185,13 +204,15 @@ const NAV = [
   ['crash', 'Crash', '♣'],
   ['plinko', 'Plinko', '♦'],
   ['mines', 'Mines', '♠'],
+  ['rooster', 'Road Rooster', '♥'],
   ['leaderboard', 'Leaderboard', '♛'],
   ['profile', 'Profile', '☺'],
 ];
+let drawerAd = null;
 function renderDrawer() {
-  const u = cloud.user;
-  const sync = syncLabel();
   const route = currentRoute();
+  const st = statusLine();
+  drawerAd?.destroy();
   drawerPanel.innerHTML = `
     <div class="drawer-top">
       <span class="kicker">The floor</span>
@@ -205,17 +226,18 @@ function renderDrawer() {
     </nav>
     <div class="drawer-card">
       <div class="account">
-        ${u?.avatar ? `<img class="avatar" src="${esc(u.avatar)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar-fallback">${icon('user')}</span>`}
-        <div class="who"><strong>${u ? '@' + esc(u.login) : 'Guest player'}</strong><span>${sync.text}</span></div>
+        ${store.signedIn ? `<span class="avatar-initial">${initial()}</span>` : `<span class="avatar-fallback">${icon('user')}</span>`}
+        <div class="who"><strong>${store.signedIn ? esc(store.username) : 'Not signed in'}</strong><span>${esc(st.text)}</span></div>
       </div>
       ${
-        u
-          ? `<button class="btn btn-outline btn-block" type="button" data-act="signout">${icon('logout')}<span>Sign out</span></button>`
-          : `<button class="btn btn-primary btn-block" type="button" data-act="signin">${icon('github')}<span>Sign in with GitHub</span></button>`
+        store.signedIn
+          ? `<div data-ad></div><button class="btn btn-outline btn-block" type="button" data-act="signout">${icon('logout')}<span>Sign out</span></button>`
+          : `<button class="btn btn-primary btn-block" type="button" data-act="signup">${icon('sparkle')}<span>Create account · 1,000 chips</span></button>
+             <button class="btn btn-outline btn-block" type="button" data-act="login">${icon('user')}<span>Log in</span></button>`
       }
     </div>
     <div class="drawer-card" style="margin-top:12px">
-      <button class="drawer-row" type="button" data-act="promo" style="text-align:left"><span>Redeem a promo code<div class="sub">Free chips, if you know the word</div></span><span style="color:var(--gold)">${icon('ticket')}</span></button>
+      <button class="drawer-row" type="button" data-act="promo" style="text-align:left"><span>Redeem a promo code<div class="sub">One-time bonus, if you know the word</div></span><span style="color:var(--gold)">${icon('ticket')}</span></button>
     </div>
     <div class="drawer-card" style="margin-top:12px">
       <label class="drawer-row"><span>Sound effects<div class="sub">Synth bleeps, no downloads</div></span><span class="switch"><input type="checkbox" data-set="sound" ${soundOn() ? 'checked' : ''}><span></span></span></label>
@@ -227,6 +249,11 @@ function renderDrawer() {
       <p><a href="${esc(CONFIG.repoUrl)}" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>`;
   drawerPanel.querySelectorAll('.drawer-row svg').forEach((s) => s.setAttribute('width', '22'));
+  const slot = drawerPanel.querySelector('[data-ad]');
+  if (slot) {
+    drawerAd = adButton();
+    slot.replaceWith(drawerAd.el);
+  }
 }
 function openDrawer() {
   renderDrawer();
@@ -249,13 +276,13 @@ drawer.addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) return closeDrawer();
   if (e.target.closest('.drawer-nav a')) return closeDrawer();
   const act = e.target.closest('[data-act]')?.dataset.act;
-  if (act === 'signin') {
+  if (act === 'signup' || act === 'login') {
     closeDrawer();
-    cloud.signIn();
+    openAccount({ mode: act });
   }
   if (act === 'signout') {
     closeDrawer();
-    cloud.signOut();
+    confirmDialog({ title: 'Sign out?', text: `Your chips stay on ${store.username}. Log back in with your username and password on any browser.`, confirm: 'Sign out' }).then((ok) => ok && signOut());
   }
   if (act === 'promo') {
     closeDrawer();
@@ -296,7 +323,7 @@ $('#siteFoot').innerHTML = `
     <div class="foot-grid">
       <div class="foot-links">
         <a href="#/blackjack">Blackjack</a><a href="#/roulette">Roulette</a><a href="#/slots">Slots</a><a href="#/crash">Crash</a>
-        <a href="#/plinko">Plinko</a><a href="#/mines">Mines</a><a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
+        <a href="#/plinko">Plinko</a><a href="#/mines">Mines</a><a href="#/rooster">Road Rooster</a><a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
         <a href="${esc(CONFIG.repoUrl)}" target="_blank" rel="noopener">GitHub</a>
       </div>
       <p class="foot-note">CrankedCasino is a free game that uses fake chips with no cash value. Nothing can be bought, won or withdrawn. If real-money gambling ever stops being fun, talk to someone. <a href="https://www.begambleaware.org/" target="_blank" rel="noopener">BeGambleAware</a> can help.</p>
@@ -312,6 +339,7 @@ const routes = {
   plinko: () => import('./games/plinko.js'),
   slots: () => import('./games/slots.js'),
   crash: () => import('./games/crash.js'),
+  rooster: () => import('./games/rooster.js'),
   leaderboard: () => import('./pages/leaderboard.js'),
   profile: () => import('./pages/profile.js'),
 };
@@ -381,20 +409,70 @@ $('.skip-link').addEventListener('click', (e) => {
 window.addEventListener('pointerdown', unlockAudio, { once: true, passive: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
 
-// Daily bonus nudge, once per visit.
-setTimeout(() => {
-  if (store.dailyReadyIn() === 0 && !sessionStorage.getItem('cc:nudged')) {
+// ---------------------------------------------------------------- session
+const GAME_NAMES = { mines: 'Mines', blackjack: 'Blackjack', crash: 'Crash' };
+function noticeRounds() {
+  for (const g of ['blackjack', 'mines', 'crash']) {
+    if (store.state.rounds?.[g] && currentRoute() !== g) {
+      toast(`Your ${GAME_NAMES[g]} round is still open. Head back to finish it.`, { iconName: 'refresh', timeout: 5000 });
+      break;
+    }
+  }
+}
+
+engine.on((type, data) => {
+  if (type !== 'signedout') return;
+  if (store.signedIn) store.signOut();
+  if (data?.expired) {
+    toast('Your session ended. Log in again to keep playing.', { iconName: 'user', timeout: 4500 });
+    openAccount({ mode: 'login' });
+  }
+});
+
+async function boot() {
+  renderAuth();
+  if (engine.signedIn) {
+    const me = await engine.me();
+    if (me?.ok) {
+      store.load(me, { silent: true });
+      noticeRounds();
+    } else if (me?.error !== 'auth') {
+      // Server unreachable: keep the session and try again when the connection returns.
+      toast('Can’t reach the casino right now. Retrying…', { type: 'loss', iconName: 'info', timeout: 4000 });
+      const retry = async () => {
+        const r = await engine.me();
+        if (r?.ok) {
+          store.load(r, { silent: true });
+          window.removeEventListener('online', retry);
+          clearInterval(timer);
+        }
+      };
+      const timer = setInterval(retry, 8000);
+      window.addEventListener('online', retry);
+    }
+  } else {
+    // First visit in this tab: invite them to grab a username.
+    let seen = false;
     try {
-      sessionStorage.setItem('cc:nudged', '1');
+      seen = sessionStorage.getItem('cc:invited') === '1';
+      sessionStorage.setItem('cc:invited', '1');
     } catch {
       /* ignore */
     }
-    toast('Your daily bonus is ready. Tap your stack to claim it.', { iconName: 'gift', timeout: 4500 });
+    if (!seen) setTimeout(() => !store.signedIn && !document.querySelector('.modal-root') && openAccount(), 1400);
   }
-}, 2500);
+  navigate();
+}
 
-renderAuth();
-navigate();
-cloud.init().then(renderAuth);
+// Pick up anything that changed on another device when the player comes back.
+let lastRefresh = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !store.signedIn || store.busy) return;
+  if (Date.now() - lastRefresh < 15000) return;
+  lastRefresh = Date.now();
+  store.refresh();
+});
 
-window.__cc = { store, cloud, confirmDialog, openWallet };
+boot();
+
+window.__cc = { store, engine, confirmDialog, openWallet, openAccount };

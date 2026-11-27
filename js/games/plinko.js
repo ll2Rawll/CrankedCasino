@@ -1,50 +1,18 @@
 // Plinko: drop balls through a peg triangle onto multiplier bins.
 // Each row is a fair 50/50 bounce, so bin k is hit with probability C(n,k)/2^n.
-// The multiplier tables below were generated for this site to return ≈99% on every setting.
+// The server decides every bounce; the ball waits at the top until its path arrives.
+// Multiplier tables live in ../math.js (≈99% return on every setting).
 
 import { h, fmt, fmtMult, round2, signed, storage, clamp, cssVar } from '../util.js';
 import { icon } from '../icons.js';
 import { store } from '../store.js';
-import { random } from '../rng.js';
+import { engine } from '../engine.js';
+import { PLINKO } from '../math.js';
 import { sfx, haptic } from '../sound.js';
 import { burst, PALETTES, coinRain } from '../fx.js';
-import { gameFrame, betInput, tryBet, segmented, toast } from '../ui.js';
+import { gameFrame, betInput, tryBet, segmented, toast, serverRefused } from '../ui.js';
 
-export const TABLES = {
-  low: {
-    8: [5.6, 2.8, 1.3, 0.8, 0.5, 0.8, 1.3, 2.8, 5.6],
-    9: [6.8, 3.4, 1.8, 0.9, 0.6, 0.6, 0.9, 1.8, 3.4, 6.8],
-    10: [7.4, 4.2, 2.3, 1.2, 0.7, 0.5, 0.7, 1.2, 2.3, 4.2, 7.4],
-    11: [8.4, 4.7, 2.7, 1.4, 0.9, 0.6, 0.6, 0.9, 1.4, 2.7, 4.7, 8.4],
-    12: [9, 5.5, 3.1, 1.9, 1.1, 0.7, 0.5, 0.7, 1.1, 1.9, 3.1, 5.5, 9],
-    13: [11, 6.2, 3.7, 2.4, 1.3, 0.8, 0.6, 0.6, 0.8, 1.3, 2.4, 3.7, 6.2, 11],
-    14: [12, 7.5, 4.2, 2.6, 1.7, 1, 0.7, 0.5, 0.7, 1, 1.7, 2.6, 4.2, 7.5, 12],
-    15: [14, 8.8, 5.3, 3.2, 1.9, 1.2, 0.8, 0.6, 0.6, 0.8, 1.2, 1.9, 3.2, 5.3, 8.8, 14],
-    16: [16, 9.6, 6, 3.6, 2.3, 1.4, 1, 0.7, 0.5, 0.7, 1, 1.4, 2.3, 3.6, 6, 9.6, 16],
-  },
-  medium: {
-    8: [13, 3.7, 1.3, 0.6, 0.4, 0.6, 1.3, 3.7, 13],
-    9: [17, 5.6, 1.9, 0.8, 0.4, 0.4, 0.8, 1.9, 5.6, 17],
-    10: [22, 7.1, 2.8, 1.1, 0.5, 0.4, 0.5, 1.1, 2.8, 7.1, 22],
-    11: [29, 10, 3.8, 1.5, 0.7, 0.4, 0.4, 0.7, 1.5, 3.8, 10, 29],
-    12: [38, 13, 4.9, 2.2, 0.9, 0.5, 0.4, 0.5, 0.9, 2.2, 4.9, 13, 38],
-    13: [49, 18, 7.1, 2.9, 1.3, 0.6, 0.4, 0.4, 0.6, 1.3, 2.9, 7.1, 18, 49],
-    14: [64, 24, 9.2, 3.8, 1.7, 0.8, 0.5, 0.4, 0.5, 0.8, 1.7, 3.8, 9.2, 24, 64],
-    15: [84, 32, 12, 5.2, 2.3, 1.1, 0.6, 0.4, 0.4, 0.6, 1.1, 2.3, 5.2, 12, 32, 84],
-    16: [110, 43, 17, 7.4, 3.3, 1.5, 0.8, 0.4, 0.3, 0.4, 0.8, 1.5, 3.3, 7.4, 17, 43, 110],
-  },
-  high: {
-    8: [29, 4.7, 1.1, 0.4, 0.2, 0.4, 1.1, 4.7, 29],
-    9: [45, 8.1, 1.9, 0.5, 0.2, 0.2, 0.5, 1.9, 8.1, 45],
-    10: [70, 12, 2.9, 0.8, 0.3, 0.2, 0.3, 0.8, 2.9, 12, 70],
-    11: [110, 20, 4.4, 1.3, 0.4, 0.2, 0.2, 0.4, 1.3, 4.4, 20, 110],
-    12: [170, 31, 7, 1.8, 0.6, 0.3, 0.2, 0.3, 0.6, 1.8, 7, 31, 170],
-    13: [270, 48, 11, 2.8, 0.9, 0.4, 0.2, 0.2, 0.4, 0.9, 2.8, 11, 48, 270],
-    14: [410, 75, 16, 4.2, 1.4, 0.5, 0.3, 0.2, 0.3, 0.5, 1.4, 4.2, 16, 75, 410],
-    15: [640, 120, 25, 6.7, 2, 0.7, 0.4, 0.2, 0.2, 0.4, 0.7, 2, 6.7, 25, 120, 640],
-    16: [1000, 180, 39, 9.8, 2.9, 1, 0.5, 0.3, 0.2, 0.3, 0.5, 1, 2.9, 9.8, 39, 180, 1000],
-  },
-};
+export const TABLES = PLINKO;
 
 const STOPS = [
   [0, [124, 92, 255]],
@@ -249,12 +217,7 @@ export default {
     const binX = (k) => L.cx + (k - L.n / 2) * L.s;
 
     // ---------------------------------------------------------- balls
-    function makeBall(t) {
-      const n = rows;
-      const path = [];
-      for (let i = 0; i < n; i++) path.push(random() < 0.5 ? 0 : 1);
-      const k = path.reduce((a, b) => a + b, 0);
-      const mult = TABLES[risk][n][k];
+    function makeBall(t, n, riskAt) {
       // Per-segment timing and bounce heights, slightly randomised for a natural feel.
       const durs = [];
       const hops = [];
@@ -262,10 +225,16 @@ export default {
         durs.push((i === 0 ? 300 : 128) * (0.9 + Math.random() * 0.22));
         hops.push(0.18 + Math.random() * 0.16);
       }
-      return { path, k, mult, durs, hops, t0: performance.now(), seg: -1, ticket: t, n, landed: false, trail: [], jitter: (Math.random() - 0.5) * 0.12 };
+      // path/k/mult arrive from the server; until then the ball hovers at the top.
+      return { path: null, k: 0, mult: 0, entry: null, risk: riskAt, durs, hops, t0: 0, seg: -1, ticket: t, n, landed: false, trail: [], jitter: (Math.random() - 0.5) * 0.12, born: performance.now() };
     }
 
     function ballPos(b, now) {
+      if (!b.path) {
+        // waiting for the server: hover just above the board
+        const y0 = L.top - L.rowGap * 1.4;
+        return { x: L.cx + b.jitter * L.s, y: y0 + Math.sin((now - b.born) / 90) * 1.5, seg: -1, waiting: true };
+      }
       let el = now - b.t0;
       let i = 0;
       while (i <= b.n && el > b.durs[i]) {
@@ -301,17 +270,36 @@ export default {
       if (destroyed) return false;
       const t = tryBet('plinko', bet);
       if (!t) return false;
-      const b = makeBall(t);
-      store.setPayout(t, round2(t.amount * b.mult));
+      const b = makeBall(t, rows, risk);
       balls.push(b);
       lockSettings();
       start();
+      engine.plinko(t.amount, risk, rows).then((r) => {
+        if (!r?.ok) {
+          const i = balls.indexOf(b);
+          if (i >= 0) balls.splice(i, 1);
+          serverRefused(t, r, bet);
+          if (auto) stopAuto();
+          lockSettings();
+          return;
+        }
+        store.confirm(t, r, { debited: t.amount, paid: r.payout });
+        b.path = r.path;
+        b.k = r.k;
+        b.mult = r.mult;
+        b.entry = r.entry;
+        b.t0 = performance.now();
+        if (destroyed) land(b);
+        else start();
+      });
       return true;
     }
 
     function land(b) {
+      if (b.landed) return;
       b.landed = true;
-      store.finish(b.ticket, round2(b.ticket.amount * b.mult), { info: `${risk} · ${b.n} rows` });
+      store.finish(b.ticket, b.entry);
+      if (destroyed) return;
       binHits[b.k] = performance.now();
       sfx.land(b.mult);
       if (b.mult >= 1) haptic(8);
@@ -352,6 +340,20 @@ export default {
           g.fill();
         }
       }
+    }
+
+    function drawBall(p) {
+      const g = ctx.createRadialGradient(p.x - L.ballR * 0.35, p.y - L.ballR * 0.4, 0.5, p.x, p.y, L.ballR);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.35, '#ffb3dd');
+      g.addColorStop(1, '#e0268b');
+      ctx.shadowColor = 'rgba(255,79,174,0.8)';
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, L.ballR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
     function draw(full = false) {
@@ -439,6 +441,10 @@ export default {
           continue;
         }
         active = true;
+        if (p.waiting) {
+          drawBall(p);
+          continue;
+        }
         if (p.seg !== b.seg) {
           // contact with a new peg
           if (p.seg >= 1) {
@@ -458,17 +464,7 @@ export default {
           ctx.arc(tx, ty, L.ballR * (0.45 + (q / b.trail.length) * 0.45), 0, Math.PI * 2);
           ctx.fill();
         }
-        const g = ctx.createRadialGradient(p.x - L.ballR * 0.35, p.y - L.ballR * 0.4, 0.5, p.x, p.y, L.ballR);
-        g.addColorStop(0, '#ffffff');
-        g.addColorStop(0.35, '#ffb3dd');
-        g.addColorStop(1, '#e0268b');
-        ctx.shadowColor = 'rgba(255,79,174,0.8)';
-        ctx.shadowBlur = 14;
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, L.ballR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        drawBall(p);
       }
       if (!balls.length && !auto) lockSettings();
       return active;
@@ -537,8 +533,9 @@ export default {
       ro.disconnect();
       window.removeEventListener('themechange', onTheme);
       document.removeEventListener('keydown', onKey);
-      // Pay out any balls still bouncing.
-      for (const b of balls) if (!b.landed) store.finish(b.ticket, round2(b.ticket.amount * b.mult), { info: `${b.n} rows` });
+      // Balls still bouncing are already settled on the server: show their wins now.
+      // (Balls still waiting for the server land as soon as their answer arrives.)
+      for (const b of balls) if (b.path && !b.landed) land(b);
       balls.length = 0;
       frame.destroy();
     };

@@ -47,6 +47,12 @@ export const icons = {
   heart: '<svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><path d="M50 92C20 68 4 50 4 31 4 16 16 5 30 5c9 0 16 5 20 12 4-7 11-12 20-12 14 0 26 11 26 26 0 19-16 37-46 61Z"/></svg>',
   diamond: '<svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><path d="M50 2Q68 30 90 50 68 70 50 98 32 70 10 50 32 30 50 2Z"/></svg>',
   club: '<svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><circle cx="50" cy="27" r="20"/><circle cx="27" cy="57" r="20"/><circle cx="73" cy="57" r="20"/><circle cx="50" cy="52" r="10"/><path d="M47 58c-1 18-5 28-13 37h32c-8-9-12-19-13-37Z"/></svg>',
+  lock: s('<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3M12 14.5v2"/>'),
+  eye: s('<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff: s('<path d="M4 4l16 16M10 5.8a9 9 0 0 1 2-.3c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.6 6.9C3.9 8.6 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.6 0 3-.4 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'),
+  tv: s('<rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M8 2.5 12 6l4-3.5"/><path d="m10.2 10 4.3 2.5-4.3 2.5Z" fill="currentColor"/>'),
+  at: s('<circle cx="12" cy="12" r="3.8"/><path d="M15.8 12v1.5a2.7 2.7 0 0 0 5.4 0V12a9.2 9.2 0 1 0-3.6 7.3"/>'),
+  live: s('<circle cx="12" cy="12" r="2.4" fill="currentColor"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/>'),
 };
 
 export const icon = (name) => icons[name] || '';

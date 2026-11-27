@@ -181,7 +181,7 @@
   transition: rotate 0.8s var(--ease-spring), translate 0.5s var(--ease-out), scale 0.5s var(--ease-out), opacity 0.4s;
   z-index: calc(10 + var(--i));
 }
-.deck[data-mode="fan"] .gcard.is-dealt { rotate: calc((var(--i) - 2.5) * 8.5deg); opacity: 1; scale: 1; }
+.deck[data-mode="fan"] .gcard.is-dealt { rotate: calc((var(--i) - (var(--n, 7) - 1) / 2) * 7.6deg); opacity: 1; scale: 1; }
 .deck[data-mode="fan"] .gc-inner { transform: rotateY(180deg); }
 .deck[data-mode="fan"] .gcard.is-up .gc-inner { transform: rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)); transition: transform 0.9s var(--ease-out); }
 .deck[data-mode="fan"] .gcard.is-up:hover .gc-inner { transition: transform 0.15s linear; }

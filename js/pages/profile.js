@@ -1,26 +1,39 @@
-// Profile: account, sync status, lifetime stats, per-game breakdown, history, reset.
+// Profile: account, lifetime stats, per-game breakdown, history, ad rewards, promo codes.
 
-import { esc, fmt, fmtMult, signed, timeAgo, countdown } from '../util.js';
+import { esc, fmt, fmtMult, signed, timeAgo } from '../util.js';
 import { icon } from '../icons.js';
-import { store, on, GAMES, DAILY_BONUS } from '../store.js';
-import { cloud, syncLabel } from '../cloud.js';
-import { sfx } from '../sound.js';
-import { burstAt, PALETTES } from '../fx.js';
-import { toast, confirmDialog, promoTicket } from '../ui.js';
+import { store, on, GAMES } from '../store.js';
+import { MODE } from '../engine.js';
+import { confirmDialog, promoTicket } from '../ui.js';
+import { openAccount, signOut } from '../account.js';
+import { adButton } from '../ads.js';
 
-const TITLES = { blackjack: 'Blackjack', roulette: 'Roulette', mines: 'Mines', plinko: 'Plinko', slots: 'Slots', crash: 'Crash' };
+const TITLES = { blackjack: 'Blackjack', roulette: 'Roulette', mines: 'Mines', plinko: 'Plinko', slots: 'Slots', crash: 'Crash', rooster: 'Road Rooster' };
+const since = (t) => (t ? new Date(t).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '');
 
 export default {
   title: 'Profile',
   mount(view) {
     let timer = 0;
     const render = () => {
-      const u = cloud.user;
       const s = store.state;
       const st = s.stats;
-      const sync = syncLabel();
       const winRate = st.bets ? (st.wins / st.bets) * 100 : 0;
-      const wait = store.dailyReadyIn();
+      if (!store.signedIn) {
+        view.innerHTML = `
+          <section class="wrap page-head">
+            <span class="kicker">Your table</span>
+            <h1 class="page-title display">Pro<em>file</em></h1>
+          </section>
+          <section class="wrap">
+            <div class="panel setup-card">
+              <h2 class="section-title" style="font-size:clamp(36px,8vw,56px)">No seat <em>yet</em></h2>
+              <p class="muted">Make a username to start with 1,000 chips. Your stack and stats are saved to your account and follow you to any browser.</p>
+              <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" data-act="signup">${icon('sparkle')}<span>Create account</span></button><button class="btn btn-outline" data-act="login">${icon('user')}<span>Log in</span></button></div>
+            </div>
+          </section>`;
+        return;
+      }
       view.innerHTML = `
         <section class="wrap page-head">
           <span class="kicker">Your table</span>
@@ -29,23 +42,15 @@ export default {
         <section class="wrap profile-top">
           <div class="panel" style="padding:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
             <div class="profile-id">
-              ${u?.avatar ? `<img src="${esc(u.avatar)}" alt="" referrerpolicy="no-referrer">` : `<span class="ph">${icon('user')}</span>`}
+              <span class="avatar-initial" style="width:64px;height:64px;font-size:28px">${esc(store.username.slice(0, 1))}</span>
               <div>
-                <h2>${u ? '@' + esc(u.login) : 'Guest player'}</h2>
-                <p style="display:flex;align-items:center;gap:6px">${icon(sync.icon).replace('<svg', '<svg width="16" height="16"')}<span>${sync.text}</span></p>
+                <h2>${esc(store.username)}</h2>
+                <p style="display:flex;align-items:center;gap:6px">${icon(MODE === 'device' ? 'device' : 'cloud').replace('<svg', '<svg width="16" height="16"')}<span>${MODE === 'device' ? 'Saved on this device (offline mode)' : 'Saved to your account · log in on any browser'}${s.created ? ` · member since ${since(s.created)}` : ''}</span></p>
               </div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              ${
-                u
-                  ? `<button class="btn btn-outline" data-act="signout">${icon('logout')}<span>Sign out</span></button>`
-                  : `<button class="btn btn-primary" data-act="signin">${icon('github')}<span>Sign in with GitHub</span></button>`
-              }
-              ${
-                store.canRefill()
-                  ? `<button class="btn btn-primary" data-act="refill">${icon('refresh')}<span>Refill to 1,000</span></button>`
-                  : `<button class="btn ${wait ? 'btn-outline' : 'btn-primary'}" data-act="daily" ${wait ? 'disabled' : ''}>${icon('gift')}<span data-daily>${wait ? `Bonus in ${countdown(wait)}` : `Claim +${fmt(DAILY_BONUS)}`}</span></button>`
-              }
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <span data-ad></span>
+              <button class="btn btn-outline" data-act="signout">${icon('logout')}<span>Sign out</span></button>
             </div>
           </div>
           <div class="kpis">
@@ -87,7 +92,7 @@ export default {
                         .slice(0, 20)
                         .map(
                           (r) => `<tr>
-                            <td><span class="g" style="--c:var(--${esc(r.g)})"><i></i>${esc(r.g)}</span></td>
+                            <td><span class="g" style="--c:var(--${esc(r.g)})"><i></i>${esc(TITLES[r.g] || r.g)}</span></td>
                             <td>${fmt(r.a)}</td>
                             <td class="${r.m >= 1 ? 'win-text' : 'dim'}">${fmtMult(r.m)}</td>
                             <td class="dim">${timeAgo(r.t)}</td>
@@ -104,59 +109,48 @@ export default {
 
         <section class="wrap section" style="padding-bottom:0">
           <div class="profile-promo ticket-glow" data-promo style="max-width:520px"></div>
-          <p class="dim" style="margin-top:10px;font-size:13px">${s.promos.length ? `Redeemed: ${s.promos.map((c) => esc(c)).join(', ')}` : 'No promo codes redeemed yet.'}</p>
+          <p class="dim" style="margin-top:10px;font-size:13px">${s.promos.length ? `Redeemed: ${s.promos.map((c) => esc(c)).join(', ')}` : 'No promo codes redeemed yet. Each code works once per account.'}</p>
         </section>
 
         <section class="wrap section">
           <div class="panel danger-zone">
-            <div><strong>Start over</strong><p class="dim" style="font-size:14px">Resets balance, stats and history${u ? ' for this GitHub account' : ' on this device'}.</p></div>
-            <button class="btn btn-danger" data-act="reset">${icon('refresh')}<span>Reset progress</span></button>
+            <div><strong>About your account</strong><p class="dim" style="font-size:14px">Your chips live on the casino server, so they can’t be reset, refilled or lost by clearing your browser. Free chips come from ad breaks (+${fmt(store.adStatus().reward).replace(/\.00$/, '')}) and one-time promo codes.</p></div>
           </div>
         </section>`;
     };
-    // One ticket element that survives re-renders, so its stamp/message stay visible.
-    const ticketEl = promoTicket({ title: 'Promo code', sub: 'Codes work once per player' });
-    const mountPromo = () => view.querySelector('[data-promo]')?.append(ticketEl);
+    // One ticket element (and ad button) that survive re-renders, so their state stays visible.
+    const ticketEl = promoTicket({ title: 'Promo code', sub: 'Codes work once per account' });
+    let ad = null;
+    const mountExtras = () => {
+      view.querySelector('[data-promo]')?.append(ticketEl);
+      const slot = view.querySelector('[data-ad]');
+      if (slot) {
+        ad ||= adButton({ block: false });
+        slot.replaceWith(ad.el);
+      }
+    };
     render();
-    mountPromo();
+    mountExtras();
 
     view.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-act]');
       if (!b) return;
       const act = b.dataset.act;
-      if (act === 'signin') cloud.signIn();
-      if (act === 'signout') cloud.signOut();
-      if (act === 'daily' && store.claimDaily()) {
-        sfx.win(2);
-        burstAt(b, { count: 70, colors: PALETTES.gold });
-        toast(`+${fmt(DAILY_BONUS)} chips. See you tomorrow!`, { type: 'win', iconName: 'gift' });
-      }
-      if (act === 'refill' && store.refill()) {
-        sfx.cashout();
-        toast('Topped back up to 1,000 chips.', { type: 'win', iconName: 'coins' });
-      }
-      if (act === 'reset') {
-        const ok = await confirmDialog({ title: 'Reset everything?', text: 'Your balance goes back to 1,000 and all stats and history are wiped. This can’t be undone.', confirm: 'Reset progress', danger: true });
-        if (ok) {
-          store.reset();
-          toast('Fresh start. 1,000 chips on the table.', { iconName: 'refresh' });
-        }
+      if (act === 'signup' || act === 'login') openAccount({ mode: act });
+      if (act === 'signout') {
+        const ok = await confirmDialog({ title: 'Sign out?', text: `Your chips stay on ${store.username}. Log back in with your username and password on any browser.`, confirm: 'Sign out' });
+        if (ok) signOut();
       }
     });
 
     const rerender = () => {
       render();
-      mountPromo();
+      mountExtras();
     };
-    const offs = [on('balance', rerender), on('reset', rerender), cloud.onChange(rerender)];
-    timer = setInterval(() => {
-      const el = view.querySelector('[data-daily]');
-      const wait = store.dailyReadyIn();
-      if (el && wait) el.textContent = `Bonus in ${countdown(wait)}`;
-      else if (el && !wait && el.textContent.startsWith('Bonus in')) rerender();
-    }, 1000);
+    const offs = [on('balance', rerender), on('reset', rerender), on('account', rerender)];
+    store.refresh();
     return () => {
-      clearInterval(timer);
+      ad?.destroy();
       offs.forEach((f) => f());
     };
   },

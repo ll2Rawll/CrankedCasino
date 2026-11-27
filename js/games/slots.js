@@ -1,99 +1,24 @@
 // Slots: 5 reels × 3 rows, 10 fixed lines, wilds, scatter stars and free spins at ×2.
-// Every cell is drawn independently with the weights below, which makes the maths exact:
-// line pays ≈ 84%, scatter pays ≈ 2%, free spins ≈ 11.4%  →  RTP ≈ 97.5%.
+// The server spins every reel (and any free spins); this page animates the result.
+// Paytable and line maths live in ../math.js (RTP ≈ 97.5%).
 
 import { h, fmt, fmtMult, round2, signed, storage, sleep, reducedMotion, esc } from '../util.js';
 import { icon } from '../icons.js';
 import { store } from '../store.js';
+import { engine } from '../engine.js';
 import { weightedPick, randInt } from '../rng.js';
+import { SLOT_WEIGHTS, SLOT_TOTAL_W, SLOT_PAY as PAY, WILD, SCAT, FS_MULT, LINES, slotEvaluate as evaluate, unflatGrid } from '../math.js';
 import { sfx, haptic } from '../sound.js';
 import { burstAt, coinRain, countTo, PALETTES, shake } from '../fx.js';
-import { gameFrame, betInput, tryBet, toast, modal } from '../ui.js';
+import { gameFrame, betInput, tryBet, toast, modal, serverRefused } from '../ui.js';
 
 export const SYMBOLS = ['cherry', 'lemon', 'grape', 'bell', 'bar', 'diamond', 'seven', 'wild', 'scatter'];
 const NAMES = { cherry: 'Cherry', lemon: 'Lemon', grape: 'Grapes', bell: 'Bell', bar: 'Bar', diamond: 'Diamond', seven: 'Lucky 7', wild: 'Wild', scatter: 'Bonus star' };
-const WEIGHTS = [19, 18, 16, 12, 9, 6, 4, 4.2, 2.5];
-const TOTAL_W = WEIGHTS.reduce((a, b) => a + b, 0);
-const WILD = 7;
-const SCAT = 8;
-// pays × line bet for 3, 4, 5 in a row (from the leftmost reel)
-const PAY = [
-  [6, 20, 50],
-  [7, 20, 60],
-  [8, 25, 80],
-  [12, 40, 125],
-  [20, 60, 200],
-  [30, 100, 400],
-  [50, 200, 750],
-  [80, 300, 1500],
-];
-const SCAT_PAY = { 3: 2, 4: 10, 5: 50 }; // × total bet, anywhere
-const FS_AWARD = { 3: 8, 4: 12, 5: 20 };
-const FS_MULT = 2;
-const LINES = [
-  [1, 1, 1, 1, 1],
-  [0, 0, 0, 0, 0],
-  [2, 2, 2, 2, 2],
-  [0, 1, 2, 1, 0],
-  [2, 1, 0, 1, 2],
-  [0, 0, 1, 2, 2],
-  [2, 2, 1, 0, 0],
-  [1, 0, 0, 0, 1],
-  [1, 2, 2, 2, 1],
-  [1, 0, 1, 2, 1],
-];
 const LINE_COLORS = ['#ffffff', '#5ab4ff', '#ff4fae', '#45e3a0', '#f3c35f', '#b169ff', '#ff7a45', '#7df9ff', '#ffd1ea', '#c7f78d'];
 const src = (i) => `assets/symbols/${SYMBOLS[i]}.svg`;
 
-// ------------------------------------------------------------------ engine
-const pick = () => weightedPick(WEIGHTS, TOTAL_W);
-const spinGrid = () => Array.from({ length: 5 }, () => [pick(), pick(), pick()]);
-
-function linePay(syms) {
-  let target = -1;
-  let count = 0;
-  for (let i = 0; i < 5; i++) {
-    const s = syms[i];
-    if (s === SCAT) break;
-    if (s === WILD) {
-      count++;
-      continue;
-    }
-    if (target < 0) {
-      target = s;
-      count++;
-      continue;
-    }
-    if (s === target) {
-      count++;
-      continue;
-    }
-    break;
-  }
-  let wr = 0;
-  while (wr < 5 && syms[wr] === WILD) wr++;
-  const pt = target >= 0 && count >= 3 ? PAY[target][count - 3] : 0;
-  const pw = wr >= 3 ? PAY[WILD][wr - 3] : 0;
-  if (pw > pt) return { pay: pw, count: wr, sym: WILD };
-  return { pay: pt, count, sym: target };
-}
-
-export function evaluate(grid, totalBet, mult = 1) {
-  const lineBet = totalBet / LINES.length;
-  const wins = [];
-  LINES.forEach((line, li) => {
-    const syms = line.map((r, c) => grid[c][r]);
-    const { pay, count, sym } = linePay(syms);
-    if (pay > 0) wins.push({ li, count, sym, amount: round2(pay * lineBet * mult), cells: line.slice(0, count).map((r, c) => [c, r]) });
-  });
-  const scat = [];
-  grid.forEach((col, c) => col.forEach((s, r) => s === SCAT && scat.push([c, r])));
-  const n = Math.min(scat.length, 5);
-  const scatWin = n >= 3 ? round2(SCAT_PAY[n] * totalBet * mult) : 0;
-  const fs = n >= 3 ? FS_AWARD[n] : 0;
-  const total = round2(wins.reduce((a, w) => a + w.amount, 0) + scatWin);
-  return { wins, scat, scatWin, fs, total };
-}
+// Filler symbols that blur past while the reels spin (looks only).
+const pick = () => weightedPick(SLOT_WEIGHTS, SLOT_TOTAL_W);
 
 // ------------------------------------------------------------------ page
 const RULES = `
@@ -339,33 +264,43 @@ export default {
     // ---------------------------------------------------------- spin sequence
     async function spin() {
       if (spinning || destroyed) return;
-      const totalBet = bet.value;
-      // Decide everything up front: base spin and any free spins.
-      const grid = spinGrid();
-      const ev = evaluate(grid, totalBet);
-      const fsList = [];
-      if (ev.fs) {
-        let queue = ev.fs;
-        while (queue > 0 && fsList.length < 300) {
-          queue--;
-          const g = spinGrid();
-          const e = evaluate(g, totalBet, FS_MULT);
-          fsList.push({ grid: g, ev: e });
-          queue += e.fs;
-        }
-      }
-      const total = round2(ev.total + fsList.reduce((a, f) => a + f.ev.total, 0));
-      const t = tryBet('slots', bet, { payout: total });
+      const t = tryBet('slots', bet);
       if (!t) {
         autoLeft = 0;
         renderPlay();
         return;
       }
+      const totalBet = t.amount;
       open = t;
       spinning = true;
       renderPlay();
       clearWins();
       banner.innerHTML = `<span class="idle">Good luck…</span>`;
+      cabinet.classList.add('is-pulling');
+      const r = await engine.slots(totalBet);
+      cabinet.classList.remove('is-pulling');
+      if (!r?.ok) {
+        serverRefused(t, r, bet);
+        open = null;
+        spinning = false;
+        autoLeft = 0;
+        if (!destroyed) {
+          banner.innerHTML = `<span class="idle">Spin to win. Three stars unlock free spins.</span>`;
+          renderPlay();
+        }
+        return;
+      }
+      store.confirm(t, r, { debited: totalBet, paid: r.total });
+      t.entry = r.entry;
+      if (destroyed) return store.finish(t, r.entry);
+      // The server's grids, presented with the same line maths it used.
+      const grid = unflatGrid(r.grid);
+      const ev = evaluate(grid, totalBet);
+      const fsList = r.fs.map((f) => {
+        const g = unflatGrid(f.grid);
+        return { grid: g, ev: evaluate(g, totalBet, FS_MULT) };
+      });
+      const total = r.total;
       const fast = turbo || autoLeft > 0;
       await animateReels(grid, { fast });
       if (destroyed) return;
@@ -409,7 +344,7 @@ export default {
           banner.innerHTML = `<div class="wb"><span class="k">Total win · ${fmtMult(total / totalBet)}</span><span class="v tnum">${fmt(total)}</span></div>`;
         }
       }
-      store.finish(t, total, { info: fsList.length ? `${fsList.length} free spins` : '' });
+      store.finish(t, r.entry);
       open = null;
       spinning = false;
       if (autoLeft > 0) {
@@ -452,7 +387,8 @@ export default {
       destroyed = true;
       autoLeft = 0;
       document.removeEventListener('keydown', onKey);
-      if (open) store.finish(open);
+      // A spin still animating is already paid on the server: show the win now.
+      if (open?.entry) store.finish(open, open.entry);
       frame.destroy();
     };
   },

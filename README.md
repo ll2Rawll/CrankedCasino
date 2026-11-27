@@ -2,88 +2,101 @@
 
 ![CrankedCasino](assets/img/og.jpg)
 
-A fake-money online casino that runs entirely on GitHub Pages. It has six original games and a neon "after hours" look, and it saves your progress to your GitHub account.
+A free fake-money casino with a neon "after hours" look. Every player picks a username, and their chips live on the casino server, so they follow the player to any browser and can't be reset by clearing history. The site runs on GitHub Pages; the server is a free Supabase project.
 
-**Games**
+## Games
 
 | Game | What happens | Return to player |
 | --- | --- | --- |
-| **Blackjack** | Six-deck shoe with a cut card. Hit, stand, double, split and insurance. The dealer stands on all 17s and blackjack pays 3:2. Cards are dealt from the shoe with flip animations, and chips fly in and out. | ≈99.5% (basic strategy) |
-| **Roulette** | Single-zero European wheel with a rolling ball that lands in the winning pocket. Bet straight up (35:1), on dozens and columns (2:1), and on red/black, odd/even and 1–18/19–36 (1:1). Undo, double, rebet and quick spin. | 97.3% |
-| **Slots** | Five reels, ten lines, wilds, and bonus stars that trigger free spins at ×2 (with retriggers). Turbo and autoplay. | ≈97.5% |
+| **Blackjack** | Six-deck shoe with a cut card. Hit, stand, double, split and insurance. The dealer stands on all 17s and blackjack pays 3:2. | ≈99.5% (basic strategy) |
+| **Roulette** | Single-zero European wheel with a rolling ball that lands in the winning pocket. Straight up 35:1, dozens and columns 2:1, even-money bets. | 97.3% |
+| **Slots** | Five reels, ten lines, wilds, and bonus stars that trigger free spins at ×2 (with retriggers). | ≈97.5% |
 | **Crash** | A rocket climbs a live multiplier curve until it explodes. Cash out in time, or set an auto cash-out. | 99% |
-| **Plinko** | Drop balls through 8–16 rows of pegs, with three risk levels, up to 1,000×. Manual or auto drop. | ≈99% |
-| **Mines** | Flip tiles on a 5×5 grid, collect gems, dodge 1–24 bombs, and cash out whenever you like. | 99% |
+| **Plinko** | Drop balls through 8–16 rows of pegs, three risk levels, up to 1,000×. | ≈99% |
+| **Mines** | Flip tiles on a 5×5 grid, collect gems, dodge 1–24 bombs, cash out whenever you like. | 99% |
+| **Road Rooster** *(new)* | A skill game. Hop a rooster across a neon highway, dodging cars, buses and trains, with a hawk chasing you if you dawdle. Cash out any time for your furthest row: row 10 returns your bet, and every row after adds 7%, up to 81.27× at the golden egg on row 75. | Depends on how well you play |
 
-Every card, spin and bounce comes from the browser's cryptographic random number generator (`crypto.getRandomValues`).
+The server decides every card, spin, bounce and crash with a cryptographic random number generator; the browser only animates the result. Road Rooster is the exception: it's a skill game. The server hands out a seed that lays out the traffic, and when you cash out it replays your moves against the same traffic before paying.
 
 **Also included**
 
-- **Cashier:** a daily +1,000 bonus, a refill when you're broke, and **promo codes**.
-- **Profile:** a leaderboard and per-game stats.
-- **Look and feel:** synthesized sound effects (no audio files), a daylight theme, reduced-motion support and keyboard shortcuts. It also installs to your phone's home screen as an app.
+- **Accounts:** a username and password. They are remembered on each device, so players only log in again on a new browser.
+- **Cashier:** watch an ad for +250 chips (two minutes apart, 20 a day), and **promo codes** that work once per account. There's no daily bonus or refill, and new players start with 1,000 chips.
+- **Live leaderboard** and a profile with per-game stats.
+- **Look and feel:** synthesized sound effects (no audio files), a daylight theme and reduced-motion support. It also installs to your phone's home screen.
 
 > Chips are pretend. Nothing can be bought, won or withdrawn.
 
-## Promo codes
+## Connect the server (Supabase)
 
-Players redeem codes from the 🎟 ticket button in the header, from the cashier (tap your balance), from the lobby's golden ticket, or from their profile. Each code works **once per player**, and codes are not case-sensitive.
+Until you do this, the site runs in **offline mode**: everything works, but accounts are stored only in the visitor's browser. To make accounts work across browsers, and to make cheating impossible, connect a Supabase project. It's free and takes about five minutes:
 
-The site ships with:
+1. **Create a project** at [supabase.com/dashboard](https://supabase.com/dashboard). Any name and region; note the database password somewhere safe.
+2. **Install the casino.** Open **SQL Editor** → **New query**, paste all of [`supabase/schema.sql`](supabase/schema.sql), and press **Run**. It's safe to run again later, for example after an update; it never deletes players.
+3. **Connect the site.** In **Project Settings** → **API** (or **API Keys**), copy the **Project URL** and the **anon** / **publishable** key into [`js/config.js`](js/config.js):
 
-| Code | Reward |
-| --- | --- |
-| `MaxWin` | +1,000 chips |
+   ```js
+   supabaseUrl: 'https://abcdefghijklmnop.supabase.co',
+   supabaseKey: 'sb_publishable_…', // or the older "anon" key starting with eyJ…
+   ```
 
-To add or change codes, edit `PROMOS` in [`js/store.js`](js/store.js):
+   Commit and push, and GitHub Pages redeploys in a minute.
 
-```js
-export const PROMOS = {
-  MAXWIN: { chips: 1000, note: 'MaxWin bonus' },
-  HIGHROLLER: { chips: 5000, note: 'Launch party' }, // keys are UPPERCASE
-};
-```
+Both values are meant to be public. All the tables sit in a private `cc` schema that the API can't reach; visitors can only call the `cc_*` functions, and those check the player's session on every call.
+
+Free Supabase projects pause after a week without any visits. If that happens, open the dashboard and press **Restore**.
+
+### How it stops cheating
+
+- **Balances live on the server.** Every bet is placed, decided and paid inside Postgres, under a row lock. Editing the page or the network traffic can't change a result.
+- **Clearing history doesn't reset anything.** It only logs you out. Logging back in, from that browser or any other, brings back the same stack, stats and history.
+- **Promo codes are once per account, ever.** They're tracked in `cc.promo_redemptions`.
+- **Ad rewards are rate-limited by the server** (cooldown plus a daily cap), so the button can't be farmed.
+- **New accounts are limited** to 4 per network per day, so you can't keep making accounts for fresh chips. Passwords are bcrypt-hashed, and 8 wrong passwords lock the account for 10 minutes.
+- **Road Rooster runs are replayed** by the server before they pay. Fake runs, impossible timings and moves that would have been hit by traffic pay nothing.
+
+### Tuning
+
+Change these in **Table Editor** → schema **cc** → **settings** (no redeploy needed):
+
+| key | default | meaning |
+| --- | --- | --- |
+| `start_balance` | 1000 | chips for a new player |
+| `ad_reward` | 250 | chips per rewarded ad |
+| `ad_cooldown_seconds` | 120 | wait between ads |
+| `ad_daily_cap` | 20 | ads per player per day |
+| `signups_per_ip_per_day` | 4 | new accounts per network per day |
+| `login_attempts` / `lockout_minutes` | 8 / 10 | lockout after wrong passwords |
+
+**Promo codes** live in `cc.promo_codes`. Add a row with `code` (UPPERCASE) and `chips`, or set `active` to false to retire one. The site ships with `MAXWIN` → +1,000 chips. For offline mode the same codes are listed in `PROMOS` in [`js/engine-local.js`](js/engine-local.js).
+
+## Ads
+
+The site has two kinds of ad placement:
+
+- **Banners** in the lobby, under every game and on the leaderboard.
+- **Rewarded ad breaks:** the "Watch an ad · +250 chips" button in the cashier, the drawer and the profile.
+
+Until you add an ad account, those spots show **house ads** for the casino's own games, and the rewarded break is a 15-second house spot, so everything already works.
+
+To earn money, use Google AdSense:
+
+1. Sign up at [adsense.google.com](https://adsense.google.com) and add your site.
+2. AdSense needs an `ads.txt` file at the root of your domain. For a GitHub Pages project site, that's the `ll2rawll.github.io` user-site repository, so a custom domain is usually simpler.
+3. Once approved, create a responsive **display ad unit**. In [`js/config.js`](js/config.js), fill in `ads.adsenseClient` (`ca-pub-…`) and `ads.bannerSlot` (the unit's `data-ad-slot` number).
+4. For **rewarded** ads, apply for Google's [H5 Games Ads](https://developers.google.com/ad-placement) (the Ad Placement API) on the same AdSense account. Keep `testMode: true` until Google approves it, then set it to `false`.
+
+With real ads switched on, chips are only claimed after Google's player reports the ad as watched, and the server still applies the cooldown and daily cap. If an ad blocker stops the ad, the player is asked to allow ads instead.
+
+Heads-up: Google treats simulated casino games as restricted content, so approval isn't guaranteed and some advertisers won't show up. You'll also need a privacy policy, and a consent banner for visitors in Europe (AdSense's own **Privacy & messaging** tool can provide one).
 
 ## Put it online with GitHub Pages
 
 1. Open the repo on GitHub → **Settings** → **Pages**.
-2. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
-3. Pick the branch that holds this code (for example `main`) and the **/ (root)** folder, then **Save**.
-4. After a minute the casino is live at **https://ll2rawll.github.io/CrankedCasino/**.
+2. Under **Build and deployment**, set **Source** to **Deploy from a branch**. Pick the branch with this code and the **/ (root)** folder, then **Save**.
+3. After a minute the casino is live at **https://ll2rawll.github.io/CrankedCasino/**.
 
-There's no build step. The site is plain HTML, CSS and JavaScript modules, and the fonts and libraries are bundled in the repo.
-
-## Turn on GitHub sign-in
-
-Without this, everything still works and chips are saved in the visitor's browser. With it, players can **Sign in with GitHub**. Their stack, stats, promo redemptions and history are then saved to their account and follow them to any device, and they appear on the leaderboard.
-
-GitHub Pages can't keep secrets, so sign-in goes through [Supabase](https://supabase.com) (free tier). It takes about 5 minutes:
-
-1. **Create a Supabase project** at [supabase.com/dashboard](https://supabase.com/dashboard).
-2. **Create the database table.** Open **SQL Editor** → **New query**, paste all of [`supabase/schema.sql`](supabase/schema.sql), and press **Run**.
-3. **Create a GitHub OAuth app.** On GitHub go to **Settings** → **Developer settings** → **OAuth Apps** → **New OAuth App**:
-   - *Homepage URL:* `https://ll2rawll.github.io/CrankedCasino/`
-   - *Authorization callback URL:* `https://<your-project-ref>.supabase.co/auth/v1/callback`
-
-     Supabase shows this exact URL under **Authentication** → **Sign In / Providers** → **GitHub**.
-   - Register the app, then copy the **Client ID** and generate a **Client secret**.
-4. **Enable GitHub in Supabase.** In **Authentication** → **Sign In / Providers** → **GitHub**, switch it on and paste the Client ID and secret.
-5. **Allow the site to receive the login.** In **Authentication** → **URL Configuration**:
-   - *Site URL:* `https://ll2rawll.github.io/CrankedCasino/`
-   - *Redirect URLs:* add `https://ll2rawll.github.io/CrankedCasino/**`. Add `http://localhost:8080/**` too if you test locally.
-6. **Connect the site.** Copy the **Project URL** and the **anon** / **publishable** key from **Project Settings** → **API** into [`js/config.js`](js/config.js), then commit and push.
-
-Both values are meant to be public. The database rules only let each player read and write their own save, and the leaderboard only exposes usernames, avatars and numbers.
-
-### How saving works
-
-- **Guests:** progress lives in `localStorage` on that device.
-- **First GitHub sign-in:** the guest's progress (including redeemed promo codes) moves into their account, and the guest slot starts fresh.
-- **Signed in:** every change is saved about 1.5 seconds after it happens, and again when the tab is hidden or closed. If two devices disagree, the newest save wins.
-- **Mid-game:** wins that are still animating are already counted in the saved balance. An unfinished Mines round resumes where you left it, and leaving Blackjack mid-hand settles the hand automatically.
-- **Paused projects:** free Supabase projects pause after a week without traffic. The casino falls back to on-device saves until you un-pause the project.
-
-The games run in the browser, so a determined player could edit their own balance or redeem a code twice by resetting their save. That's fine for fake chips; just treat the leaderboard as an honour system.
+There's no build step. The site is plain HTML, CSS and JavaScript modules, and the fonts are bundled in the repo.
 
 ## Run it locally
 
@@ -96,25 +109,22 @@ python3 -m http.server 8080
 
 ```
 index.html               app shell (header, cashier, menu, footer)
-css/base.css             design system: tokens, neon, buttons, chips, cashier, promo ticket
-css/lobby.css            neon marquee, holo card deck, cashier section
-css/games.css            game frame, Mines, Plinko, Slots, Crash, leaderboard, profile
-css/tables.css           felt tables, playing cards, chips, Blackjack and Roulette
-js/main.js               header, cashier, menu, theme, hash router
-js/store.js              balance, bets, stats, history, promo codes, local saves
-js/cloud.js              GitHub sign-in and cloud saves (Supabase)
-js/config.js             ← your Supabase URL and key go here
-js/games/*.js            blackjack, roulette, slots, crash, plinko, mines (+ cards.js deck and shoe)
+css/                     design system, lobby, game screens, felt tables
+js/main.js               header, cashier, menu, theme, hash router, session start-up
+js/engine.js             talks to the casino server (Supabase REST), one call at a time
+js/engine-local.js       the same server, in the browser, for offline mode
+js/math.js               game maths shared with the server (pay tables, Road Rooster traffic)
+js/store.js              the balance and stats the player sees, synced from the server
+js/account.js            sign-up / log-in sheet
+js/ads.js                banners and rewarded ad breaks (AdSense, or house ads)
+js/config.js             ← your Supabase URL/key and AdSense IDs go here
+js/games/*.js            blackjack, roulette, slots, crash, plinko, mines, rooster (+ art)
 js/pages/*.js            lobby, leaderboard, profile
-js/sound.js, fx.js       synthesized sound effects, particles, coin rain
-assets/                  fonts (Tilt Neon, Bricolage Grotesque), 3D card art, slot symbols, icons
-supabase/schema.sql      database table, security rules, leaderboard function
-tools/                   scripts that re-render the 3D art, share image and app icons
-vendor/                  supabase-js (site), three.js (art tools only)
+supabase/schema.sql      the whole casino server: accounts, chips, games, ads, promos
+tools/                   scripts that re-render the 3D card art, share image and app icons
+vendor/                  three.js (art tools only)
 ```
-
-To re-render the 3D card art after editing `tools/art3d.js`, serve the repo on port 8765 and run `node tools/render-assets.mjs`. This needs Playwright and Python with Pillow.
 
 ## Credits
 
-[supabase-js](https://github.com/supabase/supabase-js) and [Three.js](https://threejs.org) are MIT licensed. The fonts, [Tilt Neon](https://github.com/googlefonts/Tilt-Fonts) and [Bricolage Grotesque](https://github.com/ateliertriay/bricolage), are under the SIL Open Font License. All game art, cards, chips, symbols and sounds are original to this project.
+[Three.js](https://threejs.org) is MIT licensed. The fonts, [Tilt Neon](https://github.com/googlefonts/Tilt-Fonts) and [Bricolage Grotesque](https://github.com/ateliertriay/bricolage), are under the SIL Open Font License. All game art, cards, chips, symbols, vehicles, the rooster and the sounds are original to this project.

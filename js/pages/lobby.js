@@ -1,13 +1,14 @@
 // Lobby: neon marquee sign, searchlights, a hand of holographic game cards,
-// the cashier (stack, daily bonus, promo ticket), recent action, GitHub saves, FAQ.
+// the cashier (stack, ad rewards, promo ticket), recent action, accounts, FAQ.
 
 import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js';
 import { icon } from '../icons.js';
 import { store, on } from '../store.js';
-import { cloud } from '../cloud.js';
+import { engine, MODE } from '../engine.js';
 import { sfx } from '../sound.js';
-import { burstAt, PALETTES } from '../fx.js';
-import { toast, promoTicket } from '../ui.js';
+import { promoTicket } from '../ui.js';
+import { openAccount } from '../account.js';
+import { adButton, banner } from '../ads.js';
 
 const GAMES = [
   { id: 'blackjack', name: 'Blackjack', rank: 'A', suit: '♠', red: false, line: 'Beat the dealer to 21.', tags: ['Pays 3:2', 'Split · Double'] },
@@ -16,15 +17,17 @@ const GAMES = [
   { id: 'crash', name: 'Crash', rank: 'J', suit: '♣', red: false, line: 'Cash out before the rocket blows.', tags: ['Up to 10,000×', 'Auto cash-out'] },
   { id: 'plinko', name: 'Plinko', rank: '10', suit: '♥', red: true, line: 'Drop it. Watch it bounce.', tags: ['Up to 1,000×', '3 risk levels'] },
   { id: 'mines', name: 'Mines', rank: '9', suit: '♠', red: false, line: 'Find gems, dodge the bombs.', tags: ['99% RTP', '1–24 mines'] },
+  { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Dodge the traffic. Cash out alive.', tags: ['Skill game', 'Up to 81×'] },
 ];
 
-const TICKER = ['Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Daily bonus +1,000', 'Free spins at double pay', 'Got a promo code? Cash it in', 'Saved to GitHub'];
+const TICKER = ['New: Road Rooster, dodge traffic for up to 81×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
 
 const FAQ = [
-  ['Is this real money?', 'No. Chips are pretend and have no cash value. You can’t buy them, win anything real, or withdraw. Everyone starts with 1,000 chips, there’s a daily bonus, and you can refill whenever you go broke.'],
-  ['How do promo codes work?', 'Tap the ticket at the top of the page (or open the cashier) and type the code. Each code works once per player, and the chips land in your stack instantly.'],
-  ['How are results decided?', 'Every card, spin and bounce comes from your browser’s cryptographic random number generator. Blackjack uses a real six-deck shoe, Roulette is a single-zero European wheel, and every game’s house edge is listed on its table.'],
-  ['What does GitHub sign-in do?', 'It saves your stack, stats and history to your account so they follow you to any device, and it puts you on the leaderboard. It only reads your public username and avatar.'],
+  ['Is this real money?', 'No. Chips are pretend and have no cash value. You can’t buy them, win anything real, or withdraw. New players start with 1,000 chips.'],
+  ['How do I get more chips?', 'Win them, or tap your stack and watch a short ad for +250 chips (a few minutes apart, with a daily limit). There’s also a one-time promo code bonus. There are no daily handouts or refills.'],
+  ['Why do I need a username?', 'Your username and password are your account. Your stack, stats and history are saved to it, so you can log in on any phone or computer and pick up where you left off. Clearing your browser history only logs you out; it can’t reset or refill your chips.'],
+  ['How do promo codes work?', 'Tap the ticket at the top of the page (or open the cashier) and type the code. Each code works once per account, ever, and the chips land in your stack instantly.'],
+  ['How are results decided?', 'The casino server decides every card, spin, bounce and crash with a cryptographic random number generator, then your screen animates the result. Blackjack uses a real six-deck shoe, Roulette is a single-zero European wheel, and every game’s house edge is listed on its table.'],
 ];
 
 export default {
@@ -49,7 +52,7 @@ export default {
             <h1 class="sign-neon neon" aria-label="Cranked Casino">${letters.map((c, i) => `<span class="nl" style="--n:${i}" aria-hidden="true">${c}</span>`).join('')}</h1>
             <div class="sign-casino gold-text" aria-hidden="true">CASINO</div>
           </div>
-          <p class="hero-sub">Six tables. Fake chips. Real adrenaline.<br>Your stack follows you anywhere with GitHub.</p>
+          <p class="hero-sub">Seven tables. Fake chips. Real adrenaline.<br>One username, and your stack follows you to any browser.</p>
           <div class="hero-ctas">
             <button type="button" class="btn btn-primary btn-lg" data-cta="seat">${icon('cards')}<span>Take a seat</span></button>
             <button type="button" class="btn btn-ghost btn-lg" data-cta="promo">${icon('ticket')}<span>Redeem code</span></button>
@@ -61,12 +64,12 @@ export default {
       <section class="deck-section" data-games>
         <div class="wrap section-head">
           <h2 class="section-title">Pick your <em>table.</em></h2>
-          <p class="muted head-note">Six cards, six games. Tap one to deal yourself in.</p>
+          <p class="muted head-note">Seven cards, seven games. Tap one to deal yourself in.</p>
         </div>
         <div class="deck" data-deck>
           ${GAMES.map(
             (g, i) => `
-            <a class="gcard" href="#/${g.id}" style="--i:${i}; --accent:var(--${g.id})" data-i="${i}" aria-label="Play ${g.name}">
+            <a class="gcard" href="#/${g.id}" style="--i:${i}; --n:${GAMES.length}; --accent:var(--${g.id})" data-i="${i}" aria-label="Play ${g.name}">
               <span class="gc-inner">
                 <span class="gc-face gc-back" aria-hidden="true"><span class="cb-medal"><span class="chip-ico"></span></span></span>
                 <span class="gc-face gc-front">
@@ -88,8 +91,10 @@ export default {
         <div class="deck-dots" data-dots>${GAMES.map((g, i) => `<button type="button" data-dot="${i}" aria-label="${g.name}"></button>`).join('')}</div>
       </section>
 
+      <div class="wrap" data-ad></div>
+
       <section class="wrap section cashier-section">
-        <div class="section-head" data-reveal><h2 class="section-title">The <em>cashier.</em></h2><p class="muted head-note">Daily chips, refills and promo codes. All free, all fake.</p></div>
+        <div class="section-head" data-reveal><h2 class="section-title">The <em>cashier.</em></h2><p class="muted head-note">Watch an ad for chips, or cash in a promo code. All fake, all free.</p></div>
         <div class="cashier-grid">
           <div class="stack-card panel" data-reveal>
             <span class="kicker">Your stack</span>
@@ -116,18 +121,18 @@ export default {
       <section class="wrap section">
         <div class="cloud-band" data-reveal>
           <div class="cloud-copy">
-            <span class="kicker">Saved to GitHub</span>
+            <span class="kicker">Your account</span>
             <h2 class="section-title">Your chips, <em>everywhere.</em></h2>
-            <p class="muted">Play as a guest and your stack lives in this browser. Sign in with GitHub and your balance, stats, promos and bet history move to your account, so you can pick up on your phone right where you left off.</p>
+            <p class="muted">Pick a username and password once. Your stack, stats, promo codes and bet history live on the casino server under your name, so you can log in from any phone or computer and carry on.</p>
             <div class="cloud-points">
-              <div>${icon('cloud')}<span><strong>Auto-saved</strong> after every bet</span></div>
-              <div>${icon('device')}<span><strong>Any device</strong>, same stack</span></div>
-              <div>${icon('trophy')}<span><strong>Leaderboard</strong> with your GitHub avatar</span></div>
+              <div>${icon('shield')}<span><strong>No resets.</strong> Clearing history can’t wipe or refill chips</span></div>
+              <div>${icon('device')}<span><strong>Any browser</strong>, same stack</span></div>
+              <div>${icon('trophy')}<span><strong>Live leaderboard</strong> under your username</span></div>
             </div>
             <div class="cloud-cta" data-cloud-cta></div>
           </div>
           <div class="leader-peek panel" data-peek>
-            <div class="gh-head"><h2>High rollers</h2><a class="link-arrow" href="#/leaderboard">Leaderboard ${icon('arrowRight')}</a></div>
+            <div class="gh-head"><h2>High rollers <span class="live-pill" style="margin-left:8px"><i></i>Live</span></h2><a class="link-arrow" href="#/leaderboard">Leaderboard ${icon('arrowRight')}</a></div>
             <ol class="peek-list" data-peek-list><li class="empty"><span class="spinner" style="margin:auto"></span></li></ol>
           </div>
         </div>
@@ -290,86 +295,77 @@ export default {
     });
 
     // ---------------------------------------------------------- cashier
-    view.querySelector('[data-promo]').append(promoTicket({ title: 'Golden ticket', sub: 'One code, one redemption per player' }));
+    view.querySelector('[data-ad]').append(banner());
+    view.querySelector('[data-promo]').append(promoTicket({ title: 'Golden ticket', sub: 'One code, one redemption per account' }));
     const statEls = Object.fromEntries([...view.querySelectorAll('[data-s]')].map((el) => [el.dataset.s, el]));
     const recentEl = view.querySelector('[data-recent]');
+    let ad = null;
+    const renderCta = () => {
+      ad?.destroy();
+      ad = null;
+      if (store.signedIn) {
+        ad = adButton();
+        statEls.cta.replaceChildren(ad.el);
+      } else statEls.cta.innerHTML = `<button class="btn btn-primary btn-block" data-act="join">${icon('sparkle')}<span>Create account · 1,000 chips</span></button>`;
+    };
     const renderStats = () => {
       const st = store.state.stats;
-      statEls.balance.textContent = fmt(store.balance);
+      statEls.balance.textContent = store.signedIn ? fmt(store.balance) : '—';
       statEls.big.textContent = fmt(st.biggestWin);
       statEls.multi.textContent = st.bestMulti ? fmtMult(st.bestMulti) : '—';
       statEls.profit.textContent = signed(st.profit);
       statEls.profit.className = `tnum ${st.profit > 0 ? 'win-text' : st.profit < 0 ? 'loss-text' : ''}`;
       statEls.bets.textContent = st.bets.toLocaleString('en-US');
-      const wait = store.dailyReadyIn();
-      statEls.cta.innerHTML = store.canRefill()
-        ? `<button class="btn btn-primary btn-block" data-act="refill">${icon('refresh')}<span>Refill to 1,000</span></button>`
-        : wait
-          ? `<button class="btn btn-outline btn-block" disabled>${icon('gift')}<span>Daily bonus is recharging</span></button>`
-          : `<button class="btn btn-primary btn-block" data-act="daily">${icon('gift')}<span>Claim daily +1,000</span></button>`;
       const rows = store.state.history.slice(0, 6);
       recentEl.innerHTML = rows.length
         ? rows
             .map(
               (r) => `<li style="--c:var(--${esc(r.g)})">
-                <span class="rg"><i></i>${esc(r.g)}</span>
+                <span class="rg"><i></i>${esc(r.g === 'rooster' ? 'road rooster' : r.g)}</span>
                 <span class="rm ${r.m >= 1 ? 'win-text' : 'dim'}">${fmtMult(r.m)}</span>
                 <span class="rp ${r.p > r.a ? 'win-text' : 'dim'}">${r.p > r.a ? signed(r.p - r.a) : r.p === r.a ? 'push' : '−' + fmt(r.a - r.p)}</span>
                 <span class="rt dim">${timeAgo(r.t)}</span>
               </li>`,
             )
             .join('')
-        : `<li class="empty">Your bets will show up here. Pick a card above.</li>`;
+        : `<li class="empty">${store.signedIn ? 'Your bets will show up here. Pick a card above.' : 'Make a username and your bets will show up here.'}</li>`;
     };
+    renderCta();
     renderStats();
     statEls.cta.addEventListener('click', (e) => {
-      const act = e.target.closest('[data-act]')?.dataset.act;
-      if (act === 'daily' && store.claimDaily()) {
-        sfx.win(2);
-        burstAt(e.target.closest('button'), { count: 70, colors: PALETTES.gold });
-        toast('+1,000 chips. See you tomorrow!', { type: 'win', iconName: 'gift' });
-      }
-      if (act === 'refill' && store.refill()) {
-        sfx.cashout();
-        toast('Topped back up to 1,000 chips.', { type: 'win', iconName: 'coins' });
-      }
-      renderStats();
+      if (e.target.closest('[data-act="join"]')) openAccount();
     });
-    cleanups.push(on('balance', renderStats), on('reset', renderStats), on('bet', renderStats));
+    cleanups.push(on('balance', renderStats), on('reset', renderStats), on('bet', renderStats), on('account', renderCta), () => ad?.destroy());
 
-    // ---------------------------------------------------------- cloud band + leaderboard peek
+    // ---------------------------------------------------------- account band + live leaderboard peek
     const cloudCta = view.querySelector('[data-cloud-cta]');
     const peekList = view.querySelector('[data-peek-list]');
-    const renderCloud = () => {
-      const u = cloud.user;
-      cloudCta.innerHTML = u
-        ? `<div class="signed-as">${u.avatar ? `<img src="${esc(u.avatar)}" alt="" referrerpolicy="no-referrer">` : icon('user')}<span>Signed in as <strong>@${esc(u.login)}</strong></span></div>`
-        : `<button class="btn btn-primary btn-lg" type="button" data-act="signin">${icon('github')}<span>Sign in with GitHub</span></button>`;
+    const renderAccount = () => {
+      cloudCta.innerHTML = store.signedIn
+        ? `<div class="signed-as"><span class="avatar-initial" style="width:36px;height:36px;font-size:16px">${esc(store.username.slice(0, 1))}</span><span>Playing as <strong>${esc(store.username)}</strong>${MODE === 'device' ? ' · saved on this device' : ''}</span></div>`
+        : `<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary btn-lg" type="button" data-act="signup">${icon('sparkle')}<span>Create account</span></button><button class="btn btn-outline btn-lg" type="button" data-act="login">${icon('user')}<span>Log in</span></button></div>`;
     };
-    renderCloud();
+    renderAccount();
     cloudCta.addEventListener('click', (e) => {
-      if (e.target.closest('[data-act="signin"]')) cloud.signIn();
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'signup' || act === 'login') openAccount({ mode: act });
     });
-    cleanups.push(cloud.onChange(renderCloud));
+    cleanups.push(on('account', () => (renderAccount(), loadPeek())));
 
     const loadPeek = async () => {
-      if (!cloud.enabled) {
-        peekList.innerHTML = `<li class="empty">The leaderboard switches on once GitHub sign-in is set up for this site.</li>`;
-        return;
-      }
-      const { data, error } = await cloud.leaderboard(5);
+      const data = await engine.leaderboard(5);
       if (destroyed) return;
-      if (error || !data) {
-        peekList.innerHTML = `<li class="empty">Leaderboard is taking a break. Try again soon.</li>`;
+      if (!Array.isArray(data)) {
+        if (!peekList.children.length || peekList.querySelector('.spinner')) peekList.innerHTML = `<li class="empty">Leaderboard is taking a break. Try again soon.</li>`;
         return;
       }
       peekList.innerHTML = data.length
         ? data
             .map(
-              (p, i) => `<li>
+              (p, i) => `<li class="${p.username === store.username ? 'me' : ''}">
                 <span class="pr">${i + 1}</span>
-                ${p.avatar_url ? `<img src="${esc(p.avatar_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="pa">${esc((p.username || '?')[0].toUpperCase())}</span>`}
-                <span class="pn">@${esc(p.username)}</span>
+                <span class="pa">${esc((p.username || '?')[0].toUpperCase())}</span>
+                <span class="pn">${esc(p.username)}</span>
                 <span class="pb tnum">${fmt(p.balance)}</span>
               </li>`,
             )
@@ -377,6 +373,8 @@ export default {
         : `<li class="empty">No one’s on the board yet. Be the first.</li>`;
     };
     loadPeek();
+    const peekTimer = setInterval(() => document.visibilityState === 'visible' && loadPeek(), 15000);
+    cleanups.push(() => clearInterval(peekTimer));
 
     return () => {
       destroyed = true;

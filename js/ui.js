@@ -4,6 +4,9 @@ import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js';
 import { icon } from './icons.js';
 import { store, on, BetError } from './store.js';
 import { sfx } from './sound.js';
+import { needAccount } from './account.js';
+import { banner } from './ads.js';
+import { errorText } from './engine.js';
 
 // ---------------------------------------------------------------- toasts
 const toastRoot = document.getElementById('toasts');
@@ -165,21 +168,37 @@ export function betInput(game, { label = 'Bet amount', min = 0.01, rack = true }
 }
 
 /** Validate & place a bet, showing friendly feedback. Returns ticket or null. */
-export function tryBet(game, input, opts) {
+export function tryBet(game, input) {
+  if (!needAccount()) return null;
   try {
-    const amount = input.value;
-    const t = store.placeBet(game, amount, opts);
+    const t = store.placeBet(game, input.value);
     sfx.bet();
     return t;
   } catch (e) {
     if (e instanceof BetError) {
       input.error?.();
-      if (store.balance < 1 && store.canRefill()) toast('Out of chips. Tap your balance to refill.', { iconName: 'coins' });
-      else toast(e.message, { type: 'loss' });
+      betError(e.message);
       return null;
     }
     throw e;
   }
+}
+
+/** "Not enough chips" with a pointer to the free-chips button when the player is broke. */
+export function betError(message = 'Not enough chips for that bet.') {
+  if (store.balance < 1) toast('You’re out of chips. Tap your stack and watch an ad for more.', { iconName: 'tv', timeout: 4200 });
+  else toast(message, { type: 'loss' });
+}
+
+/** The server turned a bet down: undo it on screen and say why. */
+export function serverRefused(t, r, input) {
+  store.cancel(t);
+  store.sync(r);
+  if (r?.error === 'funds') {
+    input?.error?.();
+    betError();
+    store.refresh();
+  } else if (r?.error !== 'auth') toast(errorText(r), { type: 'loss' });
 }
 
 // ---------------------------------------------------------------- segmented
@@ -207,8 +226,8 @@ export function segmented(options, value, onChange, { label } = {}) {
 }
 
 // ---------------------------------------------------------------- game frame
-const GAME_COLORS = { mines: 'var(--mines)', plinko: 'var(--plinko)', slots: 'var(--slots)', crash: 'var(--crash)', blackjack: 'var(--blackjack)', roulette: 'var(--roulette)' };
-const GAME_SUITS = { blackjack: '♠', roulette: '♦', slots: '♥', crash: '♣', plinko: '♦', mines: '♠' };
+const GAME_COLORS = { mines: 'var(--mines)', plinko: 'var(--plinko)', slots: 'var(--slots)', crash: 'var(--crash)', blackjack: 'var(--blackjack)', roulette: 'var(--roulette)', rooster: 'var(--rooster)' };
+const GAME_SUITS = { blackjack: '♠', roulette: '♦', slots: '♥', crash: '♣', plinko: '♦', mines: '♠', rooster: '♥' };
 
 /**
  * Standard game page: title row, stage, controls, and a recent-bets table.
@@ -232,6 +251,7 @@ export function gameFrame(root, { game, title, kicker, tags = [], rules }) {
         <div class="stage" data-stage></div>
         <aside class="controls panel" data-controls></aside>
       </div>
+      <div class="wrap" data-adwrap></div>
       <div class="wrap">
         <div class="game-history panel">
           <div class="gh-head"><h2>Your ${esc(title)} bets</h2><span class="dim" data-hist-count></span></div>
@@ -240,6 +260,7 @@ export function gameFrame(root, { game, title, kicker, tags = [], rules }) {
       </div>
     </section>`);
   root.append(el);
+  el.querySelector('[data-adwrap]').append(banner(game));
 
   el.querySelector('[data-rules]').addEventListener('click', () => {
     modal({ title: `How to play ${title}`, body: rules });
@@ -298,11 +319,21 @@ export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it i
     </form>`);
   const input = el.querySelector('input');
   const msg = el.querySelector('.t-msg');
-  el.addEventListener('submit', (e) => {
+  let busy = false;
+  el.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const r = store.redeemPromo(input.value);
+    if (busy) return;
+    if (!needAccount()) return;
+    busy = true;
+    const btn = el.querySelector('.t-btn');
+    btn.disabled = true;
+    msg.className = 't-msg';
+    msg.textContent = 'Checking…';
+    const r = await store.redeem(input.value);
+    busy = false;
+    btn.disabled = false;
     el.querySelector('.stamp')?.remove();
-    if (r.ok) {
+    if (r?.ok) {
       msg.className = 't-msg';
       msg.textContent = `+${fmt(r.chips)} chips added. Go get 'em.`;
       el.insertAdjacentHTML('beforeend', '<span class="stamp">Redeemed</span>');
@@ -315,7 +346,14 @@ export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it i
       toast(`Promo ${r.code} redeemed: +${fmt(r.chips)} chips!`, { type: 'win', iconName: 'ticket', timeout: 4200 });
     } else {
       msg.className = 't-msg err';
-      msg.textContent = r.reason === 'used' ? `${r.code} is already redeemed on this account.` : r.reason === 'empty' ? 'Type a code first.' : 'That code isn’t valid. Check the spelling?';
+      msg.textContent =
+        r?.error === 'used'
+          ? `${r.code || 'That code'} was already redeemed on your account. Codes work once.`
+          : r?.error === 'empty'
+            ? 'Type a code first.'
+            : r?.error === 'invalid'
+              ? 'That code isn’t valid. Check the spelling?'
+              : errorText(r);
       el.classList.remove('is-error');
       void el.offsetWidth;
       el.classList.add('is-error');

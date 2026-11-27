@@ -176,6 +176,44 @@ export const sfx = {
     tone({ freq: 2600 + Math.random() * 600, type: 'square', dur: 0.02, gain: 0.03 });
     noise({ dur: 0.03, gain: 0.1, freq: 3500, type: 'bandpass', q: 5 });
   },
+  // ---- Road Rooster
+  cluck() {
+    const f = 560 + Math.random() * 80;
+    [0, 0.1].forEach((d, i) => {
+      tone({ freq: f * (i ? 1.12 : 1), slideTo: f * 0.6, type: 'square', dur: 0.075, gain: 0.04, delay: d });
+      noise({ dur: 0.06, gain: 0.05, freq: 1500, type: 'bandpass', q: 3, delay: d });
+    });
+  },
+  hop() {
+    tone({ freq: 320, slideTo: 820, type: 'sine', dur: 0.16, gain: 0.08 });
+    noise({ dur: 0.07, gain: 0.05, freq: 2400, type: 'bandpass', q: 1, delay: 0.02 });
+  },
+  thud() {
+    noise({ dur: 0.09, gain: 0.08, freq: 700, type: 'lowpass' });
+    tone({ freq: 160, slideTo: 90, type: 'sine', dur: 0.08, gain: 0.08 });
+  },
+  pass(level = 1) {
+    // a car rushing past, pitch dropping like a doppler
+    noise({ dur: 0.42, gain: 0.05 * level, freq: 1100, to: 260, type: 'bandpass', q: 0.9, attack: 0.09 });
+  },
+  screech() {
+    tone({ freq: 2100, slideTo: 1300, type: 'sawtooth', dur: 0.5, gain: 0.022 });
+    tone({ freq: 2350, slideTo: 1500, type: 'sawtooth', dur: 0.45, gain: 0.016, delay: 0.03 });
+    noise({ dur: 0.55, gain: 0.07, freq: 3200, type: 'bandpass', q: 5 });
+  },
+  honk() {
+    tone({ freq: 392, type: 'square', dur: 0.2, gain: 0.03 });
+    tone({ freq: 494, type: 'square', dur: 0.2, gain: 0.025 });
+  },
+  barrier() {
+    tone({ freq: 880, type: 'triangle', dur: 0.05, gain: 0.05 });
+    tone({ freq: 660, type: 'triangle', dur: 0.08, gain: 0.05, delay: 0.06 });
+  },
+  splat() {
+    noise({ dur: 0.55, gain: 0.5, freq: 2200, to: 110, attack: 0.002 });
+    tone({ freq: 170, slideTo: 38, type: 'sine', dur: 0.5, gain: 0.55 });
+    tone({ freq: 980, slideTo: 340, type: 'square', dur: 0.14, gain: 0.05, delay: 0.04 });
+  },
   jackpot() {
     const base = 523.25;
     [0, 7, 12, 16, 19, 24, 28, 31].forEach((s2, i) => {

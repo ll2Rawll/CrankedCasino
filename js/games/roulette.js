@@ -1,15 +1,17 @@
 // Roulette: single-zero European wheel (RTP 97.3%).
 // Bets: straight 35:1, dozens & columns 2:1, red/black/odd/even/low/high 1:1.
-// The winning pocket is drawn first; the ball's flight is then solved so it
+// The server draws the winning pocket; the ball's flight is then solved so it
 // rolls, drops, rattles and comes to rest in exactly that pocket.
 
 import { h, fmt, round2, storage, reducedMotion, sleep, clamp, esc } from '../util.js';
 import { icon } from '../icons.js';
 import { store, BetError } from '../store.js';
+import { engine } from '../engine.js';
+import { needAccount } from '../account.js';
 import { randInt } from '../rng.js';
 import { sfx, roll, haptic } from '../sound.js';
 import { burstAt, coinRain, floatFrom, PALETTES } from '../fx.js';
-import { gameFrame, toast, CHIP_VALUES, chipClass, chipLabel } from '../ui.js';
+import { gameFrame, toast, betError, serverRefused, CHIP_VALUES, chipClass, chipLabel } from '../ui.js';
 
 export const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -260,10 +262,10 @@ export default {
     });
 
     function place(key, cell) {
-      if (spinning) return;
+      if (spinning || !needAccount()) return;
       const after = round2(total() + chip);
       if (after > store.balance + 1e-9) {
-        toast(store.balance < 1 && store.canRefill() ? 'Out of chips. Tap your stack to refill.' : 'Not enough chips for that bet.', { type: 'loss' });
+        betError();
         cell.animate([{ transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'none' }], { duration: 250 });
         return;
       }
@@ -353,14 +355,12 @@ export default {
         toast('Place a chip on the table first.', { iconName: 'info' });
         return;
       }
-      const k = randInt(37);
-      const n = WHEEL[k];
-      const payout = round2([...bets].reduce((a, [key, v]) => a + v * payoutFor(key, n), 0));
+      if (!needAccount()) return;
       let t;
       try {
-        t = store.placeBet('roulette', amount, { payout });
+        t = store.placeBet('roulette', amount);
       } catch (e) {
-        if (e instanceof BetError) return toast(e.message, { type: 'loss' });
+        if (e instanceof BetError) return betError(e.message);
         throw e;
       }
       open = t;
@@ -370,6 +370,23 @@ export default {
       clearResult();
       renderBets();
       sfx.bet();
+      const r = await engine.roulette(Object.fromEntries(bets));
+      if (!r?.ok) {
+        serverRefused(t, r);
+        open = null;
+        spinning = false;
+        if (!destroyed) {
+          clearResult();
+          renderBets();
+        }
+        return;
+      }
+      store.confirm(t, r, { debited: amount, paid: r.payout });
+      t.entry = r.entry;
+      if (destroyed) return store.finish(t, r.entry);
+      const n = r.number;
+      const k = WHEEL.indexOf(n);
+      const payout = r.payout;
       await animate(k);
       if (destroyed) return;
       // result
@@ -400,7 +417,7 @@ export default {
           bc?.animate([{ opacity: 1, transform: 'translate(-50%, -50%)' }, { opacity: 0, transform: 'translate(-50%, -160%) scale(.6)' }], { duration: 500, delay: 300, fill: 'forwards', easing: 'ease-in' });
         }
       }
-      store.finish(t, payout, { info: `${n} ${col}` });
+      store.finish(t, r.entry);
       open = null;
       const mult = payout / amount;
       if (payout > 0) {
@@ -523,7 +540,7 @@ export default {
       cancelAnimationFrame(raf);
       roll.stop();
       document.removeEventListener('keydown', onKey);
-      if (open) store.finish(open);
+      if (open?.entry) store.finish(open, open.entry);
       document.querySelectorAll('.mchip.fly').forEach((c) => c.remove());
       frame.destroy();
     };

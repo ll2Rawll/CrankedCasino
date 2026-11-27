@@ -1,17 +1,22 @@
 // Blackjack: 6-deck shoe, dealer stands on soft 17, blackjack pays 3:2,
 // double on any first two cards, one split (double after split allowed),
 // insurance pays 2:1, dealer peeks for blackjack. ≈99.5% RTP with basic strategy.
+//
+// The server holds the shoe and the dealer's hole card and plays the dealer's hand;
+// this page deals out the events it sends back, card by card.
 
 import { h, fmt, round2, sleep, reducedMotion, esc } from '../util.js';
 import { icon } from '../icons.js';
 import { store, BetError } from '../store.js';
+import { engine, errorText } from '../engine.js';
+import { needAccount } from '../account.js';
+import { parseCard } from '../math.js';
 import { sfx, haptic } from '../sound.js';
 import { burstAt, coinRain, PALETTES, shake } from '../fx.js';
-import { gameFrame, betInput, toast, chipClass, chipLabel } from '../ui.js';
-import { Shoe, cardEl, reveal, handValue, isBlackjack, cardValue } from './cards.js';
+import { gameFrame, betInput, toast, betError, serverRefused, chipClass, chipLabel } from '../ui.js';
+import { cardEl, reveal, setFace, handValue, isBlackjack } from './cards.js';
 
-const shoe = new Shoe(6); // survives page switches, like a real table
-globalThis.__ccShoe = shoe; // handy for testing in the console
+const HIDDEN = { r: 'A', s: 'spade' }; // placeholder face for the dealer's hole card (never shown)
 
 const RULES = `
   <ol class="rules">
@@ -103,7 +108,8 @@ export default {
     bet.el.addEventListener('change', renderSpot);
     bet.el.querySelector('input').addEventListener('input', renderSpot);
     renderSpot();
-    const renderShoe = () => (shoeInfo.textContent = `${shoe.decksLeft.toFixed(1)} decks in the shoe`);
+    let decksLeft = 6;
+    const renderShoe = () => (shoeInfo.textContent = `${Number(decksLeft).toFixed(1)} decks in the shoe`);
     renderShoe();
 
     const msg = (text, cls = '') => {
@@ -225,20 +231,12 @@ export default {
 
     function setButtons() {
       const p = round?.phase;
-      const hand = round && round.hands[round.active];
-      const can = (a) => {
-        if (busy || p !== 'player' || !hand) return false;
-        const v = handValue(hand.cards).total;
-        if (a === 'hit') return v < 21;
-        if (a === 'stand') return true;
-        if (a === 'double') return hand.cards.length === 2 && v < 21 && store.canAfford(hand.bet);
-        if (a === 'split')
-          return round.hands.length === 1 && hand.cards.length === 2 && cardValue(hand.cards[0]) === cardValue(hand.cards[1]) && store.canAfford(hand.bet);
-        return false;
-      };
+      // The server says which moves are legal for the hand in play.
+      const can = (a) => !busy && p === 'player' && !!round.can?.[a];
       actions.querySelectorAll('[data-a]').forEach((b) => (b.disabled = !can(b.dataset.a)));
       actions.hidden = !round || p === 'done';
       insRow.hidden = p !== 'insurance';
+      insRow.querySelectorAll('button').forEach((b) => (b.disabled = busy));
       playBtn.hidden = !!round && p !== 'done';
       playBtn.disabled = busy;
       playBtn.querySelector('span').textContent = round?.phase === 'done' ? 'Deal again' : 'Deal';
@@ -247,217 +245,248 @@ export default {
     }
 
     // ---------------------------------------------------------- round flow
+    const balanceEl = () => document.getElementById('balanceBtn');
+    let lastView = null;
+
+    /** Deal out what the server did, one card at a time. */
+    async function play(events = []) {
+      for (const ev of events) {
+        if (destroyed) return;
+        if (ev.t === 'shuffle') {
+          msg('Shuffling a fresh shoe…', 'info');
+          shoeEl.classList.add('shuffling');
+          sfx.shuffle();
+          await sleep(1100 * speed());
+          shoeEl.classList.remove('shuffling');
+          msg('');
+        } else if (ev.t === 'p') {
+          const i = ev.h - 1;
+          const hand = round.hands[i];
+          const el = handEl(i);
+          if (!hand || !el) continue;
+          const c = parseCard(ev.c);
+          if (ev.x) {
+            flyChips(balanceEl(), el.querySelector('.bj-bet'), hand.bet);
+            hand.bet = round2(hand.bet * 2);
+            hand.doubled = true;
+            renderHands();
+          }
+          hand.cards.push(c);
+          await dealTo(el.querySelector('.bj-hand'), c, { double: !!ev.x });
+          renderHands();
+          if (handValue(hand.cards).total > 21) {
+            sfx.lose();
+            shake(el);
+            stamp(i, 'Bust', 'loss');
+            await sleep(450 * speed());
+          }
+        } else if (ev.t === 'd') {
+          if (ev.c === '??') {
+            round.dealer.push(HIDDEN);
+            round.holeEl = await dealTo(dealerHand, HIDDEN, { down: true });
+          } else {
+            if (round.revealed) await sleep(320 * speed());
+            const c = parseCard(ev.c);
+            round.dealer.push(c);
+            await dealTo(dealerHand, c);
+            renderDealer(round.revealed);
+          }
+        } else if (ev.t === 'peek') {
+          round.holeEl?.classList.add('peek');
+          await sleep(650 * speed());
+          round.holeEl?.classList.remove('peek');
+        } else if (ev.t === 'reveal') {
+          const c = parseCard(ev.c);
+          round.dealer[1] = c;
+          round.revealed = true;
+          if (round.holeEl) {
+            setFace(round.holeEl, c);
+            reveal(round.holeEl, c);
+            sfx.flip();
+          }
+          renderDealer(true);
+          await sleep(420 * speed());
+        } else if (ev.t === 'split') {
+          const hand = round.hands[0];
+          const moved = hand.cards.pop();
+          const P = handEl(0).querySelector('.bj-hand');
+          const movedEl = P.lastElementChild;
+          const from = movedEl.getBoundingClientRect();
+          movedEl.remove();
+          const h1 = newHandEl(1);
+          const el = cardEl(moved);
+          h1.querySelector('.bj-hand').append(el);
+          const to = el.getBoundingClientRect();
+          el.animate([{ transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)` }, { transform: 'none' }], { duration: 380 * speed(), easing: 'cubic-bezier(.2,.8,.2,1)' });
+          round.hands.push({ cards: [moved], bet: hand.bet, done: false, doubled: false });
+          flyChips(balanceEl(), h1.querySelector('.bj-bet'), hand.bet);
+          renderHands();
+          sfx.chip();
+          await sleep(420 * speed());
+        }
+      }
+    }
+
+    /** Take the server's view of the table as the truth. */
+    function syncView(v) {
+      lastView = v;
+      round.phase = v.phase;
+      round.active = Math.max(0, (v.active || 1) - 1);
+      round.can = v.can || {};
+      round.base = v.base;
+      round.insurance = v.insurance || 0;
+      v.hands.forEach((hv, i) => {
+        const hand = round.hands[i];
+        if (!hand) return;
+        hand.bet = hv.bet;
+        hand.done = hv.done;
+        hand.doubled = hv.doubled;
+      });
+      if (v.decks_left != null) decksLeft = v.decks_left;
+      renderShoe();
+    }
+
+    /** The page went away while a reply was playing: settle up or keep the hand for later. */
+    function leaveWith(v) {
+      if (!round || round.t.done) return;
+      if (v?.ok && v.phase === 'done') store.finish(round.t, v.entry);
+      else {
+        store.cancel(round.t);
+        if (v?.ok) store.state.rounds.blackjack = v;
+      }
+    }
+
+    async function after(v) {
+      syncView(v);
+      if (v.phase === 'done') return finishRound(v);
+      busy = false;
+      if (v.phase === 'insurance') msg('Insurance?', 'info');
+      else msg('');
+      renderHands();
+      setButtons();
+    }
+
     async function deal() {
       if (busy || destroyed) return;
       if (round && round.phase !== 'done') return;
-      const amount = bet.value;
+      if (!needAccount()) return;
       let t;
       try {
-        t = store.placeBet('blackjack', amount);
+        t = store.placeBet('blackjack', bet.value);
       } catch (e) {
         if (e instanceof BetError) {
           bet.error();
-          toast(store.balance < 1 && store.canRefill() ? 'Out of chips. Tap your stack to refill.' : e.message, { type: 'loss' });
+          betError(e.message);
           return;
         }
         throw e;
       }
       busy = true;
       sfx.bet();
-      round = { t, base: t.amount, dealer: [], hands: [{ cards: [], bet: t.amount, done: false, doubled: false }], active: 0, insurance: 0, phase: 'dealing' };
+      round = { t, base: t.amount, dealer: [], revealed: false, hands: [{ cards: [], bet: t.amount, done: false, doubled: false }], active: 0, insurance: 0, phase: 'dealing', can: {}, holeEl: null };
       setButtons();
       msg('');
+      const req = engine.bjDeal(t.amount);
       await sweep();
-      if (destroyed) return;
-      spotStack.innerHTML = '';
-      if (shoe.needsShuffle) {
-        msg('Shuffling a fresh shoe…', 'info');
-        shoeEl.classList.add('shuffling');
-        sfx.shuffle();
-        shoe.shuffle();
-        await sleep(1100 * speed());
-        shoeEl.classList.remove('shuffling');
-        msg('');
-      }
-      const h0 = newHandEl(0);
-      renderHands();
-      const P = h0.querySelector('.bj-hand');
-      const draw = () => shoe.draw();
-      const c1 = draw();
-      round.hands[0].cards.push(c1);
-      await dealTo(P, c1);
-      renderHands();
-      const d1 = draw();
-      round.dealer.push(d1);
-      await dealTo(dealerHand, d1);
-      renderDealer(false);
-      const c2 = draw();
-      round.hands[0].cards.push(c2);
-      await dealTo(P, c2);
-      renderHands();
-      const d2 = draw();
-      round.dealer.push(d2);
-      round.holeEl = await dealTo(dealerHand, d2, { down: true });
-      renderShoe();
-      if (destroyed) return;
-
-      const up = round.dealer[0];
-      if (up.r === 'A' && store.canAfford(round.base / 2)) {
-        round.phase = 'insurance';
+      const v = await req;
+      if (!v?.ok) {
+        round = null;
         busy = false;
-        msg('Insurance?', 'info');
-        setButtons();
-        return; // waits for the insurance buttons
-      }
-      await afterInsurance();
-    }
-
-    async function afterInsurance() {
-      busy = true;
-      setButtons();
-      const up = round.dealer[0];
-      // Dealer peeks with an ace or ten showing.
-      if (up.r === 'A' || cardValue(up) === 10) {
-        round.holeEl?.classList.add('peek');
-        await sleep(650 * speed());
-        round.holeEl?.classList.remove('peek');
-        if (isBlackjack(round.dealer)) {
-          await revealHole();
-          msg('Dealer blackjack', 'loss');
-          return settle();
+        if (v?.error === 'round_active' && v.round) {
+          store.cancel(t);
+          if (!destroyed) restore(v.round);
+          return;
         }
-        if (round.insurance) {
-          msg('No blackjack. Insurance lost.', 'info');
-          await sleep(700 * speed());
+        serverRefused(t, v, bet);
+        if (!destroyed) {
+          setButtons();
+          renderSpot();
         }
+        return;
       }
-      if (isBlackjack(round.hands[0].cards)) {
-        await revealHole();
-        return settle();
-      }
-      round.phase = 'player';
-      busy = false;
-      msg('');
+      store.confirm(t, v, { debited: v.wagered ?? t.amount, paid: v.phase === 'done' ? v.payout : undefined });
+      if (destroyed) return leaveWith(v);
+      spotStack.innerHTML = '';
+      newHandEl(0);
       renderHands();
-      setButtons();
-    }
-
-    async function revealHole() {
-      if (!round.holeEl || !round.holeEl.classList.contains('is-down')) return;
-      reveal(round.holeEl, round.dealer[1]);
-      sfx.flip();
-      renderDealer(true);
-      await sleep(420 * speed());
+      await play(v.events);
+      if (destroyed) return leaveWith(v);
+      await after(v);
     }
 
     async function act(a) {
-      if (busy || !round || round.phase !== 'player') return;
-      const hand = round.hands[round.active];
+      if (busy || !round || round.phase !== 'player' || !round.can?.[a]) return;
       const btn = actions.querySelector(`[data-a="${a}"]`);
       if (!btn || btn.disabled) return;
       busy = true;
       setButtons();
       sfx.click();
-      const P = handEl(round.active).querySelector('.bj-hand');
-      if (a === 'hit') {
-        const c = shoe.draw();
-        hand.cards.push(c);
-        await dealTo(P, c);
-        renderHands();
-        const v = handValue(hand.cards).total;
-        if (v > 21) {
-          hand.done = true;
-          sfx.lose();
-          shake(handEl(round.active));
-          stamp(round.active, 'Bust', 'loss');
-          await sleep(500 * speed());
-        } else if (v === 21) hand.done = true;
-      } else if (a === 'stand') {
-        hand.done = true;
-      } else if (a === 'double') {
+      const before = round.t.amount;
+      if (a === 'double' || a === 'split') {
         try {
-          store.addToBet(round.t, hand.bet);
+          store.addToBet(round.t, round.hands[round.active].bet);
         } catch {
           busy = false;
+          betError('Not enough chips for that.');
           return setButtons();
         }
-        flyChips(document.getElementById('balanceBtn'), handEl(round.active).querySelector('.bj-bet'), hand.bet);
-        hand.bet = round2(hand.bet * 2);
-        hand.doubled = true;
-        renderHands();
-        const c = shoe.draw();
-        hand.cards.push(c);
-        await dealTo(P, c, { double: true });
-        renderHands();
-        hand.done = true;
-        if (handValue(hand.cards).total > 21) {
-          sfx.lose();
-          stamp(round.active, 'Bust', 'loss');
-          await sleep(400 * speed());
-        }
-      } else if (a === 'split') {
-        try {
-          store.addToBet(round.t, hand.bet);
-        } catch {
-          busy = false;
-          return setButtons();
-        }
-        const moved = hand.cards.pop();
-        const h1 = newHandEl(1);
-        const movedEl = P.lastElementChild;
-        const from = movedEl.getBoundingClientRect();
-        movedEl.remove();
-        const el = cardEl(moved);
-        h1.querySelector('.bj-hand').append(el);
-        const to = el.getBoundingClientRect();
-        el.animate([{ transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)` }, { transform: 'none' }], { duration: 380 * speed(), easing: 'cubic-bezier(.2,.8,.2,1)' });
-        round.hands.push({ cards: [moved], bet: hand.bet, done: false, doubled: false, split: true });
-        hand.split = true;
-        flyChips(document.getElementById('balanceBtn'), h1.querySelector('.bj-bet'), hand.bet);
-        renderHands();
-        sfx.chip();
-        await sleep(420 * speed());
-        // each split hand gets its second card
-        for (const i of [0, 1]) {
-          const c = shoe.draw();
-          round.hands[i].cards.push(c);
-          await dealTo(handEl(i).querySelector('.bj-hand'), c);
-        }
-        renderHands();
-        if (moved.r === 'A') round.hands.forEach((x) => (x.done = true)); // split aces get one card each
-        round.hands.forEach((x) => handValue(x.cards).total === 21 && (x.done = true));
       }
-      renderShoe();
-      // move to the next unfinished hand
-      if (round.hands[round.active].done) {
-        const next = round.hands.findIndex((x) => !x.done);
-        if (next === -1) return dealerTurn();
-        round.active = next;
+      const v = await engine.bjAct(a);
+      if (!v?.ok) {
+        round.t.amount = before;
+        store.sync(v);
+        busy = false;
+        if (v?.error === 'no_round') {
+          store.cancel(round.t);
+          round = null;
+          store.refresh();
+          toast('That hand already finished on another screen.', { iconName: 'info' });
+        } else if (v?.error !== 'auth') toast(errorText(v), { type: 'loss' });
+        if (!destroyed) setButtons();
+        return;
       }
-      busy = false;
-      renderHands();
-      setButtons();
+      store.confirm(round.t, v, { debited: v.wagered, paid: v.phase === 'done' ? v.payout : undefined });
+      if (destroyed) return leaveWith(v);
+      await play(v.events);
+      if (destroyed) return leaveWith(v);
+      await after(v);
     }
 
-    async function dealerTurn() {
-      round.phase = 'dealer';
+    async function insure(yes) {
+      if (busy || !round || round.phase !== 'insurance') return;
       busy = true;
-      renderHands();
       setButtons();
-      await revealHole();
-      const live = round.hands.some((x) => handValue(x.cards).total <= 21);
-      if (live) {
-        while (handValue(round.dealer).total < 17) {
-          await sleep(320 * speed());
-          if (destroyed) return;
-          const c = shoe.draw();
-          round.dealer.push(c);
-          await dealTo(dealerHand, c);
-          renderDealer(true);
+      let added = 0;
+      if (yes) {
+        const ins = round2(round.base / 2);
+        try {
+          store.addToBet(round.t, ins);
+          added = ins;
+          sfx.chip();
+          flyChips(balanceEl(), dealerHand, ins);
+        } catch {
+          yes = false; // not enough chips: carry on without
         }
-        renderShoe();
+      } else sfx.click();
+      const v = await engine.bjAct(yes ? 'insure' : 'noinsure');
+      if (!v?.ok) {
+        if (added) round.t.amount = round2(round.t.amount - added);
+        store.sync(v);
+        busy = false;
+        if (v?.error !== 'auth') toast(errorText(v), { type: 'loss' });
+        if (!destroyed) setButtons();
+        return;
       }
-      return settle();
+      store.confirm(round.t, v, { debited: v.wagered, paid: v.phase === 'done' ? v.payout : undefined });
+      round.insurance = v.insurance || 0;
+      if (destroyed) return leaveWith(v);
+      await play(v.events);
+      if (destroyed) return leaveWith(v);
+      if (v.phase === 'player' && round.insurance > 0) {
+        msg('No blackjack. Insurance lost.', 'info');
+        await sleep(700 * speed());
+      }
+      await after(v);
     }
 
     function stamp(i, text, cls) {
@@ -467,64 +496,28 @@ export default {
       el.insertAdjacentHTML('beforeend', `<span class="bj-stamp ${cls}">${esc(text)}</span>`);
     }
 
-    async function settle() {
-      round.phase = 'settle';
-      const d = handValue(round.dealer).total;
-      const dealerBJ = isBlackjack(round.dealer);
-      let total = 0;
-      let wins = 0;
-      let losses = 0;
-      round.hands.forEach((hand, i) => {
-        const v = handValue(hand.cards).total;
-        const natural = isBlackjack(hand.cards) && round.hands.length === 1;
-        let pay = 0;
-        let label = '';
-        let cls = '';
-        if (natural && !dealerBJ) {
-          pay = hand.bet * 2.5;
-          label = `Blackjack +${fmt(hand.bet * 1.5)}`;
-          cls = 'bj';
-        } else if (natural && dealerBJ) {
-          pay = hand.bet;
-          label = 'Push';
-          cls = 'push';
-        } else if (v > 21) {
-          label = 'Bust';
-          cls = 'loss';
-        } else if (dealerBJ) {
-          label = 'Lose';
-          cls = 'loss';
-        } else if (d > 21 || v > d) {
-          pay = hand.bet * 2;
-          label = d > 21 ? `Dealer busts +${fmt(hand.bet)}` : `Win +${fmt(hand.bet)}`;
-          cls = 'win';
-        } else if (v === d) {
-          pay = hand.bet;
-          label = 'Push';
-          cls = 'push';
-        } else {
-          label = 'Lose';
-          cls = 'loss';
-        }
-        hand.payout = round2(pay);
-        total += pay;
-        if (pay > hand.bet) wins++;
-        if (pay === 0) losses++;
-        stamp(i, label, cls);
-        const betSpot = handEl(i)?.querySelector('.bj-bet');
-        if (pay === 0) flyChips(betSpot, trayEl, hand.bet, { fade: true });
-        else if (pay > hand.bet) {
-          flyChips(dealerHand, betSpot, pay - hand.bet);
-          setTimeout(() => !destroyed && flyChips(betSpot, document.getElementById('balanceBtn'), pay, { fade: true }), 750);
-        } else flyChips(betSpot, document.getElementById('balanceBtn'), pay, { fade: true });
-      });
-      if (round.insurance && dealerBJ) total += round.insurance * 3;
-      total = round2(total);
-      const t = round.t;
+    async function finishRound(v) {
       round.phase = 'done';
+      const d = handValue(round.dealer).total;
+      const dealerBJ = !!v.dealer_bj;
+      let wins = 0;
+      (v.results || []).forEach((res, i) => {
+        const label = res.cls === 'bj' ? `Blackjack +${fmt(res.bet * 1.5)}` : res.cls === 'win' ? `${d > 21 ? 'Dealer busts' : 'Win'} +${fmt(res.bet)}` : res.label;
+        stamp(i, label, res.cls);
+        if (res.pay > res.bet) wins++;
+        const betSpot = handEl(i)?.querySelector('.bj-bet');
+        if (res.pay === 0) flyChips(betSpot, trayEl, res.bet, { fade: true });
+        else if (res.pay > res.bet) {
+          flyChips(dealerHand, betSpot, res.pay - res.bet);
+          setTimeout(() => !destroyed && flyChips(betSpot, balanceEl(), res.pay, { fade: true }), 750);
+        } else flyChips(betSpot, balanceEl(), res.pay, { fade: true });
+      });
+      const total = v.payout;
+      const t = round.t;
       await sleep(250);
-      store.finish(t, total, { info: `${round.hands.length > 1 ? 'split · ' : ''}dealer ${dealerBJ ? 'BJ' : d > 21 ? 'bust' : d}` });
-      const naturalWin = round.hands.length === 1 && isBlackjack(round.hands[0].cards) && !dealerBJ;
+      store.finish(t, v.entry);
+      if (destroyed) return;
+      const naturalWin = round.hands.length === 1 && v.results?.[0]?.cls === 'bj';
       if (naturalWin) {
         msg('Blackjack!', 'bj');
         sfx.jackpot();
@@ -533,10 +526,10 @@ export default {
         haptic([20, 40, 20]);
       } else if (wins) {
         msg(d > 21 ? 'Dealer busts!' : 'You win!', 'win');
-        sfx.win(total >= t.amount * 2 ? 2 : 1);
+        sfx.win(total >= v.wagered * 2 ? 2 : 1);
         burstAt(handsEl, { count: 40, colors: PALETTES.win });
-      } else if (total > 0 && total >= t.amount) {
-        msg(round.insurance && dealerBJ ? 'Insurance paid' : 'Push', 'info');
+      } else if (total > 0 && total >= v.wagered) {
+        msg(v.insurance_paid ? 'Insurance paid' : 'Push', 'info');
         sfx.click();
       } else {
         msg(dealerBJ ? 'Dealer blackjack' : 'House wins', 'loss');
@@ -547,28 +540,53 @@ export default {
       renderHands();
     }
 
+    /** Lay out a hand still open on the server (after a reload or a trip to another game). */
+    function restore(v) {
+      if (!v || !v.ok || v.phase === 'done') return;
+      const t = store.resume('blackjack', v.wagered ?? v.base);
+      round = { t, base: v.base, dealer: [], revealed: v.dealer[1] !== '??', hands: [], active: 0, insurance: 0, phase: v.phase, can: {}, holeEl: null };
+      dealerHand.innerHTML = '';
+      handsEl.innerHTML = '';
+      v.dealer.forEach((c, i) => {
+        const card = c === '??' ? HIDDEN : parseCard(c);
+        round.dealer.push(card);
+        const el = cardEl(card, { down: c === '??' });
+        el.style.setProperty('--k', i);
+        dealerHand.append(el);
+        if (c === '??') round.holeEl = el;
+      });
+      v.hands.forEach((hv, i) => {
+        const el = newHandEl(i);
+        const hand = { cards: hv.cards.map(parseCard), bet: hv.bet, done: hv.done, doubled: hv.doubled };
+        round.hands.push(hand);
+        hand.cards.forEach((c, k) => {
+          const ce = cardEl(c);
+          ce.style.setProperty('--k', k);
+          if (hv.doubled && k === hand.cards.length - 1) {
+            ce.classList.add('pc-double');
+            ce.style.transform = 'rotate(90deg)';
+          }
+          el.querySelector('.bj-hand').append(ce);
+        });
+      });
+      spotStack.innerHTML = '';
+      syncView(v);
+      renderDealer(round.revealed);
+      renderHands();
+      msg(v.phase === 'insurance' ? 'Insurance?' : '', 'info');
+      setButtons();
+      toast('Picked up your hand where you left off.', { iconName: 'refresh' });
+    }
+
     // ---------------------------------------------------------- input
     playBtn.addEventListener('click', deal);
     actions.addEventListener('click', (e) => {
       const b = e.target.closest('[data-a]');
       if (b) act(b.dataset.a);
     });
-    insRow.addEventListener('click', async (e) => {
+    insRow.addEventListener('click', (e) => {
       const b = e.target.closest('[data-ins]');
-      if (!b || !round || round.phase !== 'insurance') return;
-      if (b.dataset.ins === 'yes') {
-        const ins = round2(round.base / 2);
-        try {
-          store.addToBet(round.t, ins);
-          round.insurance = ins;
-          sfx.chip();
-          flyChips(document.getElementById('balanceBtn'), dealerHand, ins);
-        } catch {
-          /* not enough chips: carry on without */
-        }
-      } else sfx.click();
-      round.phase = 'peek';
-      await afterInsurance();
+      if (b) insure(b.dataset.ins === 'yes');
     });
     const onKey = (e) => {
       if (e.target.closest('input, select, textarea') || e.metaKey || e.ctrlKey) return;
@@ -584,33 +602,17 @@ export default {
       if (k === 'p') act('split');
     };
     document.addEventListener('keydown', onKey);
+    restore(store.takeRound('blackjack'));
     setButtons();
 
     return () => {
       destroyed = true;
       document.removeEventListener('keydown', onKey);
-      // Leaving mid-hand: stand everything and let the dealer finish instantly.
-      if (round && round.phase !== 'done' && !round.t.done) {
-        if (round.phase === 'insurance' || round.phase === 'dealing') {
-          while (round.hands[0].cards.length < 2) round.hands[0].cards.push(shoe.draw());
-          while (round.dealer.length < 2) round.dealer.push(shoe.draw());
-        }
-        const live = round.hands.some((x) => handValue(x.cards).total <= 21);
-        if (live && !isBlackjack(round.dealer)) while (handValue(round.dealer).total < 17) round.dealer.push(shoe.draw());
-        const d = handValue(round.dealer).total;
-        const dealerBJ = isBlackjack(round.dealer);
-        let total = 0;
-        for (const hand of round.hands) {
-          const v = handValue(hand.cards).total;
-          const natural = isBlackjack(hand.cards) && round.hands.length === 1;
-          if (natural && !dealerBJ) total += hand.bet * 2.5;
-          else if (natural && dealerBJ) total += hand.bet;
-          else if (v > 21 || dealerBJ) total += 0;
-          else if (d > 21 || v > d) total += hand.bet * 2;
-          else if (v === d) total += hand.bet;
-        }
-        if (round.insurance && dealerBJ) total += round.insurance * 3;
-        store.finish(round.t, round2(total), { info: 'auto-settled' });
+      // Leaving mid-hand: the hand waits on the server and comes back next visit.
+      if (round && round.phase !== 'done' && !round.t.done && !busy) {
+        store.cancel(round.t);
+        if (lastView) store.state.rounds.blackjack = lastView;
+        toast('Your hand is saved. Come back to Blackjack to finish it.', { iconName: 'cards', timeout: 4200 });
       }
       document.querySelectorAll('.mchip.fly').forEach((c) => c.remove());
       frame.destroy();

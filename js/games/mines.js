@@ -1,22 +1,19 @@
 // Mines: 5×5 grid, pick 1–24 mines, reveal gems, cash out before you hit a bomb.
 // Multiplier after k gems with m mines = 0.99 × Π (25 − i) / (25 − m − i), i < k  (1% house edge)
+// The server hides the mines and checks every tile, so the board can't be peeked at.
 
 import { h, fmt, fmtMult, round2, signed, storage, esc } from '../util.js';
 import { icon } from '../icons.js';
 import { store } from '../store.js';
-import { sample, randInt } from '../rng.js';
+import { engine, errorText } from '../engine.js';
+import { randInt } from '../rng.js';
+import { minesMult as multiplier } from '../math.js';
 import { sfx, haptic } from '../sound.js';
 import { burstAt, shake, celebrate, PALETTES, floatFrom } from '../fx.js';
-import { gameFrame, betInput, tryBet, toast } from '../ui.js';
+import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
 
 const N = 25;
-const EDGE = 0.99;
-
-export function multiplier(mines, k) {
-  let m = EDGE;
-  for (let i = 0; i < k; i++) m *= (N - i) / (N - mines - i);
-  return m;
-}
+export { multiplier };
 
 const DEFS = `
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -71,8 +68,9 @@ export default {
     const { stage, controls } = frame;
 
     let mines = storage.get('cc:mines:count', 3);
-    let round = null; // { t, bet, mines, set:Set, revealed:[] }
+    let round = null; // { t, bet, mines, revealed:[] }  (the mines themselves stay on the server)
     let ended = false;
+    let destroyed = false;
 
     // ---------------------------------------------------------- stage
     stage.classList.add('mines-stage');
@@ -164,6 +162,7 @@ export default {
     }
 
     function renderPlay() {
+      playBtn.disabled = pending && !round;
       if (round) {
         const k = round.revealed.length;
         if (k) {
@@ -210,28 +209,75 @@ export default {
       }
     }
 
-    function start() {
-      if (round) return;
+    let pending = false; // a request is on its way to the server
+
+    async function start() {
+      if (round || pending) return;
       resetBoard();
       const t = tryBet('mines', bet);
       if (!t) return;
-      const set = new Set(sample(N, mines));
-      round = { t, bet: t.amount, mines, set, revealed: [] };
-      store.setMinesRound({ bet: round.bet, mines, cells: [...set], revealed: [] });
+      pending = true;
+      renderPlay();
+      const r = await engine.minesStart(t.amount, mines);
+      pending = false;
+      if (!r?.ok) {
+        if (r?.error === 'round_active') {
+          // A round is already open on the server (another tab?): pick it up.
+          store.cancel(t);
+          const me = await store.refresh();
+          if (me?.ok && !destroyed) restore(store.takeRound('mines'));
+          return;
+        }
+        serverRefused(t, r, bet);
+        renderPlay();
+        return;
+      }
+      store.confirm(t, r, { debited: t.amount });
+      if (destroyed) {
+        // Left the page while the bet was on its way: keep the round for next time.
+        store.cancel(t);
+        store.state.rounds.mines = { bet: t.amount, mines, revealed: [] };
+        return;
+      }
+      round = { t, bet: t.amount, mines, revealed: [] };
       setPlaying(true);
       updateReadout();
       grid.animate([{ transform: 'scale(.98)' }, { transform: 'scale(1)' }], { duration: 300, easing: 'cubic-bezier(.34,1.56,.64,1)' });
     }
 
-    function pick(i) {
-      if (!round || tiles[i].classList.contains('is-open')) return;
+    async function pick(i) {
+      if (!round || pending || tiles[i].classList.contains('is-open')) return;
       const t = tiles[i];
-      if (round.set.has(i)) {
+      pending = true;
+      t.classList.add('is-pressed');
+      const r = await engine.minesReveal(i);
+      pending = false;
+      t.classList.remove('is-pressed');
+      if (destroyed) {
+        // Left mid-reveal: the server has the truth, so reload the profile from it.
+        store.sync(r);
+        store.refresh();
+        return;
+      }
+      if (!r?.ok) {
+        if (r?.error === 'no_round') {
+          // The round ended elsewhere (another tab). Start fresh.
+          const old = round;
+          round = null;
+          store.cancel(old.t);
+          store.refresh();
+          setPlaying(false);
+          updateReadout();
+          toast('That round already ended on another screen.', { iconName: 'info' });
+        } else if (r?.error !== 'auth') toast(errorText(r), { type: 'loss' });
+        return;
+      }
+      if (r.mine) {
         // Boom.
-        const r = round;
+        const rr = round;
         round = null;
-        store.setMinesRound(null);
-        store.finish(r.t, 0, { info: `${r.mines} mines` });
+        store.confirm(rr.t, r, { paid: 0 });
+        store.finish(rr.t, r.entry);
         showTile(i, 'mine', { fresh: true });
         sfx.boom();
         haptic([30, 40, 60]);
@@ -239,14 +285,13 @@ export default {
         shake(stage, true);
         burstAt(t, { count: 60, colors: PALETTES.loss, speed: [4, 13], kind: 'ember', size: [4, 9], life: [30, 60], gravity: 0.15 });
         burstAt(t, { count: 30, colors: ['#3a3a44', '#26262d', '#ff8a4d'], speed: [2, 8], size: [5, 10] });
-        revealRest(r.set, new Set([i]));
+        revealRest(new Set(r.cells), new Set([i]));
         ended = true;
         setPlaying(false);
         updateReadout();
         return;
       }
       round.revealed.push(i);
-      store.setMinesRound({ bet: round.bet, mines: round.mines, cells: [...round.set], revealed: round.revealed });
       showTile(i, 'gem', { fresh: true });
       const k = round.revealed.length;
       sfx.gem(k - 1);
@@ -255,24 +300,52 @@ export default {
       floatFrom(t, fmtMult(multiplier(round.mines, k)), 'var(--mines)');
       updateReadout();
       renderPlay();
-      if (k >= N - round.mines) cashOut(true);
+      // Every gem found: the server already cashed the round out.
+      if (r.cleared) finishWin(r, true);
     }
 
-    function cashOut(auto = false) {
-      if (!round || !round.revealed.length) return;
-      const r = round;
+    async function cashOut() {
+      if (!round || pending || !round.revealed.length) return;
+      pending = true;
+      renderPlay();
+      const r = await engine.minesCashout();
+      pending = false;
+      if (destroyed) {
+        store.sync(r);
+        store.refresh();
+        return;
+      }
+      if (!r?.ok) {
+        renderPlay();
+        if (r?.error === 'no_round') {
+          const old = round;
+          round = null;
+          store.cancel(old.t);
+          store.refresh();
+          setPlaying(false);
+          updateReadout();
+        }
+        if (r?.error !== 'auth') toast(errorText(r), { type: 'loss' });
+        return;
+      }
+      finishWin(r, false);
+    }
+
+    function finishWin(r, auto) {
+      const rr = round;
       round = null;
-      const m = multiplier(r.mines, r.revealed.length);
-      const pay = round2(r.bet * m);
-      store.setMinesRound(null);
-      store.finish(r.t, pay, { info: `${r.mines} mines` });
+      store.confirm(rr.t, r, { paid: r.payout });
+      store.finish(rr.t, r.entry);
+      if (destroyed) return;
+      const m = r.mult;
+      const pay = r.payout;
       sfx.cashout();
       if (m >= 2) sfx.win(m >= 10 ? 2 : 1);
       stage.classList.add('is-won');
-      const pop = h(`<div class="result-pop"><div class="m">${fmtMult(m)}</div><div class="p">${signed(pay - r.bet)}</div></div>`);
+      const pop = h(`<div class="result-pop"><div class="m">${fmtMult(m)}</div><div class="p">${signed(pay - rr.bet)}</div></div>`);
       stage.append(pop);
       celebrate(pop, m, PALETTES.win);
-      revealRest(r.set);
+      revealRest(new Set(r.cells));
       ended = true;
       setPlaying(false);
       updateReadout();
@@ -311,26 +384,34 @@ export default {
     document.addEventListener('keydown', onKey);
 
     // ---------------------------------------------------------- restore a round in progress
-    const saved = store.state.mines;
-    if (saved && saved.cells?.length) {
+    function restore(saved) {
+      if (!saved || round) return;
       const t = store.resume('mines', saved.bet);
-      round = { t, bet: saved.bet, mines: saved.mines, set: new Set(saved.cells), revealed: [...(saved.revealed || [])] };
+      resetBoard();
+      round = { t, bet: saved.bet, mines: saved.mines, revealed: [...(saved.revealed || [])] };
       mines = saved.mines;
       round.revealed.forEach((i) => showTile(i, 'gem'));
+      setMines(mines);
       setPlaying(true);
+      sel.disabled = true;
+      quick.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      updateReadout();
       toast('Picked up your Mines round where you left off.', { iconName: 'refresh' });
     }
     setMines(mines);
-    if (round) {
-      sel.disabled = true;
-      quick.querySelectorAll('button').forEach((b) => (b.disabled = true));
-    }
+    restore(store.takeRound('mines'));
     renderPlay();
     updateReadout();
     bet.el.querySelector('input').addEventListener('change', updateReadout);
 
     return () => {
+      destroyed = true;
       document.removeEventListener('keydown', onKey);
+      // An open round stays on the server; it comes back next time.
+      if (round) {
+        store.cancel(round.t);
+        store.state.rounds.mines = { bet: round.bet, mines: round.mines, revealed: [...round.revealed] };
+      }
       frame.destroy();
     };
   },

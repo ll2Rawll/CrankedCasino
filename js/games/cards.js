@@ -109,6 +109,12 @@ export function cardEl(card, { down = false } = {}) {
   return el;
 }
 
+/** Paint a face onto a card that was dealt face-down before its value was known. */
+export function setFace(el, card) {
+  el.classList.toggle('red', isRed(card.s));
+  el.querySelector('.pc-front').innerHTML = faceSVG(card.r, card.s);
+}
+
 export function reveal(el, card) {
   el.classList.remove('is-down');
   el.setAttribute('aria-label', `${card.r} of ${card.s}s`);
