@@ -17,10 +17,11 @@ const GAMES = [
   { id: 'crash', name: 'Crash', rank: 'J', suit: '♣', red: false, line: 'Cash out before the rocket blows.', tags: ['Up to 10,000×', 'Auto cash-out'] },
   { id: 'plinko', name: 'Plinko', rank: '10', suit: '♥', red: true, line: 'Drop it. Watch it bounce.', tags: ['Up to 1,000×', '3 risk levels'] },
   { id: 'mines', name: 'Mines', rank: '9', suit: '♠', red: false, line: 'Find gems, dodge the bombs.', tags: ['99% RTP', '1–24 mines'] },
+  { id: 'flight', name: 'Night Flight', rank: '7', suit: '♣', red: false, line: 'Flap through the moonlit harbor.', tags: ['Free arcade', 'Chase your best'] },
   { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Beat your best score.', tags: ['Free score run', 'Chip run up to 81×'] },
 ];
 
-const TICKER = ['New: Road Rooster, dodge traffic for up to 81×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
+const TICKER = ['New: Night Flight, tap to fly through the harbor', 'Road Rooster, dodge traffic for up to 81×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
 
 const FAQ = [
   ['Is this real money?', 'No. Chips are pretend and have no cash value. You can’t buy them, win anything real, or withdraw. New players start with 1,000 chips.'],
@@ -52,7 +53,7 @@ export default {
             <h1 class="sign-neon neon" aria-label="Cranked Casino">${letters.map((c, i) => `<span class="nl" style="--n:${i}" aria-hidden="true">${c}</span>`).join('')}</h1>
             <div class="sign-casino gold-text" aria-hidden="true">CASINO</div>
           </div>
-          <p class="hero-sub">Seven tables. Fake chips. Real adrenaline.<br>One username, and your stack follows you to any browser.</p>
+          <p class="hero-sub">Eight games. Fake chips. Real adrenaline.<br>One username, and your stack follows you to any browser.</p>
           <div class="hero-ctas">
             <button type="button" class="btn btn-primary btn-lg" data-cta="seat">${icon('cards')}<span>Take a seat</span></button>
             <button type="button" class="btn btn-ghost btn-lg" data-cta="promo">${icon('ticket')}<span>Redeem code</span></button>
@@ -64,7 +65,7 @@ export default {
       <section class="deck-section" data-games>
         <div class="wrap section-head">
           <h2 class="section-title">Pick your <em>table.</em></h2>
-          <p class="muted head-note">Seven cards, seven games. Tap one to deal yourself in.</p>
+          <p class="muted head-note">Choose a card to play.</p>
         </div>
         <div class="deck" data-deck>
           ${GAMES.map(

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>CrankedCasino · After hours, fake chips</title>
-  <meta name="description" content="CrankedCasino is a free fake-money casino: Blackjack, Roulette, Slots, Crash, Plinko, Mines and Road Rooster. One username keeps your chips on any browser.">
+  <meta name="description" content="CrankedCasino is a free fake-money casino: Blackjack, Roulette, Slots, Crash, Plinko, Mines, Road Rooster and Night Flight. One username keeps your chips on any browser.">
   <meta name="theme-color" content="#0d0507">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
@@ -16,15 +16,16 @@
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="CrankedCasino">
-  <meta property="og:description" content="Blackjack, Roulette, Slots, Crash, Plinko, Mines and Road Rooster. Fake chips, real adrenaline.">
+  <meta property="og:description" content="Blackjack, Roulette, Slots, Crash, Plinko, Mines, Road Rooster and Night Flight. Fake chips, real adrenaline.">
   <meta property="og:image" content="https://ll2rawll.github.io/CrankedCasino/assets/img/og.jpg">
   <meta property="og:url" content="https://ll2rawll.github.io/CrankedCasino/">
   <meta name="twitter:card" content="summary_large_image">
 
   <link rel="preload" href="assets/fonts/bricolage-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/tilt-neon-var.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/base.css?v=86f8308bbf4f">
   <link rel="stylesheet" href="css/lobby.css">
+  <link rel="stylesheet" href="css/flight.css?v=0fe37f72c7ba">
   <link rel="stylesheet" href="css/games.css?v=c1c70a2ba44e">
   <link rel="stylesheet" href="css/tables.css">
 
@@ -36,7 +37,7 @@
       if (localStorage.getItem('cc:motion') === '"reduced"') document.documentElement.dataset.motion = 'reduced';
     } catch (e) {}
   </script>
-  <script type="module" src="js/main.js?v=e747cc35341e"></script>
+  <script type="module" src="js/main.js?v=344e69bb4c3c"></script>
 </head>
 <body>
   <div class="backdrop" aria-hidden="true">
@@ -61,6 +62,7 @@
         <a href="#/plinko" data-nav="plinko">Plinko</a>
         <a href="#/mines" data-nav="mines">Mines</a>
         <a href="#/rooster" data-nav="rooster">Rooster</a>
+        <a href="#/flight" data-nav="flight">Flight</a>
       </nav>
       <div class="topbar-actions">
         <button class="balance-pill" id="balanceBtn" type="button" aria-haspopup="dialog" aria-label="Open cashier">

@@ -205,6 +205,7 @@ const NAV = [
   ['plinko', 'Plinko', '♦'],
   ['mines', 'Mines', '♠'],
   ['rooster', 'Road Rooster', '♥'],
+  ['flight', 'Night Flight', '♣'],
   ['leaderboard', 'Leaderboard', '♛'],
   ['profile', 'Profile', '☺'],
 ];
@@ -323,7 +324,7 @@ $('#siteFoot').innerHTML = `
     <div class="foot-grid">
       <div class="foot-links">
         <a href="#/blackjack">Blackjack</a><a href="#/roulette">Roulette</a><a href="#/slots">Slots</a><a href="#/crash">Crash</a>
-        <a href="#/plinko">Plinko</a><a href="#/mines">Mines</a><a href="#/rooster">Road Rooster</a><a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
+        <a href="#/plinko">Plinko</a><a href="#/mines">Mines</a><a href="#/rooster">Road Rooster</a><a href="#/flight">Night Flight</a><a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
         <a href="${esc(CONFIG.repoUrl)}" target="_blank" rel="noopener">GitHub</a>
       </div>
       <p class="foot-note">CrankedCasino is a free game that uses fake chips with no cash value. Nothing can be bought, won or withdrawn. If real-money gambling ever stops being fun, talk to someone. <a href="https://www.begambleaware.org/" target="_blank" rel="noopener">BeGambleAware</a> can help.</p>
@@ -332,7 +333,7 @@ $('#siteFoot').innerHTML = `
 
 // ---------------------------------------------------------------- router
 const routes = {
-  '': () => import('./pages/lobby.js'),
+  '': () => import('./pages/lobby.js?v=73f8b13a4b01'),
   blackjack: () => import('./games/blackjack.js'),
   roulette: () => import('./games/roulette.js'),
   mines: () => import('./games/mines.js'),
@@ -340,6 +341,7 @@ const routes = {
   slots: () => import('./games/slots.js'),
   crash: () => import('./games/crash.js'),
   rooster: () => import('./games/rooster.js?v=1548e79590c3'),
+  flight: () => import('./games/flight.js?v=1f3cb4b31451'),
   leaderboard: () => import('./pages/leaderboard.js'),
   profile: () => import('./pages/profile.js'),
 };
@@ -459,7 +461,7 @@ async function boot() {
     } catch {
       /* ignore */
     }
-    if (!seen) setTimeout(() => !store.signedIn && currentRoute() !== 'rooster' && !document.querySelector('.modal-root') && openAccount(), 1400);
+    if (!seen) setTimeout(() => !store.signedIn && !['rooster', 'flight'].includes(currentRoute()) && !document.querySelector('.modal-root') && openAccount(), 1400);
   }
   navigate();
 }
