@@ -18,6 +18,7 @@ import { landscape } from './rooster-landscape.js';
 import { loadArt } from './rooster-art.js';
 
 const HOP_MS = 110;
+const SCORE_COURSE_SPEED = 0.90;
 const SWIPE_PX = 10;
 const COUNTDOWN_MS = 1500;
 const BANK_HOLD_MS = 450;
@@ -141,7 +142,9 @@ export default {
     const particles = [];
     const floats = []; // canvas float texts
     const trainsWarned = new Set();
-    const worldT = (now) => (now - runT0) / 1000;
+    // Slow the score course as a whole so visible gaps, log drift and collisions agree.
+    // Input and hop animations still run on the real clock.
+    const worldT = (now) => (now - runT0) / 1000 * (scoreMode ? SCORE_COURSE_SPEED : 1);
 
     function resetRun() {
       endT = null;
