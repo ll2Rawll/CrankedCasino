@@ -5,17 +5,17 @@
 // the server hands out the seed that lays out the course, replays the moves, and pays
 // bet × that target's multiplier if the rooster reached it.
 
-import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=779240ffda44';
-import { icon } from '../icons.js?v=779240ffda44';
-import { store } from '../store.js?v=779240ffda44';
-import { engine, errorText } from '../engine.js?v=779240ffda44';
-import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=779240ffda44';
-import { sfx, haptic } from '../sound.js?v=779240ffda44';
-import { burst, PALETTES, coinRain } from '../fx.js?v=779240ffda44';
-import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=779240ffda44';
-import { scoreLane, onPlatform, chaseLine, LINE_GRACE } from './rooster-course.js?v=779240ffda44';
-import { landscape } from './rooster-landscape.js?v=779240ffda44';
-import { loadArt } from './rooster-art.js?v=779240ffda44';
+import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=5f2ed3b0f3fc';
+import { icon } from '../icons.js?v=5f2ed3b0f3fc';
+import { store } from '../store.js?v=5f2ed3b0f3fc';
+import { engine, errorText } from '../engine.js?v=5f2ed3b0f3fc';
+import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=5f2ed3b0f3fc';
+import { sfx, haptic } from '../sound.js?v=5f2ed3b0f3fc';
+import { burst, PALETTES, coinRain } from '../fx.js?v=5f2ed3b0f3fc';
+import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=5f2ed3b0f3fc';
+import { scoreLane, onPlatform, chaseLine, LINE_GRACE } from './rooster-course.js?v=5f2ed3b0f3fc';
+import { landscape } from './rooster-landscape.js?v=5f2ed3b0f3fc';
+import { loadArt } from './rooster-art.js?v=5f2ed3b0f3fc';
 
 const HOP_MS = 110;
 // Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.

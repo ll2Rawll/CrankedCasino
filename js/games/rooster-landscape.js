@@ -1,7 +1,7 @@
-import { RR, rrFront } from '../math.js?v=779240ffda44';
-import { courseMaterials } from './rooster-materials.js?v=779240ffda44';
-import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=779240ffda44';
-import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=779240ffda44';
+import { RR, rrFront } from '../math.js?v=5f2ed3b0f3fc';
+import { courseMaterials } from './rooster-materials.js?v=5f2ed3b0f3fc';
+import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=5f2ed3b0f3fc';
+import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=5f2ed3b0f3fc';
 
 // lite: phones. Skip the river reflections and paint flat ground (see rasterLayers).
 export function landscape(ctx, { lite = false } = {}) {
@@ -110,6 +110,9 @@ export function landscape(ctx, { lite = false } = {}) {
         kind = r === -3 || r === -4 ? 'brook' : L.kind;
       const turf = meadow(kind);
       const water = kind === 'river' || kind === 'brook';
+      // A low wall along both edges of the seven playable columns.
+      add('curb', -.62, r);
+      add('curb', RR.COLS - .38, r);
       if (turf) {
         for (let x = minX; x <= maxX; x++) {
           const h = variation(seed, r, x);
@@ -295,6 +298,7 @@ export function landscape(ctx, { lite = false } = {}) {
       if (a.kind === 'egg' || a.kind === 'hawk') continue;
       a.sprite = stamp(a.kind, a.variant, a.dir);
       if (a.kind === 'hen' && drowned) continue; // the water swallows her shadow
+      if (a.kind === 'curb' && lite) continue; // phones skip the walls' soft shadows
       const p = point(a.x + 1.10 * a.lift, a.r - .63 * a.lift);
       layers.shadow(a.sprite.penumbra, p.x * dpr, p.y * dpr, a.size, a.stretch);
     }

@@ -1,14 +1,14 @@
 // Lobby: neon marquee sign, searchlights, a hand of holographic game cards,
 // the cashier (stack, ad rewards, promo ticket), recent action, accounts, FAQ.
 
-import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=779240ffda44';
-import { icon } from '../icons.js?v=779240ffda44';
-import { store, on } from '../store.js?v=779240ffda44';
-import { engine, MODE } from '../engine.js?v=779240ffda44';
-import { sfx } from '../sound.js?v=779240ffda44';
-import { promoTicket } from '../ui.js?v=779240ffda44';
-import { openAccount } from '../account.js?v=779240ffda44';
-import { adButton, banner } from '../ads.js?v=779240ffda44';
+import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=5f2ed3b0f3fc';
+import { icon } from '../icons.js?v=5f2ed3b0f3fc';
+import { store, on } from '../store.js?v=5f2ed3b0f3fc';
+import { engine, MODE } from '../engine.js?v=5f2ed3b0f3fc';
+import { sfx } from '../sound.js?v=5f2ed3b0f3fc';
+import { promoTicket } from '../ui.js?v=5f2ed3b0f3fc';
+import { openAccount } from '../account.js?v=5f2ed3b0f3fc';
+import { adButton, banner } from '../ads.js?v=5f2ed3b0f3fc';
 
 const GAMES = [
   { id: 'blackjack', name: 'Blackjack', rank: 'A', suit: '♠', red: false, line: 'Beat the dealer to 21.', tags: ['Pays 3:2', 'Split · Double'] },

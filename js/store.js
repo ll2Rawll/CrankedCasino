@@ -12,8 +12,8 @@
 //
 // Shown balance = server balance − chips the server hasn't taken yet − wins not yet revealed.
 
-import { round2 } from './util.js?v=779240ffda44';
-import { engine } from './engine.js?v=779240ffda44';
+import { round2 } from './util.js?v=5f2ed3b0f3fc';
+import { engine } from './engine.js?v=5f2ed3b0f3fc';
 
 export const GAMES = ['blackjack', 'roulette', 'slots', 'crash', 'plinko', 'mines', 'rooster', 'flight'];
 const HISTORY_MAX = 40;

@@ -193,6 +193,10 @@ function model(kind, variant, direction) {
       block(x, 0, 0.53, 0.148, 0.173, 0.04, '#e1b986');
     }
     for (const z of [0.14, 0.34]) block(0, 0.045, z, 1.99, 0.092, 0.09, '#cfaa78');
+  } else if (kind === 'curb') {
+    // One row's length of the low stone wall that edges the course, with a pale coping.
+    block(0, 0, 0, 0.2, 1.01, 0.15, '#8f9a93', 0.25);
+    block(0, 0, 0.15, 0.25, 1.01, 0.055, '#e9e0c6', 0.3);
   } else if (kind === 'rock') {
     bulb(0, 0, 0.14, 0.37, 0.29, 0.23, '#98a29a', 7);
   } else if (kind === 'log') {

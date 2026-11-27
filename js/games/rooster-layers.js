@@ -1,7 +1,7 @@
 // Raster caches for the stationary ground and cast shadows.
 // All destinations in this module are expressed in backing pixels.
-import { RR } from '../math.js?v=779240ffda44';
-import { plane } from './rooster-models.js?v=779240ffda44';
+import { RR } from '../math.js?v=5f2ed3b0f3fc';
+import { plane } from './rooster-models.js?v=5f2ed3b0f3fc';
 
 const grass = ['#98af49', '#94ab47', '#a0b451'];
 const asphalt = ['#505961', '#586269'];
@@ -106,6 +106,10 @@ function paintTile(image, tx, ty, unit, lane, seed, materials, lite) {
       }
     }
   }
+  // Outside the playable columns the ground is shaded, so the course edge reads at a glance.
+  g.fillStyle = 'rgba(16, 26, 38, .3)';
+  if (left < -.5) g.fillRect(left, first, -.5 - left, last - first + 1);
+  if (right > RR.COLS - .5) g.fillRect(RR.COLS - .5, first, right - (RR.COLS - .5), last - first + 1);
 }
 
 export function wildTree(x, row, hash) {
