@@ -341,7 +341,7 @@ const routes = {
   slots: () => import('./games/slots.js'),
   crash: () => import('./games/crash.js'),
   rooster: () => import('./games/rooster.js?v=1548e79590c3'),
-  flight: () => import('./games/flight.js?v=1f3cb4b31451'),
+  flight: () => import('./games/flight.js?v=d892ac4690b0'),
   leaderboard: () => import('./pages/leaderboard.js'),
   profile: () => import('./pages/profile.js'),
 };

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const { chromium, webkit } = createRequire(import.meta.url)('playwright-core');
 const engine = process.env.BROWSER === 'chromium' ? chromium : webkit;
-const browser = await engine.launch(engine === chromium ? { executablePath: process.env.CHROMIUM } : {});
+const browser = await engine.launch({ executablePath: engine === chromium ? process.env.CHROMIUM : webkit.executablePath() });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const errors = [];
@@ -21,8 +21,8 @@ try {
   await tap();
   assert.equal(await phase(), 'flying');
   await page.clock.runFor(410);
-  const y = await birdY();
   await tap();
+  const y = await birdY();
   await page.clock.runFor(20);
   assert(await birdY() < y, 'touch lifts the bird on the next frame');
   await page.getByRole('button', { name: 'Pause flight' }).tap({ force: true });

@@ -40,7 +40,7 @@ export default {
     const record = $('.nf-record'), results = $('.nf-results'), keys = $('.nf-keys'), status = $('.nf-status');
     let best = Math.max(0, Number(storage.get(BEST, 0)) || 0);
     let phase = 'ready', course = flightCourse(), previousBest = best;
-    let raf = 0, last = 0, carry = 0, scale = 1, anchor = 0, right = 0, liftTime = 0;
+    let raf = 0, last = 0, scale = 1, anchor = 0, right = 0, liftTime = 0;
     let width = 1, height = 1, quiet = reducedMotion();
     const gates = new Map(), pool = [];
     const events = new AbortController();
@@ -119,7 +119,7 @@ export default {
       const y = idle ? height * .49 : s.y * scale;
       bird.style.transform = `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${pitch.toFixed(1)}deg)`;
       if (!idle) {
-        const age = liftTime + carry;
+        const age = liftTime;
         const frame = quiet ? 1 : age < .085 ? 2 : age < .18 ? 1 : 0;
         bird.firstElementChild.style.backgroundPositionX = frame * 50 + '%';
       }
@@ -151,13 +151,16 @@ export default {
     }
     function advance(now) {
       // A frame timestamp can predate a pointer event handled in the same frame.
-      carry += Math.min(Math.max(0, now - last) / 1000, .12);
+      let remaining = Math.min(Math.max(0, now - last) / 1000, .12);
       last = Math.max(last, now);
       const oldScore = course.state.score;
-      while (carry + 1e-9 >= STEP && !course.state.hit) {
-        course.step(STEP, right, anchor / scale);
-        carry -= STEP;
-        liftTime += STEP;
+      // Keep collision steps short and consume the fractional step too. A tap
+      // just before vsync can then lift the bird on that very frame.
+      while (remaining > 0 && !course.state.hit) {
+        const dt = Math.min(STEP, remaining);
+        course.step(dt, right, anchor / scale);
+        remaining -= dt;
+        liftTime += dt;
       }
       if (course.state.score !== oldScore) {
         score.lastElementChild.textContent = course.state.score;
@@ -180,7 +183,7 @@ export default {
         course.extend(right);
         previousBest = best;
         score.lastElementChild.textContent = '0';
-        carry = liftTime = 0;
+        liftTime = 0;
         course.flap();
       }
       quiet = reducedMotion();

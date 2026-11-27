@@ -11,7 +11,9 @@ html.flight-open, html.flight-open body { overflow: hidden; overscroll-behavior:
 .nf [hidden] { display: none !important; }
 .nf-sky, .nf-course { position: absolute; inset: 0; pointer-events: none; }
 .nf-sky {
-  background: #232e4e url('../assets/flight/harbor.webp') 58% center / cover no-repeat;
+  background: url('../assets/flight/harbor.webp') 58% center / cover no-repeat,
+    radial-gradient(circle at 67% 31%, #f0b477 0 8%, transparent 8.3%),
+    linear-gradient(#181d3b 0%,#795168 58%,#283248 77%,#54445b 78%,#33374e);
   image-rendering: pixelated;
 }
 .nf-course, .nf-quay, .nf-bird, .nf-panel { pointer-events: none; }
@@ -93,7 +95,7 @@ html.flight-open, html.flight-open body { overflow: hidden; overscroll-behavior:
 .nf-results strong { color: #ffc27c; font-size: 2.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
 @media (pointer:coarse) { .nf-keys { display: none; } }
 @media (max-width: 580px) {
-  .nf-sky { background-position: 64% center; }
+  .nf-sky { background-position: 64% center, center, center; }
   .nf-panel { padding-inline: max(24px, env(safe-area-inset-left)); background: linear-gradient(90deg,#13192cb8,transparent 93%); }
   .nf-note { max-width: 20ch; }
   .nf-nav { top: max(12px,env(safe-area-inset-top)); left: max(12px,env(safe-area-inset-left)); right: max(12px,env(safe-area-inset-right)); }
