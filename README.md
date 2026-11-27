@@ -14,10 +14,10 @@ A free fake-money casino with a neon "after hours" look. Every player picks a us
 | **Crash** | A rocket climbs a live multiplier curve until it explodes. Cash out in time, or set an auto cash-out. | 99% |
 | **Plinko** | Drop balls through 8–16 rows of pegs, three risk levels, up to 1,000×. | ≈99% |
 | **Mines** | Flip tiles on a 5×5 grid, collect gems, dodge 1–24 bombs, cash out whenever you like. | 99% |
-| **Night Flight** *(new)* | Free score chase. Tap to flap a kingfisher through the harbour's gates, one point a gate, with medals at 10, 20, 30 and 40. The flight follows the classic tap-to-flap arcade rules frame for frame. Your best score stays in this browser. | Free to play |
-| **Road Rooster** *(new)* | Score run is free and tracks your best banked score in this browser. Cross traffic, trains, and rivers on logs and lily pads. Hold the egg to bank points. In chip run, hop a rooster across a neon highway, dodging cars, buses and trains, with a hawk chasing you if you dawdle. Cash out any time for your furthest row: row 10 returns your bet, and every row after adds 7%, up to 81.27× at the golden egg on row 75. | Depends on how well you play |
+| **Night Flight** *(new)* | Tap to flap a kingfisher through the harbour's gates, one point a gate, with medals at 10, 20, 30 and 40. The flight follows the classic tap-to-flap arcade rules frame for frame. Free flights chase your best score. Bet flights pick a number of gates and pay the moment you clear them: 5 gates 1.5×, 10 gates 2.5×, 25 gates 8×, 50 gates 30×. | Depends on how well you play |
+| **Road Rooster** *(new)* | Hop across roads, rail lines and rivers (ride logs, land on lily pads) ahead of a red line. Score runs are free: hold the egg to bank your rows, and your best stays in this browser. Bet runs pick a row to reach and pay the moment you get there: row 10 1.2×, row 25 2.2×, row 50 6×, row 100 30×. | Depends on how well you play |
 
-The server decides every card, spin, bounce and crash with a cryptographic random number generator; the browser only animates the result. Road Rooster is a skill game. Score runs play locally. In chip runs, the server hands out a seed that lays out the traffic, and when you cash out it replays your moves against the same traffic before paying.
+The server decides every card, spin, bounce and crash with a cryptographic random number generator; the browser only animates the result. Road Rooster and Night Flight are skill games. Free runs and flights play locally. For a bet, the server hands out a seed that lays out the course, and before it pays it replays your hops (or your flaps, frame by frame) on that same course. The target multipliers were set with simulated players: a good player about breaks even, an average one loses slowly, and real skill wins.
 
 **Also included**
 
@@ -54,7 +54,7 @@ Free Supabase projects pause after a week without any visits. If that happens, o
 - **Promo codes are once per account, ever.** They're tracked in `cc.promo_redemptions`.
 - **Ad rewards are rate-limited by the server** (cooldown plus a daily cap), so the button can't be farmed.
 - **New accounts are limited** to 4 per network per day, so you can't keep making accounts for fresh chips. Passwords are bcrypt-hashed, and 8 wrong passwords lock the account for 10 minutes.
-- **Road Rooster runs are replayed** by the server before they pay. Fake runs, impossible timings and moves that would have been hit by traffic pay nothing.
+- **Road Rooster runs and Night Flight flights are replayed** by the server before they pay. Fake runs, impossible timings, flights faster than the clock and moves that would have crashed pay nothing.
 
 ### Tuning
 
@@ -116,7 +116,7 @@ node tools/test-flight-course.mjs         # Night Flight's physics and a proof e
 BASE=http://localhost:8080/ node tools/test-rooster-input.mjs   # touch input on a phone screen
 BASE=http://localhost:8080/ node tools/test-rooster-run.mjs     # a pilot plays logs, pads, trains, banking and every way to lose
 BASE=http://localhost:8080/ node tools/test-night-flight.mjs    # a full flight, crash, board and retry
-node tools/stamp-versions.mjs             # after changing a module: refresh the ?v= cache tags
+node tools/stamp-versions.mjs             # after any change: one ?v= build tag on every script, content tags on the rest
 ```
 
 `SHOTS=<folder>` makes `test-rooster-run.mjs` save a screenshot of each moment it checks.
@@ -129,7 +129,7 @@ css/                     design system, lobby, game screens, felt tables
 js/main.js               header, cashier, menu, theme, hash router, session start-up
 js/engine.js             talks to the casino server (Supabase REST), one call at a time
 js/engine-local.js       the same server, in the browser, for offline mode
-js/math.js               game maths shared with the server (pay tables, Road Rooster traffic)
+js/math.js               game maths shared with the server (pay tables, skill-game hash and targets)
 js/store.js              the balance and stats the player sees, synced from the server
 js/account.js            sign-up / log-in sheet
 js/ads.js                banners and rewarded ad breaks (AdSense, or house ads)

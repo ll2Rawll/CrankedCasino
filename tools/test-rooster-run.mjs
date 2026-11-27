@@ -3,7 +3,8 @@
 // pilot (rooster-pilot.mjs) plans every hop from the game's own lane maths; the test
 // performs each one as a real tap or swipe, checks the game agrees where the rooster
 // landed, rides logs, lands on lily pads, passes train crossings and banks with the egg.
-// Then it ends a run in each other way: a car, a train, the river and the red line.
+// Then it ends a run in each other way: a car, a train, the river and the red line, and
+// plays bet runs: one reaches its target row and is paid, one is hit and loses the bet.
 // Chromium only (touch input goes through the DevTools protocol). CHROMIUM=<executable>.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -93,6 +94,7 @@ try {
         await until(mv.s.tl);
         await gesture(mv.m);
         st = await state();
+        if (st.phase === 'ending' && st.cause == null) return st; // a bet run reached its target
         assert.equal(st.phase, 'run', `still running after the hop to row ${mv.s.row}`);
         assert.deepEqual([st.row, st.col], [mv.s.row, mv.s.col], 'the game landed the rooster where the plan did');
         if (await stop(st, p)) return st;
@@ -249,12 +251,68 @@ try {
     assert.match(await centerText(), /Caught by the red line/);
   }
 
+  // ---------------------------------------------------------------- bet runs
+  // Make an account on this device, then bet on reaching a row.
+  const tag = await page.evaluate(() => new URL(document.querySelector('script[src*="main.js"]').src).search);
+  await page.evaluate(async (tag) => {
+    const { engine } = await import(`/js/engine.js${tag}`);
+    const r = await engine.signup(`pilot${Math.floor(Math.random() * 1e6)}`, 'correct horse');
+    if (!r.ok) throw new Error(r.error);
+  }, tag);
+  await page.reload();
+  await page.locator('.rr-fab').waitFor();
+  const balance = () => page.evaluate(async (tag) => (await import(`/js/store.js${tag}`)).store.balance, tag);
+  await page.locator('input[value="bet"]').check({ force: true });
+  async function startBet(goal) {
+    const fab = page.locator('.rr-fab');
+    if ((await fab.textContent()).includes('Continue')) await fab.tap({ force: true });
+    await page.getByRole('button', { name: new RegExp(`^${goal} · `) }).click();
+    assert.equal(await page.getByRole('button', { name: new RegExp(`^${goal} · `) }).getAttribute('aria-pressed'), 'true');
+    const before = await balance();
+    await fab.tap({ force: true });
+    await page.clock.runFor(1505);
+    const st = await state();
+    assert.equal(st.phase, 'run');
+    assert.equal(await page.locator('.rr-dialog[open]').count(), 1, 'a bet run opens the game view');
+    assert.equal(await balance(), before - 10, 'the bet leaves the balance');
+    assert.equal(await page.locator('[data-score]').textContent(), `0 / ${goal}`);
+    return { p: pilot(st.seed), before };
+  }
+  {
+    const { p, before } = await startBet(10);
+    const st = await drive(p, (st) => st.phase !== 'run' || st.best >= 10);
+    assert.equal(st.phase, 'ending', 'reaching the target ends the run at once');
+    await shot('10-bet-reached');
+    await page.clock.runFor(400);
+    assert.equal((await state()).phase, 'over');
+    assert.match(await centerText(), /Row 10 reached[\s\S]*\+12\.00/);
+    assert.equal(await balance(), before + 2, 'row 10 pays 1.2×');
+    await page.clock.runFor(600);
+    await shot('11-bet-won');
+  }
+  {
+    const { p, before } = await startBet(25);
+    let at;
+    await drive(p, (st, p) => {
+      if (st.best < 3 || p.lane(st.row).kind === 'river') return false;
+      at = meet('road')(st, p);
+      return at != null && holdable(st, p, at);
+    });
+    await until(at);
+    await gesture(MOVES.forward);
+    for (let i = 0; i < 60 && (await state()).phase !== 'over'; i++) await page.clock.runFor(25);
+    assert.equal((await state()).phase, 'over');
+    assert.match(await centerText(), /Hit by a car[\s\S]*of 25 · bet lost/);
+    assert.equal(await balance(), before - 10, 'a hit before the target loses the bet');
+    await shot('12-bet-lost');
+  }
+
   // The best score survives a reload.
   await page.reload();
   await page.locator('.rr-fab').waitFor();
   assert.equal((await state()).record, record);
   assert.deepEqual(errors, []);
-  console.log(`passed: hopped ${seen.road + seen.bus} traffic lanes, ${seen.train} rail tracks (waiting once for the signal), ${seen.log} logs and ${seen.pad} lily pads to row ${record}, banked it with the egg, then ended runs by car, train, river and the red line.`);
+  console.log(`passed: hopped ${seen.road + seen.bus} traffic lanes, ${seen.train} rail tracks (waiting once for the signal), ${seen.log} logs and ${seen.pad} lily pads to row ${record}, banked it with the egg, ended runs by car, train, river and the red line, won a bet on row 10 and lost one to a car.`);
 } finally {
   await browser.close();
 }

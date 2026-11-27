@@ -1,12 +1,12 @@
 // Shared UI: toasts, modals, bet input, segmented controls, game page frame.
 
-import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js';
-import { icon } from './icons.js';
-import { store, on, BetError } from './store.js';
-import { sfx } from './sound.js';
-import { needAccount } from './account.js';
-import { banner } from './ads.js';
-import { errorText } from './engine.js';
+import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=714c8b12054c';
+import { icon } from './icons.js?v=714c8b12054c';
+import { store, on, BetError } from './store.js?v=714c8b12054c';
+import { sfx } from './sound.js?v=714c8b12054c';
+import { needAccount } from './account.js?v=714c8b12054c';
+import { banner } from './ads.js?v=714c8b12054c';
+import { errorText } from './engine.js?v=714c8b12054c';
 
 // ---------------------------------------------------------------- toasts
 const toastRoot = document.getElementById('toasts');
@@ -226,8 +226,8 @@ export function segmented(options, value, onChange, { label } = {}) {
 }
 
 // ---------------------------------------------------------------- game frame
-const GAME_COLORS = { mines: 'var(--mines)', plinko: 'var(--plinko)', slots: 'var(--slots)', crash: 'var(--crash)', blackjack: 'var(--blackjack)', roulette: 'var(--roulette)', rooster: 'var(--rooster)' };
-const GAME_SUITS = { blackjack: '♠', roulette: '♦', slots: '♥', crash: '♣', plinko: '♦', mines: '♠', rooster: '♥' };
+const GAME_COLORS = { mines: 'var(--mines)', plinko: 'var(--plinko)', slots: 'var(--slots)', crash: 'var(--crash)', blackjack: 'var(--blackjack)', roulette: 'var(--roulette)', rooster: 'var(--rooster)', flight: 'var(--flight, #ffbe66)' };
+const GAME_SUITS = { blackjack: '♠', roulette: '♦', slots: '♥', crash: '♣', plinko: '♦', mines: '♠', rooster: '♥', flight: '♣' };
 
 /**
  * Standard game page: title row, stage, controls, and a recent-bets table.
@@ -339,7 +339,7 @@ export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it i
       el.insertAdjacentHTML('beforeend', '<span class="stamp">Redeemed</span>');
       input.value = '';
       sfx.jackpot();
-      import('./fx.js').then(({ coinRain, burstAt, PALETTES }) => {
+      import('./fx.js?v=714c8b12054c').then(({ coinRain, burstAt, PALETTES }) => {
         coinRain(120);
         burstAt(el, { count: 90, colors: PALETTES.gold, speed: [5, 15] });
       });

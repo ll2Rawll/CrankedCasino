@@ -5,6 +5,8 @@
 // and the scoring window all come from whole-frame steps, so the browser renders between
 // frames instead of changing the physics.
 
+import { hash01 } from '../math.js?v=714c8b12054c';
+
 export const FPS = 30;
 export const VIEW_W = 288;
 export const VIEW_H = 512;
@@ -83,6 +85,10 @@ export function birdHitsGate(y, frame, gate) {
   return false;
 }
 
+/**
+ * A flight. `random` lays out the gates: a function (Math.random by default) or a seed.
+ * A seeded course (bet flights) puts gate n's gap at hash01(seed, n, 7), as the server does.
+ */
 export function flightCourse(random = Math.random) {
   const state = {
     mode: 'ready', // ready → flying → crashed (falling) → landed
@@ -98,13 +104,20 @@ export function flightCourse(random = Math.random) {
     hit: null, // 'gate' | 'quay'
     shm: 0,
     shmDir: 1,
+    start: 0, // the bob offset at take-off
+    flown: 0, // frames since take-off
+    flaps: [], // the frames on which a flap took effect (the replay's input)
   };
   let loop = 0;
   let flapped = false;
   let pending = false;
   let nextIndex = 0;
 
-  const makeGate = (x) => ({ index: nextIndex++, x, gapTop: GAP_MIN + Math.floor(random() * GAP_RANGE), passed: false });
+  const draw = typeof random === 'number' ? (n) => hash01(random, n, 7) : () => random();
+  const makeGate = (x) => {
+    const index = nextIndex++;
+    return { index, x, gapTop: GAP_MIN + Math.floor(draw(index) * GAP_RANGE), passed: false };
+  };
 
   function nextWing(every) {
     if ((loop + 1) % every === 0) {
@@ -128,6 +141,11 @@ export function flightCourse(random = Math.random) {
   function launch() {
     if (state.mode !== 'ready') return;
     state.mode = 'flying';
+    state.start = state.shm;
+    // The wing cycle restarts at take-off so a replay of the flight sees the same frames.
+    loop = 0;
+    state.wing = 0;
+    state.frame = WINGS[0];
     state.vy = FLAP_V;
     state.rot = ROT_FLAP;
     flapped = false; // the opening kick still gets gravity on its first frame
@@ -146,11 +164,13 @@ export function flightCourse(random = Math.random) {
   /** One frame of flight. Returns the sounds that frame made. */
   function fly() {
     const events = [];
+    const frame = state.flown++;
     if (pending) {
       pending = false;
       if (state.y > CEILING) {
         state.vy = FLAP_V;
         flapped = true;
+        state.flaps.push(frame);
         events.push('flap');
       }
     }
@@ -218,4 +238,27 @@ export function flightCourse(random = Math.random) {
   const shownRot = () => Math.min(state.rot, ROT_SHOWN_MAX);
 
   return { state, tick, launch, flap, shownRot };
+}
+
+/**
+ * Replay a bet flight: the seeded course, launched from bob offset `start`, flapping on
+ * the listed frames (strictly increasing), for at most `frames` frames. The server runs
+ * the same frame loop in cc.fl_replay. Returns { reached, crashed, score, frames }.
+ */
+export function flightReplay(seed, start, flaps, goal, frames) {
+  const c = flightCourse(seed);
+  c.state.shm = start;
+  c.state.y = START_Y + start;
+  c.launch();
+  let next = 0;
+  for (let k = 0; k < frames; k++) {
+    if (flaps[next] === k) {
+      c.flap();
+      next++;
+    }
+    c.tick();
+    if (c.state.score >= goal) return { reached: true, crashed: false, score: c.state.score, frames: k + 1 };
+    if (c.state.mode !== 'flying') return { reached: false, crashed: true, score: c.state.score, frames: k + 1 };
+  }
+  return { reached: false, crashed: false, score: c.state.score, frames };
 }

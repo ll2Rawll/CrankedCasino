@@ -1,21 +1,21 @@
-// Road Rooster: hop across a neon highway, dodging cars, buses and trains.
+// Road Rooster: hop across roads, rail lines and rivers ahead of a red line.
 //
-// It's a skill game. The server hands out a seed at the start of every run; the seed
-// lays out every lane and every vehicle (see ../math.js), so the browser and the server
-// see the same traffic. Cash out any time: the server replays your moves and pays for the
-// furthest row you reached. Dawdle and the hawk swoops in.
+// It's a skill game with two modes on the same course (rooster-course.js). A score run is
+// free: bank your rows with the egg. A bet run aims for a row picked before the start;
+// the server hands out the seed that lays out the course, replays the moves, and pays
+// bet × that target's multiplier if the rooster reached it.
 
-import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js';
-import { icon } from '../icons.js';
-import { store } from '../store.js';
-import { engine, errorText } from '../engine.js';
-import { RR, rrLane, rrHit, rrHawk, rrHawkTime, rrMult, rrFront } from '../math.js';
-import { sfx, haptic } from '../sound.js';
-import { burst, PALETTES, coinRain } from '../fx.js';
-import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
-import { scoreLane, onPlatform } from './rooster-course.js?v=c79a63fcecc8';
-import { landscape } from './rooster-landscape.js?v=22a28a0d3739';
-import { loadArt } from './rooster-art.js';
+import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=714c8b12054c';
+import { icon } from '../icons.js?v=714c8b12054c';
+import { store } from '../store.js?v=714c8b12054c';
+import { engine, errorText } from '../engine.js?v=714c8b12054c';
+import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=714c8b12054c';
+import { sfx, haptic } from '../sound.js?v=714c8b12054c';
+import { burst, PALETTES, coinRain } from '../fx.js?v=714c8b12054c';
+import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=714c8b12054c';
+import { scoreLane, onPlatform, chaseLine } from './rooster-course.js?v=714c8b12054c';
+import { landscape } from './rooster-landscape.js?v=714c8b12054c';
+import { loadArt } from './rooster-art.js?v=714c8b12054c';
 
 const HOP_MS = 110;
 // Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.
@@ -27,29 +27,29 @@ const BANK_HOLD_MS = 450;
 // How long a finished run stays on screen before the result panel rises.
 const RESULT_DEATH_MS = 750;
 const RESULT_BANK_MS = 300;
-const MILESTONES = [10, 20, 30, 40, 50, 60, 75];
 
 const RULES = `
-  <p><strong>Score run</strong> is free. Each new row earns one point. Ride logs, land on lily pads and hold Cash out to keep your score. Keep ahead of the red warning line. Getting caught, hitting traffic or falling into water scores zero. Your best banked score stays in this browser.</p>
-  <h3>Chip run</h3><ol class="rules">
-    <li>Pick a <strong>bet</strong> and press <strong>Start run</strong>. Your rooster waits on the grassy verge.</li>
-    <li><strong>Tap</strong> the road (or press <kbd>↑</kbd> / <kbd>Space</kbd>) to hop forward one lane. <strong>Swipe</strong> or use <kbd>←</kbd> <kbd>→</kbd> <kbd>↓</kbd> to dodge sideways or step back.</li>
-    <li>Dodge the cars, buses and trains. Grass verges are safe, but trees and rocks block the way.</li>
-    <li>Don’t dawdle: a hawk circles behind you and swoops if you fall too far back.</li>
-    <li>Hold the <strong>Cash out</strong> button on the road to bank your run. Traffic keeps moving while you hold. You’re paid for the furthest row you reached: row 10 gives your bet back, and every row after that adds 7%, all the way to the golden egg on row 75 (81.27×).</li>
+  <p><strong>Score run</strong> is free. Each new row earns one point. Ride logs, land on lily pads and hold the egg to bank your score. Keep ahead of the red line. Getting caught, hitting traffic or falling into water scores zero. Your best banked score stays in this browser.</p>
+  <h3>Bet run</h3><ol class="rules">
+    <li>Pick a <strong>bet</strong> and a <strong>target row</strong>, then press <strong>Bet</strong>.</li>
+    <li><strong>Tap</strong> (or press <kbd>↑</kbd> / <kbd>Space</kbd>) to hop forward one row. <strong>Swipe</strong> or use <kbd>←</kbd> <kbd>→</kbd> <kbd>↓</kbd> to step sideways or back.</li>
+    <li>Reach the target row and you’re paid on the spot: ${RR_TARGETS.map(([g, m]) => `row ${g} pays ${m}×`).join(', ')}.</li>
+    <li>Get hit, fall in the river or let the red line catch you before the target, and the bet is lost.</li>
   </ol>
-  <p class="dim" style="margin-top:14px;font-size:14px">A skill game: how far you get is up to you. The server lays out the traffic and checks every run before it pays.</p>`;
+  <p class="dim" style="margin-top:14px;font-size:14px">A skill game: how far you get is up to you. The server lays out the course and replays every run before it pays.</p>`;
 
 export default {
   title: 'Road Rooster',
   mount(view) {
-    const frame = gameFrame(view, { game: 'rooster', title: 'Road Rooster', kicker: 'Original · skill game', tags: ['Score chase', 'Chip run up to 81×'], rules: RULES });
+    const frame = gameFrame(view, { game: 'rooster', title: 'Road Rooster', kicker: 'Original · skill game', tags: ['Score chase', `Bet runs up to ${RR_TARGETS.at(-1)[1]}×`], rules: RULES });
     const { stage, controls } = frame;
     const modePicker = h(`<fieldset class="rr-modes"><legend class="sr-only">Road Rooster mode</legend>
       <label><input type="radio" name="rr-mode" value="score" checked> Score run</label>
-      <label><input type="radio" name="rr-mode" value="chips"> Chip run</label></fieldset>`);
+      <label><input type="radio" name="rr-mode" value="bet"> Bet run</label></fieldset>`);
     frame.el.querySelector('.game-head').append(modePicker);
-    let scoreMode = true;
+    let free = true; // a free score run; false for a bet run
+    let target = Number(storage.get('cc:rooster:target', 25)) || 25;
+    if (!targetMult(RR_TARGETS, target)) target = 25;
     let record = Number(storage.get('cc:rooster:score', 0)) || 0;
     let destroyed = false;
     let art = null;
@@ -80,9 +80,16 @@ export default {
     // ---------------------------------------------------------- controls
     controls.innerHTML = '';
     const bet = betInput('rooster');
-    const ladder = h(`<div class="field"><div class="field-label"><span>Pay table</span><span class="dim">furthest row × bet</span></div>
-      <div class="rr-ladder">${MILESTONES.map((m) => `<div data-m="${m}"><span>Row ${m}</span><b>${fmtMult(rrMult(m))}</b></div>`).join('')}</div></div>`);
-    const readout = h(`<div class="readout"><div><span>Furthest row</span><strong data-best>0</strong></div><div><span>Cash out value</span><strong data-value>0.00</strong></div></div>`);
+    const goal = h(`<div class="field"><div class="field-label"><span>Target row</span><span class="dim">reach it to win</span></div></div>`);
+    const goalPicker = segmented(RR_TARGETS.map(([g, m]) => ({ value: g, label: `${g} · ${m}×` })), target, (v) => {
+      target = Number(v);
+      storage.set('cc:rooster:target', target);
+      renderHud();
+      renderControls();
+    }, { label: 'Target row' });
+    goalPicker.el.classList.add('rr-goals');
+    goal.append(goalPicker.el);
+    const readout = h(`<div class="readout"><div><span>Reach row</span><strong data-goal>25</strong></div><div><span>To win</span><strong data-value>0.00</strong></div></div>`);
     const playBtn = h(`<button type="button" class="btn btn-primary btn-play"><span>Start run</span></button>`);
     const pad = h(`<div class="rr-pad" aria-label="Move">
       <button type="button" data-m="2" aria-label="Left">${icon('arrowRight')}</button>
@@ -90,7 +97,7 @@ export default {
       <button type="button" data-m="1" aria-label="Back">${icon('arrowRight')}</button>
       <button type="button" data-m="3" aria-label="Right">${icon('arrowRight')}</button>
     </div>`);
-    controls.append(bet.el, ladder, readout, playBtn, pad, h(`<p class="hint">Tap or <kbd>↑</kbd> hop · swipe or <kbd>←</kbd><kbd>→</kbd><kbd>↓</kbd> dodge · <kbd>C</kbd> cash out</p>`));
+    controls.append(bet.el, goal, readout, playBtn, pad, h(`<p class="hint">Tap or <kbd>↑</kbd> hop · swipe or <kbd>←</kbd><kbd>→</kbd><kbd>↓</kbd> dodge · <kbd>C</kbd> bank a score run</p>`));
     const gameDialog = h(`<dialog class="rr-dialog" aria-label="Road Rooster game view">
       <div class="rr-toolbar"><button type="button" data-exit aria-label="Exit game view">Exit</button></div>
     </dialog>`);
@@ -124,7 +131,7 @@ export default {
       event.preventDefault();
       leaveGameView();
     });
-    const bestEl = readout.querySelector('[data-best]');
+    const goalEl = readout.querySelector('[data-goal]');
     const valueEl = readout.querySelector('[data-value]');
 
     // ---------------------------------------------------------- run state
@@ -134,10 +141,11 @@ export default {
     let seed = 1 + Math.floor(Math.random() * 2147483640); // a demo road until the first run
     let lanes = new Map();
     const lane = (r) => {
-      if (!lanes.has(r)) lanes.set(r, scoreMode ? scoreLane(seed, r) : rrLane(seed, r));
+      if (!lanes.has(r)) lanes.set(r, scoreLane(seed, r));
       return lanes.get(r);
     };
     let runT0 = performance.now() - 20000; // world clock origin (demo traffic is mid-flow)
+    let goalRow = null; // the target of the bet run in play
     let moves = [];
     let row = 0;
     let col = RR.START_COL;
@@ -155,9 +163,9 @@ export default {
     const particles = [];
     const floats = []; // canvas float texts
     const trainsWarned = new Set();
-    // Slow the score course as a whole so visible gaps, log drift and collisions agree.
+    // Slow the course as a whole so visible gaps, log drift and collisions agree.
     // Input and hop animations still run on the real clock.
-    const worldT = (now) => (now - runT0) / 1000 * (scoreMode ? SCORE_COURSE_SPEED : 1);
+    const worldT = (now) => (now - runT0) / 1000 * SCORE_COURSE_SPEED;
 
     function resetRun() {
       endT = null;
@@ -206,57 +214,61 @@ export default {
     resize();
 
     // ---------------------------------------------------------- HUD + controls
+    const stakeMult = () => targetMult(RR_TARGETS, goalRow ?? target);
+    const winValue = () => round2((ticket?.amount ?? bet.value) * stakeMult());
     function bankLabel() {
-      return scoreMode ? `${best} ${best === 1 ? 'pt' : 'pts'}` : fmt(round2((ticket?.amount || 0) * rrMult(best)));
+      return `${best} ${best === 1 ? 'pt' : 'pts'}`;
     }
     function renderControls() {
-      viewEl.classList.toggle('rr-score-mode', scoreMode);
+      // Both modes use the score plaque. A bet run shows its target and has no bank.
+      viewEl.classList.add('rr-score-mode');
+      viewEl.classList.toggle('rr-bet-mode', !free);
+      viewEl.classList.toggle('rr-live', ['countdown', 'run', 'ending'].includes(phase));
       modePicker.disabled = phase !== 'idle' && phase !== 'over';
-      for (const field of [bet.el, ladder, readout]) field.hidden = scoreMode;
-      const bankValue = bankLabel();
+      for (const field of [bet.el, goal, readout]) field.hidden = free;
       viewEl.classList.toggle('rr-result', phase === 'over');
       if (phase !== 'run') stopHold();
       const live = phase === 'run' || phase === 'countdown';
-      playBtn.disabled = phase === 'starting' || phase === 'ending' || (live && best < 1);
-      if (phase === 'idle' || phase === 'over') {
+      const ready = phase === 'idle' || phase === 'over';
+      playBtn.disabled = phase === 'starting' || phase === 'ending' || (live && (!free || best < 1));
+      if (ready) {
         playBtn.className = 'btn btn-primary btn-play';
-        playBtn.innerHTML = `<span>${phase === 'over' ? 'Run again' : 'Start run'}</span>`;
+        playBtn.innerHTML = free
+          ? `<span>${phase === 'over' ? 'Run again' : 'Start run'}</span>`
+          : `<span>Bet ${fmt(bet.value)}</span><span class="sub">Reach row ${target} · win ${fmt(winValue())}</span>`;
       } else if (phase === 'starting') {
         playBtn.className = 'btn btn-outline btn-play';
         playBtn.innerHTML = '<span>Starting…</span>';
       } else if (phase === 'ending') {
         playBtn.className = 'btn btn-play is-cash';
-        playBtn.innerHTML = '<span>Banking…</span>';
-      } else {
+        playBtn.innerHTML = free ? '<span>Banking…</span>' : '<span>Settling…</span>';
+      } else if (free) {
         playBtn.className = best >= 1 ? 'btn btn-play is-cash' : 'btn btn-outline btn-play';
-        playBtn.innerHTML = best >= 1 ? `<span>Cash out</span><span class="sub">${bankValue}</span>` : '<span>Hop to start earning</span>';
+        playBtn.innerHTML = best >= 1 ? `<span>Bank score</span><span class="sub">${bankLabel()}</span>` : '<span>Hop to start scoring</span>';
+      } else {
+        playBtn.className = 'btn btn-outline btn-play';
+        playBtn.innerHTML = `<span>Row ${best} of ${goalRow}</span><span class="sub">Win ${fmt(winValue())}</span>`;
       }
-      bet.disable(phase !== 'idle' && phase !== 'over');
+      bet.disable(!ready);
+      goalPicker.disable(!ready);
+      goalPicker.set(target);
       pad.querySelectorAll('button').forEach((b) => (b.disabled = phase !== 'run'));
       // the same action, on the road itself (so phones never have to scroll mid-run)
-      if (phase === 'idle' || phase === 'over') {
+      if (ready) {
         fab.hidden = false;
         fab.className = 'rr-fab';
-        fab.innerHTML = phase === 'over' && gameDialog.open ? 'Continue' : `${phase === 'over' ? 'Run again' : 'Start run'} ${scoreMode ? '' : `<span>${fmt(bet.value)}</span>`}`;
-      } else if ((phase === 'run' || phase === 'countdown') && best >= 1) {
+        fab.innerHTML = phase === 'over' && gameDialog.open ? 'Continue' : free ? (phase === 'over' ? 'Run again' : 'Start run') : `Bet <span>${fmt(bet.value)}</span>`;
+      } else if (free && live && best >= 1) {
         fab.hidden = false;
         fab.classList.add('is-cash');
-        fab.innerHTML = `Hold to cash out <span>${bankValue}</span>`;
+        fab.innerHTML = `Hold to cash out <span>${bankLabel()}</span>`;
       } else fab.hidden = true;
     }
     function renderHud() {
-      scoreEl.textContent = String(best);
-      if (scoreMode) {
-        multEl.textContent = `Best ${record}`;
-        multEl.classList.remove('is-up');
-        return;
-      }
-      const m = rrMult(best);
-      multEl.textContent = `×${m.toFixed(2)}`;
-      multEl.classList.toggle('is-up', m >= 1);
-      bestEl.textContent = String(best);
-      valueEl.textContent = deathAt ? 'Lost' : fmt(round2((ticket?.amount || bet.value) * m));
-      ladder.querySelectorAll('[data-m]').forEach((el) => el.classList.toggle('hit', best >= Number(el.dataset.m)));
+      scoreEl.textContent = free ? String(best) : `${best} / ${goalRow ?? target}`;
+      multEl.textContent = free ? `Best ${record}` : `Win ${fmt(winValue())}`;
+      goalEl.textContent = String(target);
+      valueEl.textContent = fmt(round2(bet.value * targetMult(RR_TARGETS, target)));
     }
     function center(html, cls = '') {
       centerEl.className = `rr-center ${cls}`;
@@ -266,14 +278,15 @@ export default {
     // ---------------------------------------------------------- run flow
     async function start() {
       if (phase !== 'idle' && phase !== 'over') return;
-      if (scoreMode) {
+      if (free) {
         seed = 1 + Math.floor(Math.random() * 2147483640);
+        goalRow = null;
       } else {
         const t = tryBet('rooster', bet);
         if (!t) return;
         phase = 'starting';
         renderControls();
-        const r = await engine.roosterStart(t.amount);
+        const r = await engine.roosterStart(t.amount, target);
         if (!r?.ok) {
           serverRefused(t, r, bet);
           phase = 'idle';
@@ -284,6 +297,7 @@ export default {
         ticket = t;
         if (destroyed) return forfeit();
         seed = r.seed;
+        goalRow = r.target;
       }
       resetRun();
       runT0 = performance.now() + COUNTDOWN_MS;
@@ -305,12 +319,11 @@ export default {
       }, COUNTDOWN_MS);
     }
 
-    const chaseLine = (t) => Math.max(0, (t - 6) * 0.65);
     /** Did anything get us between the last check and t (seconds)? */
     function checkDeath(t) {
       if (phase !== 'run' || t < lastCheck) return false;
       const L = lane(row);
-      if (scoreMode && chaseLine(t) > row + 1) {
+      if (chaseLine(t) > row + 1) {
         die(t, 'line');
         return true;
       }
@@ -318,25 +331,18 @@ export default {
         die(t, 'river');
         return true;
       }
-      let tHit = rrHit(L, col, lastCheck, t, RR.HB_CLIENT);
-      let cause = L.kind;
-      if (!scoreMode && row < RR.FINISH) {
-        const th = Math.max(lastCheck, rrHawkTime(row, RR.HAWK_CLIENT));
-        if (th <= t && (tHit < 0 || th < tHit)) {
-          tHit = th;
-          cause = 'hawk';
-        }
-      }
+      const tHit = rrHit(L, col, lastCheck, t, RR.HB_CLIENT);
       lastCheck = t;
       if (tHit < 0) return false;
-      die(tHit, cause);
+      die(tHit, L.kind);
       return true;
     }
 
     function move(m, gesture = null) {
       if (phase !== 'run' || destroyed) return;
       const now = performance.now();
-      const t = worldT(now);
+      // Whole course milliseconds, so the server's replay sees exactly this moment.
+      const t = Math.round(worldT(now) * 1000) / 1000;
       if (checkDeath(t)) return;
       let nr = row;
       let nc = Math.round(ridingCol(t));
@@ -345,13 +351,13 @@ export default {
       else if (m === 2) nc -= 1;
       else if (m === 3) nc += 1;
       chick.face = [1, -1, -2, 2][m];
-      if (nr < 0 || (!scoreMode && nr > RR.FINISH) || nc < 0 || nc >= RR.COLS || lane(nr).blocked.includes(nc)) {
+      if (nr < 0 || nc < 0 || nc >= RR.COLS || lane(nr).blocked.includes(nc)) {
         chick.bumpT0 = now;
         chick.bumpDir = m;
         sfx.tap();
         return;
       }
-      if (!scoreMode) moves.push([Math.round(t * 1000), m]);
+      if (!free) moves.push([Math.round(t * 1000), m]);
       const from = pose(now, gesture);
       chick.fromRow = from.row;
       chick.fromCol = from.col;
@@ -368,30 +374,19 @@ export default {
       sfx.hop();
       if (row > best) {
         best = row;
-        if (scoreMode && best % 64 === 0) {
+        if (best % 64 === 0) {
           for (const cachedRow of lanes.keys()) if (cachedRow < best - 64) lanes.delete(cachedRow);
         }
         renderHud();
-        if (best === 1) renderControls();
+        if (!free || best === 1) renderControls();
         else {
           const label = bankLabel();
           fab.lastElementChild.textContent = label;
           playBtn.lastElementChild.textContent = label;
         }
         floats.push({ r: row, c: col, t0: now });
-        if (!scoreMode && MILESTONES.includes(best)) milestone(best);
+        if (!free && best >= goalRow) win(t);
       }
-      if (!scoreMode && row >= RR.FINISH) finish();
-    }
-
-    function milestone(k) {
-      const m = rrMult(k);
-      sfx.win(k >= 30 ? 2 : 1);
-      center(`<b>${fmtMult(m)}</b><small>Row ${k}${k === 10 ? ' · bet back!' : ''}</small>`, 'mile');
-      setTimeout(() => phase === 'run' && centerEl.classList.contains('mile') && center(''), 1300);
-      const { x, y } = chickScreen(performance.now());
-      const r = canvas.getBoundingClientRect();
-      burst(r.left + x, r.top + y, { count: 40, colors: PALETTES.gold, speed: [3, 10] });
     }
 
     function die(t, cause) {
@@ -403,12 +398,6 @@ export default {
       deathAt = { t, cause, at: now, row, col, impactAt: Math.max(now, chick.hopT0 + chick.duration) };
       const endMs = Math.max(moves.length ? moves[moves.length - 1][0] : 0, Math.round(t * 1000));
       renderControls();
-      if (cause === 'hawk') {
-        sfx.screech();
-        center('<b>Snatched!</b><small>The hawk caught you dawdling</small>', 'lose');
-      } else if (!scoreMode) {
-        center(`<b>Splat!</b><small>${cause === 'train' ? 'Hit by a train' : cause === 'bus' ? 'Flattened by a bus' : 'Hit by a car'} on row ${row}</small>`, 'lose');
-      }
       renderHud();
       endRun(endMs, false);
     }
@@ -450,18 +439,18 @@ export default {
       }
     }
 
-    function finish() {
+    /** A bet run reached its target row: it's paid on the spot. */
+    function win(t) {
       phase = 'ending';
-      endT = worldT(performance.now());
+      endT = t;
+      cashedAt = { at: performance.now() };
       renderControls();
-      sfx.jackpot();
-      coinRain(140);
-      center(`<b>Golden egg!</b><small>Row 75 · ${fmtMult(rrMult(75))}</small>`, 'win');
-      endRun(moves[moves.length - 1][0], true);
+      sfx.cashout();
+      endRun(Math.round(t * 1000), true);
     }
 
     async function cashOut() {
-      if (phase !== 'run' || best < 1) return;
+      if (phase !== 'run' || best < 1 || !free) return;
       const now = performance.now();
       const t = worldT(now);
       if (checkDeath(t)) return;
@@ -473,26 +462,31 @@ export default {
       endRun(Math.round(t * 1000), true);
     }
 
+    const CAUSES = { line: 'Caught by the red line', river: 'Fell in the river', road: 'Hit by a car', bus: 'Hit by a bus', train: 'Hit by a train' };
     async function endRun(endMs, cashout) {
-      if (scoreMode) {
+      // Let the splash, the flattening or the bank register before the result covers it.
+      const due = performance.now() + (cashout ? RESULT_BANK_MS : RESULT_DEATH_MS);
+      const reveal = (show) => setTimeout(() => {
+        if (destroyed || phase !== 'ending') return;
+        phase = 'over';
+        show();
+        renderHud();
+        renderControls();
+      }, Math.max(0, due - performance.now()));
+      const badge = (happy) => {
+        const illustration = happy ? art?.happy : art?.flat;
+        return illustration ? `<img class="rr-result-art" alt="" src="${illustration.src}">` : '';
+      };
+      if (free) {
         const points = cashout ? best : 0;
         record = Math.max(record, points, Number(storage.get('cc:rooster:score', 0)) || 0);
         storage.set('cc:rooster:score', record);
-        // Let the splash, the flattening or the bank register before the result covers it.
-        setTimeout(() => {
-          if (destroyed || phase !== 'ending') return;
-          phase = 'over';
-          const cause = { line: 'Caught by the red line', river: 'Fell in the river', road: 'Hit by a car', bus: 'Hit by a bus', train: 'Hit by a train' };
-          const illustration = cashout ? art?.happy : art?.flat;
-          const badge = illustration ? `<img class="rr-result-art" alt="" src="${illustration.src}">` : '';
-          center(`${badge}<strong>${cashout ? 'Score banked' : cause[deathAt?.cause] || 'Run ended'}</strong><b>${points}</b><small>Best ${record} · reached row ${best}</small>`, cashout ? 'win' : 'lose');
-          renderHud();
-          renderControls();
-        }, cashout ? RESULT_BANK_MS : RESULT_DEATH_MS);
+        reveal(() => center(`${badge(cashout)}<strong>${cashout ? 'Score banked' : CAUSES[deathAt?.cause] || 'Run ended'}</strong><b>${points}</b><small>Best ${record} · reached row ${best}</small>`, cashout ? 'win' : 'lose'));
         return;
       }
       const t = ticket;
-      const r = await engine.roosterEnd(moves.slice(), endMs, cashout);
+      const goalWas = goalRow;
+      const r = await engine.roosterEnd(moves.slice(), endMs);
       ticket = null;
       if (!r?.ok) {
         // The run is still open on the server; it settles when the next one starts.
@@ -504,20 +498,21 @@ export default {
       }
       store.confirm(t, r, { paid: r.payout });
       store.finish(t, r.entry);
-      phase = 'over';
       if (destroyed) return;
-      renderControls();
       if (r.payout > 0) {
-        const mult = r.mult;
-        const won = r.payout - t.amount;
-        center(`<strong>${r.finished ? 'Golden egg' : 'Score banked'}</strong><b>${r.score}</b><small>${fmtMult(mult)} · ${fmt(r.payout)} chips${won > 0 ? ` · +${fmt(won)}` : ''}</small>`, 'win');
-        const { x, y } = chickScreen(performance.now());
-        const rc = canvas.getBoundingClientRect();
-        burst(rc.left + x, rc.top + y, { count: mult >= 2 ? 80 : 40, colors: PALETTES.gold, speed: [4, 12], kind: 'coin' });
-        if (mult >= 5) coinRain(mult >= 20 ? 120 : 60);
-        if (mult >= 1) sfx.win(mult >= 3 ? 2 : 1);
-      } else if (cashout && !r.alive) {
-        center('<b>Too late!</b><small>The replay caught you on the road</small>', 'lose');
+        reveal(() => {
+          center(`${badge(true)}<strong>Row ${goalWas} reached</strong><b>+${fmt(r.payout)}</b><small>${fmtMult(r.mult)} on a ${fmt(t.amount)} bet</small>`, 'win');
+          const { x, y } = chickScreen(performance.now());
+          const rc = canvas.getBoundingClientRect();
+          burst(rc.left + x, rc.top + y, { count: r.mult >= 2 ? 80 : 40, colors: PALETTES.gold, speed: [4, 12], kind: 'coin' });
+          if (r.mult >= 5) coinRain(r.mult >= 20 ? 120 : 60);
+          sfx.win(r.mult >= 3 ? 2 : 1);
+        });
+      } else if (cashout) {
+        // The game saw the target reached, but the server's replay didn't.
+        reveal(() => center(`${badge(false)}<strong>Not counted</strong><b>${fmt(0)}</b><small>The replay caught the rooster before row ${goalWas}</small>`, 'lose'));
+      } else {
+        reveal(() => center(`${badge(false)}<strong>${CAUSES[deathAt?.cause] || 'Run ended'}</strong><b>−${fmt(t.amount)}</b><small>Row ${best} of ${goalWas} · bet lost</small>`, 'lose'));
       }
     }
 
@@ -526,7 +521,7 @@ export default {
       const t = ticket;
       ticket = null;
       const endMs = moves.length ? moves[moves.length - 1][0] : 0;
-      engine.roosterEnd(moves.slice(), endMs, false).then((r) => {
+      engine.roosterEnd(moves.slice(), endMs).then((r) => {
         if (!t) return store.sync(r);
         if (r?.ok) {
           store.confirm(t, r, { paid: 0 });
@@ -633,7 +628,7 @@ export default {
       const nextCol = Math.round(ridingCol(worldT(now)));
       touch = {
         x: event.clientX, y: event.clientY, id: event.pointerId, at,
-        canAdvance: (scoreMode || row < RR.FINISH) && !lane(row + 1).blocked.includes(nextCol),
+        canAdvance: !lane(row + 1).blocked.includes(nextCol),
       };
     });
     function recognizeMove(event) {
@@ -810,8 +805,8 @@ export default {
       if (!W || !H) return;
       const t = endT ?? worldT(now);
       if (phase === 'run') checkDeath(t);
-      const line = scoreMode ? chaseLine(t) : rrHawk(t);
-      const warning = phase === 'run' && (scoreMode ? t > 6 : t > 4);
+      const line = chaseLine(t);
+      const warning = phase === 'run' && t > 6;
       const caught = deathAt?.cause === 'line' ? clamp(1.4 - (now - deathAt.at) / 700, 0, 1) : 0;
       const danger = Math.max(caught, warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0).toFixed(2);
       if (danger !== dangerShown) {
@@ -821,7 +816,7 @@ export default {
         dangerEl.classList.toggle('is-on', danger !== '0.00');
       }
       pace(now, dt);
-      if (deathAt && deathAt.cause !== 'hawk' && !deathAt.struck && now >= deathAt.impactAt) {
+      if (deathAt && !deathAt.struck && now >= deathAt.impactAt) {
         deathAt.struck = true;
         strike(deathAt.cause, now);
       }
@@ -841,7 +836,7 @@ export default {
         lastTouchdown = { at: touchdownAt, row, x, platform };
       }
       scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: player.lift, squash, touchdown: phase === 'run' ? lastTouchdown : null,
-        facing: chick.face, death: deathAt, banked: cashedAt, score: scoreMode, phase, line, art, trainWarning });
+        facing: chick.face, death: deathAt, banked: cashedAt, score: true, target: goalRow, phase, line, art, trainWarning });
       if (phase === 'countdown') scoreLabel();
       drawParticles(Math.min(.05, dt));
     }
@@ -860,7 +855,7 @@ export default {
     // A run left open by a reload can't be resumed: settle it.
     const left = store.takeRound('rooster');
     if (left) {
-      engine.roosterEnd([], 0, false).then((r) => {
+      engine.roosterEnd([], 0).then((r) => {
         store.sync(r);
         store.refresh();
         if (r?.ok) toast('Your last run ended when you left the road.', { iconName: 'info' });
@@ -869,10 +864,11 @@ export default {
     // For automated play-tests (everything here is already on screen).
     modePicker.addEventListener('change', () => {
       if (modePicker.disabled) return;
-      scoreMode = modePicker.querySelector(':checked').value === 'score';
+      free = modePicker.querySelector(':checked').value === 'score';
+      goalRow = null;
       phase = 'idle';
       resetRun();
-      center(`<b>Road Rooster</b><small>${scoreMode ? 'Cross lanes and bank your points' : 'Set your bet and start a run'}</small>`, 'intro');
+      center(`<b>Road Rooster</b><small>${free ? 'Cross lanes and bank your points' : 'Pick a bet and a row to reach'}</small>`, 'intro');
       renderControls();
       renderHud();
     });

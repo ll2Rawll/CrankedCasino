@@ -7,7 +7,7 @@
 //
 // Calls run one at a time, in order, so balance updates always arrive in sequence.
 
-import { CONFIG } from './config.js';
+import { CONFIG } from './config.js?v=714c8b12054c';
 
 const url = String(CONFIG.supabaseUrl || '').trim().replace(/\/+$/, '');
 const key = String(CONFIG.supabaseKey || '').trim();
@@ -37,7 +37,7 @@ const emit = (type, data) => listeners.forEach((fn) => fn(type, data));
 let localApi = null;
 async function rpc(fn, args) {
   if (MODE === 'device') {
-    localApi ||= await import('./engine-local.js');
+    localApi ||= await import('./engine-local.js?v=714c8b12054c');
     return localApi.call(fn, args);
   }
   const headers = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };
@@ -147,8 +147,10 @@ export const engine = {
   crashPoll: () => call('cc_crash_poll'),
   bjDeal: (bet) => call('cc_bj_deal', { p_bet: bet }),
   bjAct: (action) => call('cc_bj_act', { p_action: action }),
-  roosterStart: (bet) => call('cc_rooster_start', { p_bet: bet }),
-  roosterEnd: (moves, endMs, cashout) => call('cc_rooster_end', { p_moves: moves, p_end_ms: Math.round(endMs), p_cashout: !!cashout }),
+  roosterStart: (bet, target) => call('cc_rooster_start', { p_bet: bet, p_target: target }),
+  roosterEnd: (moves, endMs) => call('cc_rooster_end', { p_moves: moves, p_end_ms: Math.round(endMs) }),
+  flightStart: (bet, target) => call('cc_flight_start', { p_bet: bet, p_target: target }),
+  flightEnd: (start, flaps, frames) => call('cc_flight_end', { p_start: start, p_flaps: flaps, p_frames: frames }),
 };
 
 /** Friendly text for the error codes the server sends back. */

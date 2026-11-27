@@ -1,10 +1,11 @@
 // node tools/test-rooster-course.mjs
 // Checks the score run's course: each seed always lays out the same road, neighbouring
 // rows are independent, grass never walls the road off, every river can be crossed, and
-// a pilot tapping at most 8 times a second crosses 40 random courses to row 300.
+// a pilot tapping at most 8 times a second crosses 40 random courses to row 300. Bet runs
+// are settled by replaying them; the replay agrees with the game.
 import assert from 'node:assert/strict';
 import { RR } from '../js/math.js';
-import { scoreLane, scoreRand, platformCenter, onPlatform } from '../js/games/rooster-course.js';
+import { scoreLane, scoreRand, platformCenter, onPlatform, scoreReplay } from '../js/games/rooster-course.js';
 import { pilot } from './rooster-pilot.mjs';
 
 const ROWS = 400;
@@ -103,6 +104,38 @@ for (const seed of seeds.slice(0, 40)) {
   assert(!result.stuck, `seed ${seed}: no way past row ${result.stuck?.row}`);
 }
 
+// Bet runs are settled by scoreReplay (the server runs the same steps in SQL). Every run the
+// pilot survives replays as reaching its row, under the game's own strict checks and under
+// the server's kinder tolerances; a blind dash dies, and the kinder replay never fails a
+// run the strict one passes.
+let replays = 0;
+for (const seed of seeds.slice(0, 30)) {
+  const moves = [];
+  const run = pilot(seed).run(50, { onMove: (mv) => moves.push([Math.round(mv.s.tl * 1000), mv.m]) });
+  if (run.stuck) continue;
+  const end = moves.at(-1)[0];
+  for (const tol of [{ hb: RR.HB_CLIENT, line: 0, edge: 0 }, undefined]) {
+    const r = scoreReplay(seed, moves, end, 50, tol);
+    assert(r.alive && r.reached && r.score === 50, `seed ${seed}: the pilot's run replays as reaching row 50 ${JSON.stringify(r)}`);
+  }
+  // Hopping on after reaching the target changes nothing: the replay stops there.
+  assert(scoreReplay(seed, [...moves, [end + 50, 0], [end + 100, 0]], end + 100, 50).reached);
+  // The same run aimed further does not count as reaching it.
+  assert(!scoreReplay(seed, moves, end, 100).reached);
+  replays++;
+}
+let dashes = 0;
+for (const seed of seeds.slice(0, 200)) {
+  const blind = Array.from({ length: 40 }, (_, k) => [k * 150 + 50, 0]);
+  const strict = scoreReplay(seed, blind, 40 * 150 + 1000, 30, { hb: RR.HB_CLIENT, line: 0, edge: 0 });
+  const kind = scoreReplay(seed, blind, 40 * 150 + 1000, 30);
+  if (strict.alive) assert(kind.alive, 'the kinder replay never fails a run the game passed');
+  if (!strict.alive) dashes++;
+}
+assert(dashes > 150, `most blind dashes die (${dashes} of 200)`);
+assert.equal(scoreReplay(seeds[0], [], 60000, 10).cause, 'line', 'waiting at the curb, the red line catches up');
+
 console.log(`course: ${seeds.length} seeds × ${ROWS} rows deterministic; grass ${(share('safe') * 100).toFixed(1)}%, ` +
   `trains ${(share('train') * 100).toFixed(1)}%, neighbours share a direction ${((sameWay / pairs) * 100).toFixed(1)}%; ` +
-  `no tree walls; ${logChecks} log tiles reachable; 40 courses crossed to row 300 (${quick} needed a quicker tapper)`);
+  `no tree walls; ${logChecks} log tiles reachable; 40 courses crossed to row 300 (${quick} needed a quicker tapper); ` +
+  `${replays} pilot runs replay as reaching row 50; ${dashes} of 200 blind dashes die`);

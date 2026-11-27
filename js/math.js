@@ -175,52 +175,33 @@ export const parseCard = (s) => ({ r: s.slice(0, -1), s: SUIT_OF[s.slice(-1)] ||
 export const cardText = (c) => c.r + { spade: 'S', heart: 'H', diamond: 'D', club: 'C' }[c.s];
 
 // ------------------------------------------------------------------ road rooster (skill game)
-// Hop across a highway one lane at a time, dodging cars, buses and trains. The server
-// hands out a seed, the same seed lays out the traffic here and in supabase/schema.sql,
-// and the server replays your moves before it pays. Everything below must match the
-// SQL step for step (same numbers, same order of operations), so don't "tidy" it.
-export const RR = { COLS: 7, START_COL: 3, FINISH: 75, HB_CLIENT: 0.3, HB_SERVER: 0.27, HAWK_CLIENT: 1, HAWK_SERVER: 1.1 };
-const M31 = 2147483647;
+// The course itself lives in js/games/rooster-course.js. These pieces are shared with it and
+// mirrored in supabase/schema.sql step for step (same numbers, same order of operations),
+// so the server's replay agrees with the game. Don't "tidy" them.
+export const RR = { COLS: 7, START_COL: 3, HB_CLIENT: 0.3, HB_SERVER: 0.27 };
 
-/** Deterministic random number in [0, 1) for (seed, row, slot). */
-export function rrRand(seed, row, slot) {
-  let x = (seed * 31 + row * 7919 + slot * 104729 + 12345) % M31;
-  if (x <= 0) x += M31 - 1;
-  for (let i = 0; i < 3; i++) x = (x * 48271) % M31;
-  return x / M31;
-}
+// ---------------------------------------------------------------- skill-game courses
+// One seeded hash lays out Road Rooster's score course and Night Flight's gates. The
+// server's cc.hash01 repeats these exact 32-bit steps, so both sides build the same course.
+const mix32 = (x) => {
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x7feb352d);
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x846ca68b);
+  return x ^ (x >>> 16);
+};
+/** Uniform in [0, 1) for (seed, a, b). Every input bit reaches every output bit. */
+export const hash01 = (seed, a, b) =>
+  (mix32(mix32(mix32(seed ^ 0x2c1b3c6d) ^ a ^ 0x297a2d39) ^ b ^ 0x1d8e4e27) >>> 0) / 4294967296;
 
-/** What's on row r: start, finish, safe (sidewalk with obstacles), road, bus or train. */
-export function rrLane(seed, r) {
-  if (r <= 0) return { kind: 'start', blocked: [] };
-  if (r >= RR.FINISH) return { kind: 'finish', blocked: [] };
-  const R = (slot) => rrRand(seed, r, slot);
-  const f = Math.min(1, r / 60);
-  const q = R(0);
-  const kind = r <= 2 ? 'road' : q < 0.2 ? 'safe' : r >= 6 && q < 0.28 ? 'train' : q < 0.45 ? 'bus' : 'road';
-  const dir = R(1) < 0.5 ? 1 : -1;
-  if (kind === 'safe') {
-    const blocked = [];
-    for (let c = 0; c < RR.COLS; c++) if (blocked.length < 3 && R(10 + c) < 0.22) blocked.push(c);
-    return { kind, dir, blocked };
-  }
-  let len, v, P;
-  if (kind === 'train') {
-    len = 14;
-    v = 16 + 6 * R(3);
-    P = v * (6 + 5 * R(4));
-  } else if (kind === 'bus') {
-    len = 2.6 + 0.6 * R(2);
-    v = (1.1 + 1.2 * R(3)) * (1 + 0.7 * f);
-    P = len + (3.6 - 1.0 * f) + 3.0 * R(4);
-  } else {
-    len = 1.0 + 0.35 * R(2);
-    v = (1.5 + 2.0 * R(3)) * (1 + 0.9 * f);
-    P = len + (3.2 - 1.0 * f) + 2.6 * R(4);
-  }
-  const phase = R(5) * P;
-  return { kind, dir, len, v, P, phase, blocked: [] };
-}
+// Bet targets: [goal, multiplier]. Reach the goal before you're caught to win bet × multiplier.
+// Calibrated with simulated players (a planner with human timing error): a good player
+// about breaks even, an average one loses slowly, and real skill wins. Rooster at 10/25/50/100
+// rows: good 83/52/17/2%, average 72/34/5/0%. Flight at 5/10/25/50 gates: good 62/38/8/1%,
+// average 55/28/4/0%.
+export const RR_TARGETS = [[10, 1.2], [25, 2.2], [50, 6], [100, 30]]; // Road Rooster rows
+export const NF_TARGETS = [[5, 1.5], [10, 2.5], [25, 8], [50, 30]]; // Night Flight gates
+export const targetMult = (table, goal) => table.find(([g]) => g === goal)?.[1] ?? 0;
 
 /** Front of every vehicle on lane L at time t (seconds): phase + dir·v·t + n·P, in column units. */
 export const rrFront = (L, t, n) => L.phase + L.dir * L.v * t + n * L.P;
@@ -243,65 +224,4 @@ export function rrHit(L, c, t0, t1, hb) {
     if (u0 + L.v * dt >= L.P) return t0 + (L.P - u0) / L.v;
   } else if (u0 - L.v * dt < Lw) return t0 + (u0 - Lw) / L.v;
   return -1;
-}
-
-/** The hawk line creeps up the road: rows covered after t seconds (4 s head start). */
-export const rrHawk = (t) => (t <= 4 ? 0 : 0.4 * (t - 4) + 0.004 * (t - 4) * (t - 4));
-/** When the hawk line passes row r + margin. */
-export const rrHawkTime = (r, margin) => 4 + (-0.4 + Math.sqrt(0.16 + 0.016 * (r + margin))) / 0.008;
-
-/**
- * Replay a run: moves = [[ms, move], ...] with move 0 forward, 1 back, 2 left, 3 right.
- * Returns { alive, score (furthest row), row, deathMs?, cause?, finished? }.
- */
-export function rrReplay(seed, moves, endMs, hb = RR.HB_SERVER, margin = RR.HAWK_SERVER) {
-  let row = 0;
-  let col = RR.START_COL;
-  let best = 0;
-  let tPrev = 0;
-  const cache = new Map();
-  const lane = (r) => {
-    if (!cache.has(r)) cache.set(r, rrLane(seed, r));
-    return cache.get(r);
-  };
-  const dwell = (t1) => {
-    const L = lane(row);
-    let tHit = rrHit(L, col, tPrev, t1, hb);
-    let cause = L.kind;
-    if (row < RR.FINISH) {
-      const th = Math.max(tPrev, rrHawkTime(row, margin));
-      if (th <= t1 && (tHit < 0 || th < tHit)) {
-        tHit = th;
-        cause = 'hawk';
-      }
-    }
-    return tHit >= 0 ? { alive: false, score: best, row, deathMs: Math.round(tHit * 1000), cause } : null;
-  };
-  for (const [ms, m] of moves) {
-    const t = ms / 1000;
-    const d = dwell(t);
-    if (d) return d;
-    let nr = row;
-    let nc = col;
-    if (m === 0) nr += 1;
-    else if (m === 1) nr -= 1;
-    else if (m === 2) nc -= 1;
-    else if (m === 3) nc += 1;
-    if (nr >= 0 && nr <= RR.FINISH && nc >= 0 && nc < RR.COLS && !lane(nr).blocked.includes(nc)) {
-      row = nr;
-      col = nc;
-      best = Math.max(best, row);
-    }
-    tPrev = t;
-    if (row >= RR.FINISH) return { alive: true, score: best, row, finished: true };
-  }
-  return dwell(endMs / 1000) || { alive: true, score: best, row };
-}
-
-/** Payout multiplier for the furthest row reached: row/10 up to row 10, then ×1.07 a row. */
-export function rrMult(k) {
-  if (k <= 0) return 0;
-  if (k <= 10) return k / 10;
-  const n = BigInt(k - 10);
-  return Number((107n ** n * 100n) / 100n ** n) / 100;
 }

@@ -1,7 +1,7 @@
-import { RR, rrFront } from '../math.js';
-import { courseMaterials } from './rooster-materials.js';
-import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=95c341414c5b';
-import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=8580f318ece8';
+import { RR, rrFront } from '../math.js?v=714c8b12054c';
+import { courseMaterials } from './rooster-materials.js?v=714c8b12054c';
+import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=714c8b12054c';
+import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=714c8b12054c';
 
 // lite: phones. Skip the river reflections and paint flat ground (see rasterLayers).
 export function landscape(ctx, { lite = false } = {}) {
@@ -49,6 +49,7 @@ export function landscape(ctx, { lite = false } = {}) {
     line,
     art,
     trainWarning,
+    target = null,
   }) {
     width = W;
     height = H;
@@ -230,6 +231,12 @@ export function landscape(ctx, { lite = false } = {}) {
       }
     }
     if (score && phase === 'run' && line > 0) strip(minX, line - 1.03, span, 0.075, '#e45c4c');
+    if (target != null && target >= first && target <= last) {
+      // A bet run's finish: a gold band across the target row with a chequered edge.
+      strip(minX, target - .5, span, 1, 'rgba(255, 214, 92, .2)');
+      strip(minX, target - .52, span, .06, '#ffd75e');
+      for (let x = Math.floor(minX); x < maxX; x++) strip(x + (x & 1 ? .5 : 0), target - .46, .5, .05, '#fff3c4');
+    }
     const gone = death?.cause === 'hawk';
     if (!gone) {
       const still = death && !airborne;
@@ -242,7 +249,7 @@ export function landscape(ctx, { lite = false } = {}) {
       // the hen after her support while allowing nearer traffic to cover her.
       add('hen', vc, vr, still ? 4 : hop > 0.13 ? 2 : 0, facing, 1, lift, 1, supportDepth);
     }
-    if (!score && Math.abs(vr - RR.FINISH) < 20) add('egg', RR.START_COL, RR.FINISH);
+    if (target != null && Math.abs(vr - target) < 20) add('egg', RR.START_COL, target + .25);
     if (!score && gone) {
       const seconds = (now - death.at) / 1000;
       const approach = Math.max(0, 1 - seconds / .4);

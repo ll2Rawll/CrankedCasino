@@ -312,13 +312,7 @@
 .rr-danger::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(255, 70, 90, 0.4), transparent); opacity: 0; }
 .rr-danger.is-on::after { animation: rr-throb 0.9s ease-in-out infinite; }
 @keyframes rr-throb { 50% { opacity: 1; } }
-.rr-ladder { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.rr-ladder div { display: grid; gap: 2px; padding: 8px 8px; border-radius: 12px; background: color-mix(in oklab, var(--ink) 40%, var(--panel-2)); border: 1px solid var(--line); text-align: center; transition: border-color 0.3s, background 0.3s; }
-.rr-ladder span { font-size: 10px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
-.rr-ladder b { font-size: 14px; font-variant-numeric: tabular-nums; }
-.rr-ladder div.hit { border-color: #ffc94d; background: color-mix(in oklab, #ffc94d 16%, var(--panel-2)); }
-.rr-ladder div.hit b { color: #ffd979; }
-.rr-ladder div:last-child { grid-column: span 2; }
+.rr-goals button { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rr-pad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .rr-pad button { height: 48px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--line-2); color: var(--text); transition: transform 0.1s, border-color 0.2s; }
 .rr-pad button:active:not(:disabled) { transform: scale(0.92); border-color: var(--rooster); }
@@ -390,6 +384,9 @@ html.rr-playing, html.rr-playing body { overflow: hidden; overscroll-behavior: n
 }
 .rr-score-mode .rr-score b { color: white; font: 800 clamp(28px, 8vmin, 52px)/1 var(--font-display); text-shadow: 0 2px #132932; }
 .rr-score-mode .rr-score span, .rr-score-mode .rr-mult { display: none; }
+/* A bet run: rows over target on the plaque, the prize underneath. */
+.rr-bet-mode .rr-hud { flex-direction: column; align-items: center; gap: 8px; }
+.rr-bet-mode.rr-live .rr-mult { display: block; font-size: 15px; color: #ffe39a; border-color: #ffd75e88; background: #1d2f38d9; }
 .rr-score-mode .rr-fab.is-cash {
   width: 104px; min-height: 72px; height: auto; white-space: normal; text-align: center; line-height: 1.1; padding: 8px;
   flex-direction: column; gap: 2px; font-size: 14px; color: white; background: #253d49; border: 2px solid #f5e7ce; border-radius: 18px;

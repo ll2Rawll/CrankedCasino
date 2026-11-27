@@ -118,6 +118,25 @@ html.flight-open, html.flight-open body { overflow: hidden; overscroll-behavior:
 .nf-flash { position: absolute; inset: 0; background: #fffdf4; opacity: 0; }
 .nf-flash.on { animation: nf-flash .2s ease-out; }
 @keyframes nf-flash { 0% { opacity: .92; } 100% { opacity: 0; } }
+.nf-flash.is-gold { background: #ffd75e; }
+
+/* Betting on the title card: the casino's own bet box and target picker, on the night sky. */
+.nf-bet { pointer-events: auto; display: grid; gap: 12px; width: min(100%, 340px); margin: 0 0 1.25rem; }
+.nf-bet[hidden], .nf-bet [hidden] { display: none; }
+.nf-bet .seg { background: #0d1326d9; border-color: #e9dcc04d; }
+.nf-bet .seg button { color: #f4e4ca; height: 38px; font-size: 13.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nf-bet .seg button[aria-pressed="true"] { background: var(--button); color: var(--ink-flight); box-shadow: 0 3px 0 #72494c; }
+.nf-bet .field-label { color: #f4e4ca; }
+.nf-bet .input-group { background: #0d1326e6; border-color: #e9dcc066; }
+.is-betting .nf-note { margin-bottom: .9rem; }
+.nf-score .nf-goal { display: block; margin-top: 6px; font: 800 .95rem var(--font-ui); color: #ffe3a6; text-shadow: 0 2px 0 #241a30; white-space: nowrap; }
+.nf-score .nf-goal[hidden] { display: none; }
+.nf-result { margin: 0; font: 850 clamp(1.9rem, 5.5vh, 2.7rem)/1 var(--font-display); color: #fff4d8; text-align: center;
+  animation: nf-rise .55s .2s cubic-bezier(.2,1.2,.4,1) both; }
+.nf-result small { display: block; margin-top: 6px; font: 750 .92rem var(--font-ui); color: #f4e4ca; }
+.nf-result.is-win { color: #ffd75e; text-shadow: 0 3px 0 #3a2414; }
+.nf-result.is-loss { color: #ff9a8a; text-shadow: 0 3px 0 #2a1d33; }
+.nf-board-actions button.nf-pill { cursor: pointer; font: inherit; font-weight: 750; }
 
 /* The scoreboard rises once the bird has come to rest on the quay. */
 .nf-board { position: absolute; left: var(--col-left, 0); width: var(--col-w, 100%); top: 0; bottom: 0; display: flex; flex-direction: column;
@@ -168,6 +187,8 @@ html.flight-open, html.flight-open body { overflow: hidden; overscroll-behavior:
   .nf h1 { font-size: clamp(2.8rem,15vh,5.5rem); }
   .nf-note { margin: .65rem 0; max-width: 40ch; }
   .nf-record, .nf-keys { display: none; }
+  .nf-bet { gap: 8px; margin-bottom: .7rem; }
+  .nf-bet .field-label { display: none; }
   .nf-board { gap: 10px; }
   .nf-card { padding: 10px 16px; }
 }

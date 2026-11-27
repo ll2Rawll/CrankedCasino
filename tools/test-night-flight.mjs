@@ -113,12 +113,67 @@ try {
   await page.reload();
   await page.locator('.nf[data-phase="title"]').waitFor();
   assert.equal(Number(await page.locator('.nf-record b').textContent()), best);
+
+  // Bet flights: make an account on this device, bet on clearing 5 gates, fly them.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const tag = await page.evaluate(() => new URL(document.querySelector('script[src*="main.js"]').src).search);
+  await page.evaluate(async (tag) => {
+    const { engine } = await import(`/js/engine.js${tag}`);
+    const r = await engine.signup(`flyer${Math.floor(Math.random() * 1e6)}`, 'correct horse');
+    if (!r.ok) throw new Error(r.error);
+  }, tag);
+  await page.reload();
+  await page.locator('.nf[data-phase="title"]').waitFor();
+  const balance = () => page.evaluate(async (tag) => (await import(`/js/store.js${tag}`)).store.balance, tag);
+  await page.getByRole('button', { name: 'Bet flight' }).tap();
+  await page.getByRole('button', { name: /^5 · 1\.5×/ }).tap();
+  assert.equal(await page.getByRole('button', { name: /^5 · 1\.5×/ }).getAttribute('aria-pressed'), 'true');
+  assert.match(await page.locator('.nf-note').textContent(), /Clear 5 gates to win 15\.00/);
+  const b0 = await balance();
+  await page.locator('[data-start]').tap();
+  await page.clock.runFor(100);
+  assert.equal(await phase(), 'ready');
+  assert.equal(await balance(), b0 - 10, 'the bet leaves the balance');
+  assert.equal((await state()).goal, 5);
+  await tap();
+  s = await state();
+  for (let i = 0; i < 4000 && s.phase === 'flying'; i++) {
+    const ahead = s.gates.filter((g) => g.x + 52 > 57);
+    const g = ahead[0];
+    const lo = g ? g.gapTop + 2 : 120;
+    const hi = g ? g.gapTop + 100 - 18 - 2 : 300;
+    let target = ahead[1] ? ahead[1].gapTop + 61 : hi - 10;
+    target = Math.max(lo + 56, Math.min(hi - 4, target));
+    const next = s.y + s.vy + 1;
+    if (next > target && (next - 45 >= lo || next > hi - 2)) await tap();
+    if (s.score === 3) assert.match(await page.locator('.nf-goal').textContent(), /of 5 · win 15\.00/);
+    await page.clock.runFor(34);
+    s = await state();
+  }
+  assert.equal(s.phase, 'won', 'the fifth gate ends the flight at once');
+  assert.equal(s.score, 5);
+  await page.clock.runFor(1500);
+  assert.equal(await phase(), 'over');
+  assert.match(await page.locator('.nf-board h2').textContent(), /Cleared/);
+  assert.match(await page.locator('.nf-result').textContent(), /\+15\.00/);
+  assert.equal(await balance(), b0 + 5, 'clearing 5 gates pays 1.5×');
+  // Bet again on the same terms and fall straight into the harbor.
+  await page.getByRole('button', { name: /Bet again/ }).tap({ force: true });
+  await page.clock.runFor(100);
+  await tap();
+  await page.clock.runFor(4000);
+  assert.equal(await phase(), 'over');
+  assert.match(await page.locator('.nf-result').textContent(), /Bet lost/);
+  assert.equal(await balance(), b0 - 5, 'a crash before the target loses the bet');
+  await page.getByRole('button', { name: 'Change bet' }).tap({ force: true });
+  assert.equal(await phase(), 'title');
+
   await page.getByRole('link', { name: 'Lobby', exact: true }).first().tap({ force: true });
   await page.clock.runFor(900);
   await page.getByRole('link', { name: 'Play Night Flight' }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('html.flight-open').count(), 0);
   assert.deepEqual(errors, []);
-  console.log(engine.name(), 'passed: get ready bob, take-off arc, tilt, pause, three gates, crash and board, retry, focus pause, keyboard, window, best score, lobby.');
+  console.log(engine.name(), 'passed: get ready bob, take-off arc, tilt, pause, three gates, crash and board, retry, focus pause, keyboard, window, best score, a bet flight paid at 5 gates, a lost bet, lobby.');
 } finally {
   await browser.close();
 }

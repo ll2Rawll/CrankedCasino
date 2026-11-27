@@ -104,6 +104,16 @@ create table if not exists cc.rooster_runs (
   seed bigint not null,
   started_at timestamptz not null default clock_timestamp()
 );
+-- Bet runs aim for a row (10, 25, 50 or 100).
+alter table cc.rooster_runs add column if not exists target integer not null default 10;
+
+create table if not exists cc.flight_runs (
+  player_id uuid primary key references cc.players (id) on delete cascade,
+  bet numeric(20, 2) not null,
+  target integer not null,
+  seed bigint not null,
+  started_at timestamptz not null default clock_timestamp()
+);
 
 create table if not exists cc.bj_shoes (
   player_id uuid primary key references cc.players (id) on delete cascade,
@@ -141,6 +151,7 @@ alter table cc.mines_rounds enable row level security;
 alter table cc.crash_rounds enable row level security;
 alter table cc.bj_shoes enable row level security;
 alter table cc.rooster_runs enable row level security;
+alter table cc.flight_runs enable row level security;
 alter table cc.bj_rounds enable row level security;
 
 -- ───────────────────────────── helpers ──────────────────────────────────────
@@ -613,6 +624,7 @@ declare
   v_mines jsonb;
   v_bj jsonb;
   v_rooster jsonb;
+  v_flight jsonb;
   br cc.bj_rounds;
 begin
   if pid is null then return cc.err('auth'); end if;
@@ -621,7 +633,11 @@ begin
   if exists (select 1 from cc.rooster_runs where player_id = pid and started_at < now() - interval '10 minutes') then
     perform cc.rr_settle(pid, false, 0, 'abandoned');
   end if;
-  select jsonb_build_object('bet', bet, 'started', floor(extract(epoch from started_at) * 1000)) into v_rooster from cc.rooster_runs where player_id = pid;
+  if exists (select 1 from cc.flight_runs where player_id = pid and started_at < now() - interval '10 minutes') then
+    perform cc.fl_settle(pid, false, 0, 'abandoned');
+  end if;
+  select jsonb_build_object('bet', bet, 'target', target, 'started', floor(extract(epoch from started_at) * 1000)) into v_rooster from cc.rooster_runs where player_id = pid;
+  select jsonb_build_object('bet', bet, 'target', target, 'started', floor(extract(epoch from started_at) * 1000)) into v_flight from cc.flight_runs where player_id = pid;
   select * into p from cc.players where id = pid;
   select jsonb_build_object('bet', bet, 'mines', mines, 'revealed', to_jsonb(revealed)) into v_mines from cc.mines_rounds where player_id = pid;
   select * into br from cc.bj_rounds where player_id = pid;
@@ -642,7 +658,8 @@ begin
       'mines', v_mines,
       'crash', case when v_crash ->> 'state' in ('running', 'waiting') then v_crash else null end,
       'blackjack', v_bj,
-      'rooster', v_rooster));
+      'rooster', v_rooster,
+      'flight', v_flight));
 end $$;
 
 create or replace function public.cc_redeem(p_token text, p_code text) returns jsonb
@@ -1085,56 +1102,57 @@ begin
   return cc.bj_view(r, ev, jsonb_build_object('balance', p.balance, 'seq', p.seq));
 end $$;
 
--- ── Road Rooster: a skill game. Hop across a highway dodging cars, buses and trains.
--- The server picks a seed; the seed lays out every lane; the browser sends its moves
--- and the server replays them before paying. These functions mirror js/math.js
--- operation for operation in double precision, so both sides agree exactly.
+-- ── Skill games: Road Rooster and Night Flight. The server picks a seed; the seed lays
+-- out the course; the browser sends its moves (or flaps) and the server replays them
+-- before paying. These functions mirror js/math.js, js/games/rooster-course.js and
+-- js/games/flight-course.js operation for operation, so both sides agree exactly.
+
+-- js/math.js hash01: three rounds of a 32-bit integer mix. Values are unsigned 32-bit.
+create or replace function cc.u32_mul(a bigint, b bigint) returns bigint language sql immutable set search_path = '' as $$
+  select ((a * (b & 65535)) + (((a * (b >> 16)) & 65535) << 16)) & 4294967295
+$$;
+
+create or replace function cc.mix32(x bigint) returns bigint language plpgsql immutable set search_path = '' as $$
+begin
+  x := x & 4294967295;
+  x := x # (x >> 16);
+  x := cc.u32_mul(x, 2146121005);
+  x := x # (x >> 15);
+  x := cc.u32_mul(x, 2221713035);
+  return x # (x >> 16);
+end $$;
+
+create or replace function cc.hash01(seed bigint, a bigint, b bigint) returns float8 language sql immutable set search_path = '' as $$
+  select cc.mix32(cc.mix32(cc.mix32((seed & 4294967295) # 739982445) # (a & 4294967295) # 695872825) # (b & 4294967295) # 495865383)::float8
+    / 4294967296::float8
+$$;
+
+-- Bet targets (js/math.js RR_TARGETS and NF_TARGETS): goal → multiplier, 0 for anything else.
+create or replace function cc.rr_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
+  select (case goal when 10 then 1.2 when 25 then 2.2 when 50 then 6 when 100 then 30 else 0 end)::numeric
+$$;
+create or replace function cc.nf_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
+  select (case goal when 5 then 1.5 when 10 then 2.5 when 25 then 8 when 50 then 30 else 0 end)::numeric
+$$;
+
+-- ── Road Rooster. Traffic lanes, and the collision maths for a rooster in column c.
 do $$ begin
   create type cc.rr_lane as (kind text, dir integer, len float8, v float8, p float8, phase float8, blocked integer[]);
 exception when duplicate_object then null;
 end $$;
-
-create or replace function cc.rr_rand(seed bigint, r integer, slot integer) returns float8 language plpgsql immutable set search_path = '' as $$
-declare x bigint := (seed * 31 + r::bigint * 7919 + slot::bigint * 104729 + 12345) % 2147483647;
-begin
-  if x <= 0 then x := x + 2147483646; end if;
-  for i in 1..3 loop x := (x * 48271) % 2147483647; end loop;
-  return x::float8 / 2147483647::float8;
+do $$ begin
+  create type cc.rs_lane as (kind text, dir integer, len float8, v float8, p float8, phase float8, blocked integer[],
+    speed float8, pads boolean, period float8, width float8, off float8);
+exception when duplicate_object then null;
 end $$;
 
-create or replace function cc.rr_lane(seed bigint, r integer) returns cc.rr_lane language plpgsql immutable set search_path = '' as $$
-declare L cc.rr_lane; f float8; q float8; b integer[] := '{}';
-begin
-  L.blocked := '{}';
-  if r <= 0 then L.kind := 'start'; return L; end if;
-  if r >= 75 then L.kind := 'finish'; return L; end if;
-  f := least(1::float8, r::float8 / 60::float8);
-  q := cc.rr_rand(seed, r, 0);
-  L.kind := case when r <= 2 then 'road' when q < 0.2::float8 then 'safe' when r >= 6 and q < 0.28::float8 then 'train' when q < 0.45::float8 then 'bus' else 'road' end;
-  L.dir := case when cc.rr_rand(seed, r, 1) < 0.5::float8 then 1 else -1 end;
-  if L.kind = 'safe' then
-    for c in 0..6 loop
-      if coalesce(array_length(b, 1), 0) < 3 and cc.rr_rand(seed, r, 10 + c) < 0.22::float8 then b := b || c; end if;
-    end loop;
-    L.blocked := b;
-    return L;
-  end if;
-  if L.kind = 'train' then
-    L.len := 14::float8;
-    L.v := 16::float8 + 6::float8 * cc.rr_rand(seed, r, 3);
-    L.p := L.v * (6::float8 + 5::float8 * cc.rr_rand(seed, r, 4));
-  elsif L.kind = 'bus' then
-    L.len := 2.6::float8 + 0.6::float8 * cc.rr_rand(seed, r, 2);
-    L.v := (1.1::float8 + 1.2::float8 * cc.rr_rand(seed, r, 3)) * (1::float8 + 0.7::float8 * f);
-    L.p := L.len + (3.6::float8 - 1.0::float8 * f) + 3.0::float8 * cc.rr_rand(seed, r, 4);
-  else
-    L.len := 1.0::float8 + 0.35::float8 * cc.rr_rand(seed, r, 2);
-    L.v := (1.5::float8 + 2.0::float8 * cc.rr_rand(seed, r, 3)) * (1::float8 + 0.9::float8 * f);
-    L.p := L.len + (3.2::float8 - 1.0::float8 * f) + 2.6::float8 * cc.rr_rand(seed, r, 4);
-  end if;
-  L.phase := cc.rr_rand(seed, r, 5) * L.p;
-  return L;
-end $$;
+-- The old highway chip run is gone: bet runs play the score course below.
+drop function if exists public.cc_rooster_start(text, numeric);
+drop function if exists public.cc_rooster_end(text, jsonb, integer, boolean);
+drop function if exists cc.rr_replay(bigint, jsonb, bigint, float8, float8);
+drop function if exists cc.rr_mult(integer);
+drop function if exists cc.rr_lane(bigint, integer);
+drop function if exists cc.rr_rand(bigint, integer, integer);
 
 -- First time in [t0, t1] a vehicle touches a rooster in column c (half-width hb), or -1.
 create or replace function cc.rr_hit(L cc.rr_lane, c integer, t0 float8, t1 float8, hb float8) returns float8 language plpgsql immutable set search_path = '' as $$
@@ -1155,79 +1173,160 @@ begin
   return -1;
 end $$;
 
--- Replay [[ms, move], ...] (0 forward, 1 back, 2 left, 3 right) up to end_ms.
-create or replace function cc.rr_replay(seed bigint, moves jsonb, end_ms bigint, hb float8, margin float8) returns jsonb
+-- The score course (rooster-course.js): every 16 rows is a district with one river
+-- (logs, lily pads, logs) in rows 5 to 10; grass never comes three rows in a row.
+create or replace function cc.rs_river_row(seed bigint, r integer) returns integer language sql immutable set search_path = '' as $$
+  select case when r % 16 between s and s + 2 then r % 16 - s else -1 end
+  from (select 5 + floor(cc.hash01(seed, r / 16, 81) * 4::float8)::integer as s) x
+$$;
+
+create or replace function cc.rs_level(r integer) returns integer language sql immutable set search_path = '' as $$
+  select case when r < 16 then r else 12 + r % 16 + least(40, (r / 16) * 3) end
+$$;
+
+create or replace function cc.rs_grass_draw(seed bigint, r integer) returns boolean language plpgsql immutable set search_path = '' as $$
+begin
+  if r <= 0 or cc.rs_river_row(seed, r) >= 0 or cc.rs_level(r) <= 2 then return false; end if;
+  return cc.hash01(seed, r, 0) < 0.2::float8;
+end $$;
+
+create or replace function cc.rs_lane(seed bigint, r integer) returns cc.rs_lane language plpgsql immutable set search_path = '' as $$
+declare L cc.rs_lane; lvl integer; water integer; f float8; q float8; b integer[] := '{}';
+begin
+  L.blocked := '{}';
+  if r <= 0 then L.kind := 'start'; return L; end if;
+  water := cc.rs_river_row(seed, r);
+  if water >= 0 then
+    L.kind := 'river';
+    L.pads := water = 1;
+    if L.pads then
+      L.speed := 0; L.period := 2; L.width := 0.88;
+      L.off := case when cc.hash01(seed, r, 4) < 0.5::float8 then 0 else 1 end;
+    else
+      L.speed := (case when cc.hash01(seed, r, 2) < 0.5::float8 then -1 else 1 end)::float8 * (0.6::float8 + cc.hash01(seed, r, 3) * 0.6::float8);
+      L.period := 4; L.width := 2.5;
+      L.off := cc.hash01(seed, r, 4) * 4::float8;
+    end if;
+    return L;
+  end if;
+  lvl := cc.rs_level(r);
+  f := least(1::float8, lvl::float8 / 60::float8);
+  q := case when cc.rs_grass_draw(seed, r - 1) and cc.rs_grass_draw(seed, r - 2)
+    then 0.2::float8 + 0.8::float8 * cc.hash01(seed, r, 6) else cc.hash01(seed, r, 0) end;
+  L.kind := case when lvl <= 2 then 'road' when q < 0.2::float8 then 'safe' when lvl >= 6 and q < 0.28::float8 then 'train' when q < 0.45::float8 then 'bus' else 'road' end;
+  L.dir := case when cc.hash01(seed, r, 1) < 0.5::float8 then 1 else -1 end;
+  if L.kind = 'safe' then
+    for c in 0..6 loop
+      if coalesce(array_length(b, 1), 0) < 3 and cc.hash01(seed, r, 10 + c) < 0.22::float8 then b := b || c; end if;
+    end loop;
+    L.blocked := b;
+    return L;
+  end if;
+  if L.kind = 'train' then
+    L.len := 14::float8;
+    L.v := 16::float8 + 6::float8 * cc.hash01(seed, r, 3);
+    L.p := L.v * (6::float8 + 5::float8 * cc.hash01(seed, r, 4));
+  elsif L.kind = 'bus' then
+    L.len := 2.6::float8 + 0.6::float8 * cc.hash01(seed, r, 2);
+    L.v := (1.1::float8 + 1.2::float8 * cc.hash01(seed, r, 3)) * (1::float8 + 0.7::float8 * f);
+    L.p := L.len + (3.6::float8 - 1.0::float8 * f) + 3.0::float8 * cc.hash01(seed, r, 4);
+  else
+    L.len := 1.0::float8 + 0.35::float8 * cc.hash01(seed, r, 2);
+    L.v := (1.5::float8 + 2.0::float8 * cc.hash01(seed, r, 3)) * (1::float8 + 0.9::float8 * f);
+    L.p := L.len + (3.2::float8 - 1.0::float8 * f) + 2.6::float8 * cc.hash01(seed, r, 4);
+  end if;
+  L.phase := cc.hash01(seed, r, 5) * L.p;
+  return L;
+end $$;
+
+-- Replay a bet run ([[ms, move], ...]: 0 forward, 1 back, 2 left, 3 right) until the
+-- rooster reaches row goal (rooster-course.js scoreReplay). hb, line and edge are the
+-- server's slightly kinder tolerances: rooster half-width, red-line slack, log slack.
+create or replace function cc.rs_replay(seed bigint, moves jsonb, end_ms bigint, goal integer, hb float8, line float8, edge float8) returns jsonb
 language plpgsql immutable set search_path = '' as $$
 declare
-  cur integer := 0; col integer := 3; best integer := 0; tprev float8 := 0; t float8; m integer;
-  L cc.rr_lane; NL cc.rr_lane; thit float8; th float8; cause text; nr integer; nc integer;
+  cur integer := 0; col integer := 3; landed float8 := 0; best integer := 0; tprev float8 := 0; t float8; m integer;
+  L cc.rs_lane; nl cc.rs_lane; at float8; why text; w float8; nr integer; nc integer; f float8;
   n integer := coalesce(jsonb_array_length(moves), 0);
 begin
   for i in 0..n loop
     t := case when i < n then (moves -> i ->> 0)::float8 / 1000::float8 else end_ms::float8 / 1000::float8 end;
-    -- did anything get us while we stood on this tile?
-    L := cc.rr_lane(seed, cur);
-    thit := cc.rr_hit(L, col, tprev, t, hb);
-    cause := L.kind;
-    if cur < 75 then
-      th := greatest(tprev, 4::float8 + (-0.4::float8 + sqrt(0.16::float8 + 0.016::float8 * (cur::float8 + margin))) / 0.008::float8);
-      if th <= t and (thit < 0 or th < thit) then thit := th; cause := 'hawk'; end if;
+    L := cc.rs_lane(seed, cur);
+    at := -1; why := null;
+    -- the red line
+    w := greatest(tprev, 6::float8 + ((cur + 1)::float8 + line) / 0.65::float8);
+    if w <= t then at := w; why := 'line'; end if;
+    if L.kind = 'river' then
+      -- a log carries her; she drowns if it takes her past the edge of the course
+      if L.speed <> 0 then
+        w := greatest(tprev, landed + ((case when L.speed > 0 then 6.5::float8 + edge else -0.5::float8 - edge end) - col::float8) / L.speed);
+        if w >= 0 and w <= t and (at < 0 or w < at) then at := w; why := 'river'; end if;
+      end if;
+    else
+      w := cc.rr_hit((L.kind, L.dir, L.len, L.v, L.p, L.phase, L.blocked)::cc.rr_lane, col, tprev, t, hb);
+      if w >= 0 and w <= t and (at < 0 or w < at) then at := w; why := L.kind; end if;
     end if;
-    if thit >= 0 then
-      return jsonb_build_object('alive', false, 'score', best, 'row', cur, 'death_ms', round(thit * 1000), 'cause', cause);
+    if at >= 0 then
+      return jsonb_build_object('alive', false, 'reached', false, 'score', best, 'row', cur, 'death_ms', floor(at * 1000::float8 + 0.5::float8), 'cause', why);
     end if;
     exit when i = n;
     m := (moves -> i ->> 1)::integer;
-    nr := cur; nc := col;
-    if m = 0 then nr := nr + 1; elsif m = 1 then nr := nr - 1; elsif m = 2 then nc := nc - 1; elsif m = 3 then nc := nc + 1; end if;
-    if nr >= 0 and nr <= 75 and nc >= 0 and nc < 7 then
-      NL := cc.rr_lane(seed, nr);
-      if not (nc = any (NL.blocked)) then cur := nr; col := nc; best := greatest(best, cur); end if;
+    nr := cur;
+    nc := floor(col::float8 + coalesce(L.speed, 0::float8) * (t - landed) + 0.5::float8)::integer;
+    if m = 0 then nr := nr + 1; elsif m = 1 then nr := nr - 1; elsif m = 2 then nc := nc - 1; else nc := nc + 1; end if;
+    if nr >= 0 and nc >= 0 and nc < 7 then
+      nl := cc.rs_lane(seed, nr);
+      if not (nc = any (nl.blocked)) then
+        cur := nr; col := nc; landed := t;
+        if nl.kind = 'river' then
+          f := nl.off + nl.speed * t;
+          if abs(nc::float8 - (f + floor((nc::float8 - f) / nl.period + 0.5::float8) * nl.period)) > nl.width / 2::float8 + edge then
+            return jsonb_build_object('alive', false, 'reached', false, 'score', best, 'row', cur, 'death_ms', floor(t * 1000::float8 + 0.5::float8), 'cause', 'river');
+          end if;
+        end if;
+        best := greatest(best, cur);
+        if best >= goal then return jsonb_build_object('alive', true, 'reached', true, 'score', best, 'row', cur); end if;
+      end if;
     end if;
     tprev := t;
-    if cur >= 75 then return jsonb_build_object('alive', true, 'score', best, 'row', cur, 'finished', true); end if;
   end loop;
-  return jsonb_build_object('alive', true, 'score', best, 'row', cur);
+  return jsonb_build_object('alive', true, 'reached', false, 'score', best, 'row', cur);
 end $$;
-
--- Payout multiplier for the furthest row: row/10 up to row 10, then ×1.07 per row (exact).
-create or replace function cc.rr_mult(k integer) returns numeric language sql immutable set search_path = '' as $$
-  select case when k <= 0 then 0::numeric when k <= 10 then round(k::numeric / 10, 2)
-    else round(div(power(107::numeric, k - 10) * 100, power(100::numeric, k - 10)) / 100, 2) end
-$$;
 
 create or replace function cc.rr_settle(pid uuid, won boolean, score integer, info text) returns jsonb language plpgsql volatile set search_path = '' as $$
 declare r cc.rooster_runs; mult numeric; pay numeric; entry jsonb; p cc.players;
 begin
   select * into r from cc.rooster_runs where player_id = pid for update;
   if not found then return null; end if;
-  mult := case when won then cc.rr_mult(score) else 0 end;
+  mult := case when won then cc.rr_target_mult(r.target) else 0 end;
   pay := round(r.bet * mult, 2);
   entry := cc.record(pid, 'rooster', r.bet, pay, info);
   p := cc.move(pid, pay);
   delete from cc.rooster_runs where player_id = pid;
-  return jsonb_build_object('ok', true, 'mult', mult, 'payout', pay, 'score', score, 'balance', p.balance, 'seq', p.seq, 'entry', entry);
+  return jsonb_build_object('ok', true, 'mult', mult, 'payout', pay, 'score', score, 'target', r.target, 'balance', p.balance, 'seq', p.seq, 'entry', entry);
 end $$;
 
-create or replace function public.cc_rooster_start(p_token text, p_bet numeric) returns jsonb
+-- Start a bet run aiming for row p_target (10, 25, 50 or 100).
+create or replace function public.cc_rooster_start(p_token text, p_bet numeric, p_target integer) returns jsonb
 language plpgsql volatile security definer set search_path = '' as $$
 declare pid uuid := cc.auth(p_token); p cc.players; s bigint;
 begin
   if pid is null then return cc.err('auth'); end if;
   if not cc.valid_bet(p_bet) then return cc.err('bad_bet'); end if;
+  if cc.rr_target_mult(p_target) = 0 then return cc.err('bad_target'); end if;
   select * into p from cc.players where id = pid for update;
   -- An unfinished run is forfeited.
   perform cc.rr_settle(pid, false, 0, 'abandoned');
   select * into p from cc.players where id = pid;
   if p.balance < p_bet then return cc.err('funds'); end if;
   s := 1 + floor(cc.rand() * 2147483645)::bigint;
-  insert into cc.rooster_runs (player_id, bet, seed, started_at) values (pid, p_bet, s, clock_timestamp());
+  insert into cc.rooster_runs (player_id, bet, seed, target, started_at) values (pid, p_bet, s, p_target, clock_timestamp());
   p := cc.move(pid, -p_bet);
-  return jsonb_build_object('ok', true, 'seed', s, 'bet', p_bet, 'balance', p.balance, 'seq', p.seq);
+  return jsonb_build_object('ok', true, 'seed', s, 'bet', p_bet, 'target', p_target, 'balance', p.balance, 'seq', p.seq);
 end $$;
 
--- End a run. p_cashout = true banks the furthest row reached (if the replay agrees you're alive).
-create or replace function public.cc_rooster_end(p_token text, p_moves jsonb, p_end_ms integer, p_cashout boolean) returns jsonb
+-- End a run. It pays only if the replay reaches the target row alive.
+create or replace function public.cc_rooster_end(p_token text, p_moves jsonb, p_end_ms integer) returns jsonb
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   pid uuid := cc.auth(p_token); r cc.rooster_runs; el bigint; prev bigint := 0; mv jsonb; t bigint; m integer; res jsonb; score integer; out jsonb;
@@ -1237,7 +1336,7 @@ begin
   select * into r from cc.rooster_runs where player_id = pid for update;
   if not found then return cc.err('no_round'); end if;
   el := floor(extract(epoch from (clock_timestamp() - r.started_at)) * 1000)::bigint;
-  if p_moves is null or jsonb_typeof(p_moves) <> 'array' or jsonb_array_length(p_moves) > 4000 or p_end_ms is null then
+  if p_moves is null or jsonb_typeof(p_moves) <> 'array' or jsonb_array_length(p_moves) > 6000 or p_end_ms is null then
     return cc.rr_settle(pid, false, 0, 'invalid run') || jsonb_build_object('alive', false, 'cause', 'invalid');
   end if;
   -- Times must run forward and can't be later than the server's own clock (plus slack).
@@ -1256,14 +1355,157 @@ begin
   if p_end_ms < prev or p_end_ms > el + 2000 then
     return cc.rr_settle(pid, false, 0, 'invalid run') || jsonb_build_object('alive', false, 'cause', 'invalid');
   end if;
-  res := cc.rr_replay(r.seed, p_moves, p_end_ms, 0.27::float8, 1.1::float8);
+  res := cc.rs_replay(r.seed, p_moves, p_end_ms, r.target, 0.27::float8, 0.1::float8, 0.05::float8);
   score := (res ->> 'score')::integer;
-  if (res ->> 'alive')::boolean and (p_cashout or (res ->> 'finished') is not null) and score >= 1 then
-    out := cc.rr_settle(pid, true, score, case when (res ->> 'finished') is not null then 'golden egg! row 75' else 'cashed at row ' || score end);
+  if (res ->> 'reached')::boolean then
+    out := cc.rr_settle(pid, true, score, 'reached row ' || r.target);
   else
-    out := cc.rr_settle(pid, false, score, 'row ' || score || ' · ' || case coalesce(res ->> 'cause', '') when 'hawk' then 'caught by the hawk' when 'train' then 'hit by a train' when 'bus' then 'hit by a bus' when 'road' then 'hit by a car' else 'run ended' end);
+    out := cc.rr_settle(pid, false, score, 'row ' || score || ' of ' || r.target || ' · ' || case coalesce(res ->> 'cause', '')
+      when 'line' then 'caught by the red line' when 'river' then 'fell in the river' when 'train' then 'hit by a train'
+      when 'bus' then 'hit by a bus' when 'road' then 'hit by a car' else 'run ended' end);
   end if;
-  return out || jsonb_build_object('alive', (res ->> 'alive')::boolean, 'cause', res ->> 'cause', 'death_ms', res -> 'death_ms', 'finished', (res ->> 'finished') is not null);
+  return out || jsonb_build_object('alive', (res ->> 'alive')::boolean, 'reached', (res ->> 'reached')::boolean, 'cause', res ->> 'cause', 'death_ms', res -> 'death_ms');
+end $$;
+
+-- ── Night Flight. The classic tap-to-flap loop at 30 frames a second (flight-course.js):
+-- a 288 × 512 screen, the quay at 404.48, gates 52 wide with 100-pixel gaps, and the
+-- bird's pixel masks (32 × 24, bit i of a row is column i) for its three wing frames.
+create or replace function cc.fl_replay(seed bigint, start integer, flaps integer[], goal integer, frames integer) returns jsonb
+language plpgsql immutable set search_path = '' as $$
+declare
+  masks constant bigint[] := '{{0,192,984,918512,2035708,4165628,8372216,16777212,268435448,4294967288,2147483632,33554424,4194302,4194288,1048560,261824,64528,768,0,0,0,0,0,0},{0,0,0,917504,2031616,4161536,8355840,16748288,268435452,4294967288,2147483647,33554428,4194303,4194288,1048560,261824,64528,768,0,0,0,0,0,0},{0,0,0,917504,2031616,4161536,8355840,16744448,268419072,4294966272,2147483520,33554424,4194302,4194288,1048560,262080,65488,16320,8160,8160,576,800,256,0}}';
+  wings constant integer[] := '{0,1,2,1}';
+  y float8 := 244 + start; vy integer := -9; flapped boolean := false;
+  wing integer := 0; fr integer := 0; lp integer := 0; score integer := 0; nxt integer := 2;
+  gx integer[]; gtop integer[]; gpass boolean[];
+  fi integer := 1; nflaps integer := coalesce(array_length(flaps, 1), 0);
+  py float8; x0 integer; x1 integer; lo integer; hi integer; bits bigint; gm integer; n integer;
+begin
+  gx := array[488, 632];
+  gtop := array[80 + floor(cc.hash01(seed, 0, 7) * 142::float8)::integer, 80 + floor(cc.hash01(seed, 1, 7) * 142::float8)::integer];
+  gpass := array[false, false];
+  for k in 0..frames - 1 loop
+    -- a flap lands on this frame (above the ceiling it does nothing)
+    if fi <= nflaps and flaps[fi] = k then
+      fi := fi + 1;
+      if y > -48::float8 then vy := -9; flapped := true; end if;
+    end if;
+    -- the quay
+    if y + 18::float8 >= 404.48::float8 - 1::float8 then
+      return jsonb_build_object('reached', false, 'crashed', true, 'score', score, 'frames', k + 1);
+    end if;
+    -- the gates, pixel by pixel: a 52-wide lip beside the gap, a 48-wide pier beyond it
+    n := coalesce(array_length(gx, 1), 0);
+    for j in 1..n loop
+      if gx[j] < 89 and gx[j] + 52 > 57 then
+        for rw in 0..23 loop
+          bits := masks[fr + 1][rw + 1];
+          continue when bits = 0;
+          py := y + rw::float8 + 0.5::float8;
+          continue when py >= gtop[j]::float8 and py < (gtop[j] + 100)::float8;
+          if py >= (gtop[j] - 24)::float8 and py < (gtop[j] + 124)::float8 then x0 := gx[j]; x1 := gx[j] + 52;
+          else x0 := gx[j] + 2; x1 := gx[j] + 50; end if;
+          lo := greatest(0, x0 - 57); hi := least(31, x1 - 58);
+          continue when lo > hi;
+          if (bits & (((1::bigint << (hi + 1)) - 1) - ((1::bigint << lo) - 1))) <> 0 then
+            return jsonb_build_object('reached', false, 'crashed', true, 'score', score, 'frames', k + 1);
+          end if;
+        end loop;
+      end if;
+    end loop;
+    -- a point when the bird's centre (x = 73) reaches a gate's centre
+    for j in 1..n loop
+      gm := gx[j] + 26;
+      if not gpass[j] and gm <= 73 and 73 < gm + 4 then
+        gpass[j] := true;
+        score := score + 1;
+        if score >= goal then return jsonb_build_object('reached', true, 'crashed', false, 'score', score, 'frames', k + 1); end if;
+      end if;
+    end loop;
+    if (lp + 1) % 3 = 0 then wing := (wing + 1) % 4; fr := wings[wing + 1]; end if;
+    lp := (lp + 1) % 30;
+    if vy < 10 and not flapped then vy := vy + 1; end if;
+    flapped := false;
+    y := y + least(vy::float8, 404.48::float8 - y - 18::float8);
+    for j in 1..n loop gx[j] := gx[j] - 4; end loop;
+    if n > 0 and n < 3 and gx[1] > 0 and gx[1] < 5 then
+      gx := gx || 298;
+      gtop := gtop || (80 + floor(cc.hash01(seed, nxt, 7) * 142::float8)::integer);
+      gpass := gpass || false;
+      nxt := nxt + 1;
+    end if;
+    if coalesce(array_length(gx, 1), 0) > 0 and gx[1] < -52 then
+      gx := gx[2:]; gtop := gtop[2:]; gpass := gpass[2:];
+    end if;
+  end loop;
+  return jsonb_build_object('reached', false, 'crashed', false, 'score', score, 'frames', frames);
+end $$;
+
+create or replace function cc.fl_settle(pid uuid, won boolean, score integer, info text) returns jsonb language plpgsql volatile set search_path = '' as $$
+declare r cc.flight_runs; mult numeric; pay numeric; entry jsonb; p cc.players;
+begin
+  select * into r from cc.flight_runs where player_id = pid for update;
+  if not found then return null; end if;
+  mult := case when won then cc.nf_target_mult(r.target) else 0 end;
+  pay := round(r.bet * mult, 2);
+  entry := cc.record(pid, 'flight', r.bet, pay, info);
+  p := cc.move(pid, pay);
+  delete from cc.flight_runs where player_id = pid;
+  return jsonb_build_object('ok', true, 'mult', mult, 'payout', pay, 'score', score, 'target', r.target, 'balance', p.balance, 'seq', p.seq, 'entry', entry);
+end $$;
+
+-- Start a bet flight aiming to clear p_target gates (5, 10, 25 or 50).
+create or replace function public.cc_flight_start(p_token text, p_bet numeric, p_target integer) returns jsonb
+language plpgsql volatile security definer set search_path = '' as $$
+declare pid uuid := cc.auth(p_token); p cc.players; s bigint;
+begin
+  if pid is null then return cc.err('auth'); end if;
+  if not cc.valid_bet(p_bet) then return cc.err('bad_bet'); end if;
+  if cc.nf_target_mult(p_target) = 0 then return cc.err('bad_target'); end if;
+  select * into p from cc.players where id = pid for update;
+  perform cc.fl_settle(pid, false, 0, 'abandoned');
+  select * into p from cc.players where id = pid;
+  if p.balance < p_bet then return cc.err('funds'); end if;
+  s := 1 + floor(cc.rand() * 2147483645)::bigint;
+  insert into cc.flight_runs (player_id, bet, target, seed, started_at) values (pid, p_bet, p_target, s, clock_timestamp());
+  p := cc.move(pid, -p_bet);
+  return jsonb_build_object('ok', true, 'seed', s, 'bet', p_bet, 'target', p_target, 'balance', p.balance, 'seq', p.seq);
+end $$;
+
+-- End a flight: p_start is the bob offset at take-off (-8..8), p_flaps the frames a flap
+-- landed on, p_frames how many frames were flown. Frames can't outrun the server clock.
+create or replace function public.cc_flight_end(p_token text, p_start integer, p_flaps jsonb, p_frames integer) returns jsonb
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  pid uuid := cc.auth(p_token); r cc.flight_runs; el bigint; flaps integer[] := '{}'; v jsonb; f integer; prev integer := -1; res jsonb;
+begin
+  if pid is null then return cc.err('auth'); end if;
+  perform 1 from cc.players where id = pid for update;
+  select * into r from cc.flight_runs where player_id = pid for update;
+  if not found then return cc.err('no_round'); end if;
+  el := floor(extract(epoch from (clock_timestamp() - r.started_at)) * 1000)::bigint;
+  if p_start is null or p_start not between -8 and 8 or p_frames is null or p_frames < 0 or p_frames::numeric > el::numeric * 30 / 1000 + 90
+    or p_flaps is null or jsonb_typeof(p_flaps) <> 'array' or jsonb_array_length(p_flaps) > p_frames + 1 then
+    return cc.fl_settle(pid, false, 0, 'invalid flight') || jsonb_build_object('cause', 'invalid');
+  end if;
+  for v in select value from jsonb_array_elements(p_flaps) loop
+    begin
+      f := (v #>> '{}')::integer;
+    exception when others then
+      return cc.fl_settle(pid, false, 0, 'invalid flight') || jsonb_build_object('cause', 'invalid');
+    end;
+    if jsonb_typeof(v) <> 'number' or f is null or f <= prev or f >= p_frames then
+      return cc.fl_settle(pid, false, 0, 'invalid flight') || jsonb_build_object('cause', 'invalid');
+    end if;
+    flaps := flaps || f;
+    prev := f;
+  end loop;
+  res := cc.fl_replay(r.seed, p_start, flaps, r.target, p_frames);
+  if (res ->> 'reached')::boolean then
+    return cc.fl_settle(pid, true, (res ->> 'score')::integer, 'cleared ' || r.target || ' gates') || jsonb_build_object('reached', true, 'crashed', false);
+  end if;
+  return cc.fl_settle(pid, false, (res ->> 'score')::integer, (res ->> 'score') || ' of ' || r.target || ' gates')
+    || jsonb_build_object('reached', false, 'crashed', (res ->> 'crashed')::boolean);
 end $$;
 
 -- ───────────────────────────── permissions ──────────────────────────────────
@@ -1276,7 +1518,8 @@ begin
     'cc_roulette(text,jsonb)', 'cc_slots(text,numeric)', 'cc_mines_start(text,numeric,integer)', 'cc_mines_reveal(text,integer)',
     'cc_mines_cashout(text)', 'cc_crash_start(text,numeric,numeric,integer)', 'cc_crash_cashout(text,numeric)', 'cc_crash_poll(text)',
     'cc_bj_deal(text,numeric)', 'cc_bj_act(text,text)',
-    'cc_rooster_start(text,numeric)', 'cc_rooster_end(text,jsonb,integer,boolean)']
+    'cc_rooster_start(text,numeric,integer)', 'cc_rooster_end(text,jsonb,integer)',
+    'cc_flight_start(text,numeric,integer)', 'cc_flight_end(text,integer,jsonb,integer)']
   loop
     execute format('revoke all on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);

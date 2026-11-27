@@ -5,8 +5,10 @@
 // accounts live in this browser's localStorage. Connect Supabase for accounts that
 // follow players to any browser and can't be reset by clearing site data.
 
-import { random, randInt, sample, weightedPick } from './rng.js';
-import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR, rrReplay, rrMult } from './math.js';
+import { random, randInt, sample, weightedPick } from './rng.js?v=714c8b12054c';
+import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=714c8b12054c';
+import { scoreReplay } from './games/rooster-course.js?v=714c8b12054c';
+import { flightReplay, FPS } from './games/flight-course.js?v=714c8b12054c';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const err = (error, extra = {}) => ({ ok: false, error, ...extra });
@@ -278,11 +280,13 @@ const blankPlayer = (username, salt, hash) => ({
   shoe: null,
   bj: null,
   rooster: null,
+  flight: null,
 });
 
 function meOf(db, p) {
   const crash = crashResolve(p);
   if (p.rooster && Date.now() - p.rooster.started > 600000) roosterSettle(p, false, 0, 'abandoned');
+  if (p.flight && Date.now() - p.flight.started > 600000) flightSettle(p, false, 0, 'abandoned');
   return {
     ok: true,
     username: p.username,
@@ -297,7 +301,8 @@ function meOf(db, p) {
       mines: p.mines ? { bet: p.mines.bet, mines: p.mines.mines, revealed: [...p.mines.revealed] } : null,
       crash: crash.state === 'running' || crash.state === 'waiting' ? crash : null,
       blackjack: p.bj ? bjView(p) : null,
-      rooster: p.rooster ? { bet: p.rooster.bet, started: p.rooster.started } : null,
+      rooster: p.rooster ? { bet: p.rooster.bet, target: p.rooster.target, started: p.rooster.started } : null,
+      flight: p.flight ? { bet: p.flight.bet, target: p.flight.target, started: p.flight.started } : null,
     },
   };
 }
@@ -508,35 +513,69 @@ const API = {
     return { ok: true, server_now: Date.now(), ...crashResolve(p) };
   },
 
-  cc_rooster_start({ p_bet }, db, p) {
+  // Road Rooster bet runs: pick a row to reach. The run is replayed on the score course
+  // before it pays; reaching the row pays bet × that target's multiplier, anything else loses.
+  cc_rooster_start({ p_bet, p_target }, db, p) {
     if (!validBet(p_bet)) return err('bad_bet');
+    if (!targetMult(RR_TARGETS, p_target)) return err('bad_target');
     roosterSettle(p, false, 0, 'abandoned');
     if (p.balance < p_bet) return err('funds');
     const seed = 1 + Math.floor(random() * 2147483645);
-    p.rooster = { bet: p_bet, seed, started: Date.now() };
+    p.rooster = { bet: p_bet, target: p_target, seed, started: Date.now() };
     move(p, -p_bet);
-    return money(p, { ok: true, seed, bet: p_bet });
+    return money(p, { ok: true, seed, bet: p_bet, target: p_target });
   },
 
-  cc_rooster_end({ p_moves, p_end_ms, p_cashout }, db, p) {
+  cc_rooster_end({ p_moves, p_end_ms }, db, p) {
     const r = p.rooster;
     if (!r) return err('no_round');
     const el = Date.now() - r.started;
     const invalid = () => ({ ...roosterSettle(p, false, 0, 'invalid run'), alive: false, cause: 'invalid' });
-    if (!Array.isArray(p_moves) || p_moves.length > 4000 || !Number.isFinite(p_end_ms)) return invalid();
+    if (!Array.isArray(p_moves) || p_moves.length > 6000 || !Number.isInteger(p_end_ms)) return invalid();
     let prev = 0;
     for (const mv of p_moves) {
       if (!Array.isArray(mv) || !Number.isInteger(mv[0]) || !Number.isInteger(mv[1]) || mv[0] < prev || mv[0] > el + 2000 || mv[1] < 0 || mv[1] > 3) return invalid();
       prev = mv[0];
     }
     if (p_end_ms < prev || p_end_ms > el + 2000) return invalid();
-    const res = rrReplay(r.seed, p_moves, p_end_ms);
-    const causeText = { hawk: 'caught by the hawk', train: 'hit by a train', bus: 'hit by a bus', road: 'hit by a car' };
-    const out =
-      res.alive && (p_cashout || res.finished) && res.score >= 1
-        ? roosterSettle(p, true, res.score, res.finished ? 'golden egg! row 75' : `cashed at row ${res.score}`)
-        : roosterSettle(p, false, res.score, `row ${res.score} · ${causeText[res.cause] || 'run ended'}`);
-    return { ...out, alive: res.alive, cause: res.cause ?? null, death_ms: res.deathMs ?? null, finished: !!res.finished };
+    const res = scoreReplay(r.seed, p_moves, p_end_ms, r.target);
+    const causeText = { line: 'caught by the red line', river: 'fell in the river', train: 'hit by a train', bus: 'hit by a bus', road: 'hit by a car' };
+    const out = res.reached
+      ? roosterSettle(p, true, res.score, `reached row ${r.target}`)
+      : roosterSettle(p, false, res.score, `row ${res.score} of ${r.target} · ${causeText[res.cause] || 'run ended'}`);
+    return { ...out, alive: res.alive, reached: res.reached, cause: res.cause ?? null, death_ms: res.deathMs ?? null };
+  },
+
+  // Night Flight bet flights: pick a number of gates. The flaps are replayed frame by frame.
+  cc_flight_start({ p_bet, p_target }, db, p) {
+    if (!validBet(p_bet)) return err('bad_bet');
+    if (!targetMult(NF_TARGETS, p_target)) return err('bad_target');
+    flightSettle(p, false, 0, 'abandoned');
+    if (p.balance < p_bet) return err('funds');
+    const seed = 1 + Math.floor(random() * 2147483645);
+    p.flight = { bet: p_bet, target: p_target, seed, started: Date.now() };
+    move(p, -p_bet);
+    return money(p, { ok: true, seed, bet: p_bet, target: p_target });
+  },
+
+  cc_flight_end({ p_start, p_flaps, p_frames }, db, p) {
+    const r = p.flight;
+    if (!r) return err('no_round');
+    const el = Date.now() - r.started;
+    const invalid = () => ({ ...flightSettle(p, false, 0, 'invalid flight'), cause: 'invalid' });
+    // Frames can't outrun the server's clock (30 a second, plus slack); flaps run forward.
+    if (!Number.isInteger(p_start) || p_start < -8 || p_start > 8 || !Number.isInteger(p_frames) || p_frames < 0 || p_frames > (el / 1000) * FPS + 90) return invalid();
+    if (!Array.isArray(p_flaps) || p_flaps.length > p_frames + 1) return invalid();
+    let prev = -1;
+    for (const f of p_flaps) {
+      if (!Number.isInteger(f) || f <= prev || f >= p_frames) return invalid();
+      prev = f;
+    }
+    const res = flightReplay(r.seed, p_start, p_flaps, r.target, p_frames);
+    const out = res.reached
+      ? flightSettle(p, true, res.score, `cleared ${r.target} gates`)
+      : flightSettle(p, false, res.score, `${res.score} of ${r.target} gates`);
+    return { ...out, reached: res.reached, crashed: res.crashed };
   },
 
   cc_bj_deal({ p_bet }, db, p) {
@@ -634,12 +673,23 @@ const API = {
 function roosterSettle(p, won, score, info) {
   const r = p.rooster;
   if (!r) return null;
-  const mult = won ? rrMult(score) : 0;
+  const mult = won ? targetMult(RR_TARGETS, r.target) : 0;
   const pay = r2(r.bet * mult);
   const entry = record(p, 'rooster', r.bet, pay, info);
   move(p, pay);
   p.rooster = null;
-  return money(p, { ok: true, mult, payout: pay, score, entry });
+  return money(p, { ok: true, mult, payout: pay, score, target: r.target, entry });
+}
+
+function flightSettle(p, won, score, info) {
+  const r = p.flight;
+  if (!r) return null;
+  const mult = won ? targetMult(NF_TARGETS, r.target) : 0;
+  const pay = r2(r.bet * mult);
+  const entry = record(p, 'flight', r.bet, pay, info);
+  move(p, pay);
+  p.flight = null;
+  return money(p, { ok: true, mult, payout: pay, score, target: r.target, entry });
 }
 
 function minesFinish(p, won) {

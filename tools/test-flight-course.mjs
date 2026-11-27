@@ -2,7 +2,7 @@
 // Pins Night Flight to the reference tap-to-flap loop (FlapPyBird, 30 frames a second).
 import assert from 'node:assert/strict';
 import {
-  flightCourse, FLOOR, START_Y, BIRD_X, BIRD_W, BIRD_FOOT, GATE_W, GAP, SPEED, VIEW_W, MASKS, WINGS, SHAFT_INSET,
+  flightCourse, flightReplay, FLOOR, START_Y, BIRD_X, BIRD_W, BIRD_FOOT, GATE_W, GAP, SPEED, VIEW_W, MASKS, WINGS, SHAFT_INSET,
   gateSolid, birdHitsGate, medalFor,
 } from '../js/games/flight-course.js';
 
@@ -315,6 +315,65 @@ assert.equal(medalFor(999), 'platinum');
   for (let seed = 1; seed <= 12; seed++) worst = Math.min(worst, provable(seed, 120));
   assert(worst >= 120, `an ideal flyer clears 120 gates on every course (worst ${worst})`);
   console.log('reachability: 12 courses × 120 gates, all provably flyable');
+}
+
+// Bet flights: a seeded course lays the same gates every time, and replaying the flaps a
+// flight recorded reproduces it frame for frame (the server replays them the same way).
+{
+  const gaps = (seed) => {
+    const f = flightCourse(seed);
+    f.launch();
+    const seen = [];
+    for (let i = 0; i < 2000 && seen.length < 12; i++) {
+      f.tick();
+      for (const g of f.state.gates) if (!seen.includes(g.gapTop + ':' + g.index)) seen.push(g.gapTop + ':' + g.index);
+      f.state.y = 200; // keep the bird aloft so the course keeps coming
+      f.state.vy = 0;
+    }
+    return seen.join();
+  };
+  assert.equal(gaps(4242), gaps(4242), 'a seed always lays the same gates');
+  assert.notEqual(gaps(4242), gaps(4243), 'another seed lays different gates');
+  let same = 0, wins = 0, crashes = 0;
+  for (let i = 1; i <= 60; i++) {
+    const seed = i * 104729 + 7, goal = [5, 10, 25, 50][i % 4];
+    const live = flightCourse(seed);
+    const start = (i % 17) - 8;
+    live.state.shm = start;
+    live.state.y = START_Y + start;
+    live.launch();
+    let k = 0;
+    while (live.state.mode === 'flying' && live.state.score < goal && k < 20000) {
+      const s = live.state;
+      const ahead = s.gates.filter((g) => g.x + GATE_W > BIRD_X);
+      const g = ahead[0];
+      const lo = g ? g.gapTop + 2 : 120, hi = g ? g.gapTop + GAP - 20 : 300;
+      let target = ahead[1] ? ahead[1].gapTop + 61 : hi - 10;
+      target = Math.max(lo + 56, Math.min(hi - 4, target));
+      const next = s.y + s.vy + 1;
+      // a deliberately sloppy flyer on every third course, so some flights crash
+      if (next > target && (next - 45 >= lo || next > hi - 2) && (i % 3 || (k * 7919) % 13 !== 0)) live.flap();
+      live.tick();
+      k++;
+    }
+    const r = flightReplay(seed, start, live.state.flaps, goal, k);
+    assert.equal(r.score, live.state.score, `seed ${seed}: the replay scores what the flight scored`);
+    assert.equal(r.reached, live.state.score >= goal);
+    assert.equal(r.crashed, live.state.mode !== 'flying' && live.state.score < goal);
+    assert.equal(r.frames, k);
+    same++;
+    if (r.reached) wins++;
+    if (r.crashed) crashes++;
+  }
+  assert(wins > 10 && crashes > 3, `the flights cover wins and crashes (${wins} won, ${crashes} crashed)`);
+  // A flap above the ceiling does nothing, in the game and in the replay.
+  const high = flightCourse(9);
+  high.launch();
+  high.state.y = -60;
+  high.flap();
+  high.tick();
+  assert.deepEqual(high.state.flaps, [], 'a flap above the ceiling is not recorded');
+  console.log(`bet flights: ${same} flights replayed frame for frame (${wins} cleared their gates, ${crashes} crashed)`);
 }
 
 console.log('flight course: all checks passed');

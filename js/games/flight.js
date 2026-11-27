@@ -4,13 +4,21 @@
 // arcade loop frame for frame (30 frames a second). This module draws those frames,
 // smoothing between them for 60/120 Hz screens, and runs the screens around a flight:
 // title → get ready → flight → crash and fall → scoreboard.
+//
+// A free flight chases a personal best. A bet flight picks a number of gates to clear:
+// the server hands out the seed that lays out the gates, replays the flaps, and pays
+// bet × that target's multiplier the moment the bird clears the last one.
 
 import {
   flightCourse, FPS, VIEW_W, VIEW_H, FLOOR, BIRD_X, BIRD_W, BIRD_H, GATE_W, GAP, medalFor,
-} from './flight-course.js?v=97d14c53b3e0';
-import { icon } from '../icons.js';
-import { soundOn, setSound, sfx, unlockAudio } from '../sound.js';
-import { storage, reducedMotion } from '../util.js';
+} from './flight-course.js?v=714c8b12054c';
+import { icon } from '../icons.js?v=714c8b12054c';
+import { engine, errorText } from '../engine.js?v=714c8b12054c';
+import { store } from '../store.js?v=714c8b12054c';
+import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=714c8b12054c';
+import { NF_TARGETS, targetMult } from '../math.js?v=714c8b12054c';
+import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=714c8b12054c';
+import { storage, reducedMotion, fmt, fmtMult, round2 } from '../util.js?v=714c8b12054c';
 
 const BEST = 'cc:flight:best';
 const STEP = 1000 / FPS;
@@ -39,15 +47,17 @@ export default {
           <button type="button" class="nf-icon" data-pause aria-label="Pause flight" hidden>${pauseIcon}</button>
         </div>
       </nav>
-      <div class="nf-score" aria-label="Score" hidden><b>0</b></div>
+      <div class="nf-score" aria-label="Score" hidden><b>0</b><small class="nf-goal" hidden></small></div>
       <div class="nf-panel"><div class="nf-panel-inner">
         <div class="nf-record">${icon('trophy')}<span>Personal best</span> <b></b></div>
         <h1></h1><p class="nf-note"></p>
+        <div class="nf-bet"></div>
         <button class="nf-play" type="button" data-start>${icon('play')}<span></span></button>
         <span class="nf-keys"><kbd>Space</kbd> to flap</span>
       </div></div>
       <div class="nf-board" hidden>
         <h2>Flight over</h2>
+        <p class="nf-result" hidden></p>
         <div class="nf-card">
           <div class="nf-medal" data-medal><span class="nf-medal-slot"></span></div>
           <dl>
@@ -57,7 +67,8 @@ export default {
         </div>
         <div class="nf-board-actions">
           <button class="nf-play" type="button" data-again>${icon('play')}<span>Fly again</span></button>
-          <a class="nf-pill" href="#/">${icon('cards')}<span>Lobby</span></a>
+          <button class="nf-pill" type="button" data-change hidden><span>Change bet</span></button>
+          <a class="nf-pill" href="#/" data-board-lobby>${icon('cards')}<span>Lobby</span></a>
         </div>
       </div>
       <span class="sr-only nf-status" role="status" aria-live="polite"></span>
@@ -80,10 +91,25 @@ export default {
     const record = $('.nf-record');
     const board = $('.nf-board');
     const status = $('.nf-status');
+    const goalEl = $('.nf-goal');
+    const result = $('.nf-result');
+    const againBtn = $('[data-again]');
+    const changeBtn = $('[data-change]');
+    const boardLobby = $('[data-board-lobby]');
     let best = Math.max(0, Number(storage.get(BEST, 0)) || 0);
     let phase = 'title'; // title → ready → flying → falling → over (and paused)
     let resumeTo = 'flying';
     let course = flightCourse();
+    // Betting: a free flight, or a bet on clearing a number of gates.
+    let mode = storage.get('cc:flight:mode', 'free') === 'bet' ? 'bet' : 'free';
+    let target = Number(storage.get('cc:flight:target', 10)) || 10;
+    if (!targetMult(NF_TARGETS, target)) target = 10;
+    let ticket = null; // the bet riding on this flight, until it settles
+    let goal = null; // gates the bet flight in play must clear
+    let settlement = null; // the server's answer for that flight
+    let busy = false;
+    let destroyed = false;
+    let winTimer = 0;
     let raf = 0;
     let last = 0;
     let acc = 0;
@@ -104,6 +130,28 @@ export default {
 
     const sy = (y) => (y - worldTop) * scale;
 
+    // ---------------------------------------------------------- the bet panel
+    const betBox = $('.nf-bet');
+    const modes = segmented([{ value: 'free', label: 'Free flight' }, { value: 'bet', label: 'Bet flight' }], mode, (v) => {
+      mode = v;
+      storage.set('cc:flight:mode', v);
+      show(phase);
+    }, { label: 'Flight mode' });
+    const bet = betInput('flight', { rack: false });
+    const goals = segmented(NF_TARGETS.map(([g, m]) => ({ value: g, label: `${g} · ${m}×` })), target, (v) => {
+      target = Number(v);
+      storage.set('cc:flight:target', target);
+      show(phase);
+    }, { label: 'Gates to clear' });
+    const goalField = document.createElement('div');
+    goalField.className = 'field';
+    goalField.innerHTML = '<div class="field-label"><span>Gates to clear</span><span class="dim">clear them all to win</span></div>';
+    goalField.append(goals.el);
+    modes.el.classList.add('nf-modes');
+    betBox.append(modes.el, bet.el, goalField);
+    const winFor = (amount, gates) => round2(amount * targetMult(NF_TARGETS, gates));
+    listen(bet.el, 'change', () => show(phase));
+
     function updateSound() {
       sound.innerHTML = icon(soundOn() ? 'volume' : 'volumeOff');
       sound.setAttribute('aria-label', soundOn() ? 'Mute sound' : 'Enable sound');
@@ -114,16 +162,23 @@ export default {
       field.dataset.phase = phase;
       const playing = phase === 'flying' || phase === 'falling' || phase === 'over';
       panel.hidden = phase !== 'title' && phase !== 'paused';
-      score.hidden = !(phase === 'flying' || phase === 'falling');
+      score.hidden = !(phase === 'flying' || phase === 'falling' || phase === 'won');
       pause.hidden = phase !== 'flying';
       board.hidden = phase !== 'over';
+      const betting = mode === 'bet';
+      field.classList.toggle('is-betting', betting);
+      betBox.hidden = phase !== 'title';
+      for (const el of [bet.el, goalField]) el.hidden = !betting;
+      modes.set(mode);
+      goals.set(target);
       field.classList.toggle('is-playing', playing);
       if (phase === 'title') {
         record.hidden = false;
         record.lastElementChild.textContent = best;
         heading.innerHTML = 'Night<br><em>Flight</em>';
-        note.textContent = 'Tap to flap. Slip through the harbor gates.';
-        startBtn.lastElementChild.textContent = 'Start flight';
+        note.textContent = betting ? `Clear ${target} gates to win ${fmt(winFor(bet.value, target))}.` : 'Tap to flap. Slip through the harbor gates.';
+        startBtn.lastElementChild.textContent = betting ? `Bet ${fmt(bet.value)}` : 'Start flight';
+        startBtn.disabled = busy;
       } else if (phase === 'paused') {
         record.hidden = true;
         heading.textContent = 'Paused';
@@ -207,7 +262,9 @@ export default {
       }
       if (phase === 'title') {
         // the title card: the bird hovers beside the name (the bob is CSS)
-        bird.style.transform = `translate3d(${(W * (W > H ? 0.67 : 0.76)).toFixed(2)}px,${(H * 0.49).toFixed(2)}px,0)`;
+        // On a portrait screen the bet panel fills the middle, so the bird hovers higher.
+        const high = W <= H && mode === 'bet';
+        bird.style.transform = `translate3d(${(W * (W > H ? 0.67 : 0.76)).toFixed(2)}px,${(H * (high ? 0.17 : 0.49)).toFixed(2)}px,0)`;
       } else {
         const y = lerp(prev.y, s.y, alpha);
         const rot = quiet ? 0 : lerp(prev.rot, course.shownRot(), alpha);
@@ -230,9 +287,10 @@ export default {
       const happened = course.tick();
       for (const e of happened) {
         if (e === 'point') {
-          score.lastElementChild.textContent = course.state.score;
-          if (!quiet) score.lastElementChild.animate([{ transform: 'scale(1.18)' }, { transform: 'scale(1)' }], { duration: 160, easing: 'ease-out' });
+          score.firstElementChild.textContent = course.state.score;
+          if (!quiet) score.firstElementChild.animate([{ transform: 'scale(1.18)' }, { transform: 'scale(1)' }], { duration: 160, easing: 'ease-out' });
           sfx.point?.();
+          if (goal && course.state.score >= goal) return reached();
         } else if (e === 'hit') crash();
         else if (e === 'die') setTimeout(() => phase === 'falling' && sfx.plunge?.(), 260);
         else if (e === 'land') landed();
@@ -245,7 +303,7 @@ export default {
       while (acc >= STEP) {
         acc -= STEP;
         if (phase === 'title' || phase === 'ready' || phase === 'flying' || phase === 'falling') step();
-        if (phase === 'over' || phase === 'paused') {
+        if (phase === 'over' || phase === 'paused' || phase === 'won') {
           acc = 0;
           break;
         }
@@ -260,14 +318,23 @@ export default {
     }
 
     // ---------------------------------------------------------- flow
-    function getReady() {
+    function getReady(seed) {
       clearTimeout(boardTimer);
+      clearTimeout(winTimer);
       clearInterval(countTimer);
       for (const el of gates.values()) release(el);
       gates.clear();
-      course = flightCourse();
+      if (seed == null) {
+        // a free flight
+        ticket = null;
+        goal = null;
+      }
+      settlement = null;
+      course = flightCourse(seed ?? 1 + Math.floor(Math.random() * 2147483640));
       prev = { y: course.state.y, rot: 0, distance: 0 };
-      score.lastElementChild.textContent = '0';
+      score.firstElementChild.textContent = '0';
+      goalEl.hidden = !goal;
+      if (goal) goalEl.textContent = `of ${goal} · win ${fmt(winFor(ticket.amount, goal))}`;
       quiet = reducedMotion();
       unlockAudio();
       show('ready');
@@ -286,6 +353,7 @@ export default {
     }
     function crash() {
       show('falling');
+      if (ticket) settle();
       sfx.smack?.();
       if (!quiet) {
         flash.classList.remove('on');
@@ -302,31 +370,121 @@ export default {
       const isBest = total > best;
       best = Math.max(best, total, Number(storage.get(BEST, 0)) || 0);
       storage.set(BEST, best);
-      boardTimer = setTimeout(() => {
-        show('over');
-        cancelAnimationFrame(raf);
-        const medal = medalFor(total);
-        const medalEl = board.querySelector('[data-medal]');
-        medalEl.className = `nf-medal ${medal || ''}`;
-        medalEl.innerHTML = medal ? `<span class="nf-medal-face">${anchor}</span><span class="sr-only">${MEDAL_NAMES[medal]} medal</span>` : '<span class="nf-medal-slot"></span>';
-        board.querySelector('[data-best]').textContent = best;
-        board.querySelector('.nf-new').hidden = !isBest;
-        const totalEl = board.querySelector('[data-total]');
-        // the score counts up on the card
-        let shown = 0;
-        totalEl.textContent = '0';
-        if (quiet || total === 0) totalEl.textContent = String(total);
-        else {
-          const every = Math.max(16, Math.min(60, 900 / total));
-          countTimer = setInterval(() => {
-            shown = Math.min(total, shown + Math.max(1, Math.ceil(total / 40)));
-            totalEl.textContent = String(shown);
-            if (shown >= total) clearInterval(countTimer);
-          }, every);
+      boardTimer = setTimeout(() => showBoard(total, isBest, false), quiet ? 120 : 420);
+    }
+    /** The bet flight cleared its last gate: freeze the harbor and pay at once. */
+    function reached() {
+      show('won');
+      settle();
+      sfx.cashout?.();
+      if (!quiet) {
+        flash.classList.remove('on', 'is-gold');
+        void flash.offsetWidth;
+        flash.classList.add('on', 'is-gold');
+      }
+      const total = course.state.score;
+      const isBest = total > best;
+      best = Math.max(best, total, Number(storage.get(BEST, 0)) || 0);
+      storage.set(BEST, best);
+      winTimer = setTimeout(() => showBoard(total, isBest, true), quiet ? 120 : 650);
+    }
+    /** Send the flight to the server; the board shows what it paid. */
+    function settle() {
+      const t = ticket;
+      ticket = null;
+      const s = course.state;
+      settlement = engine.flightEnd(s.start, s.flaps.slice(), s.flown).then((r) => {
+        if (!r?.ok) {
+          store.cancel(t);
+          if (r?.error !== 'auth') toast(errorText(r), { type: 'loss' });
+          return null;
         }
-        status.textContent = `Flight over. ${total} gates. Best ${best}.${medal ? ` ${MEDAL_NAMES[medal]} medal.` : ''}`;
-        board.querySelector('[data-again]').focus({ preventScroll: true });
-      }, quiet ? 120 : 420);
+        store.confirm(t, r, { paid: r.payout });
+        store.finish(t, r.entry);
+        return { ...r, amount: t.amount };
+      });
+      return settlement;
+    }
+    function showBoard(total, isBest, won) {
+      show('over');
+      cancelAnimationFrame(raf);
+      board.querySelector('h2').textContent = won ? 'Cleared!' : 'Flight over';
+      const betting = !!settlement;
+      result.hidden = !betting;
+      result.className = 'nf-result';
+      if (betting) {
+        result.textContent = 'Settling…';
+        settlement.then((r) => {
+          if (destroyed || phase !== 'over') return;
+          if (!r) result.textContent = 'Bet not settled';
+          else if (r.payout > 0) {
+            result.classList.add('is-win');
+            result.innerHTML = `+${fmt(r.payout)} <small>${fmtMult(r.mult)} on ${fmt(r.amount)}</small>`;
+            sfx.win?.(r.mult >= 5 ? 2 : 1);
+          } else {
+            result.classList.add('is-loss');
+            result.innerHTML = `Bet lost <small>${r.score} of ${r.target} gates</small>`;
+          }
+          status.textContent += r ? (r.payout > 0 ? ` Won ${fmt(r.payout)}.` : ' Bet lost.') : '';
+        });
+      }
+      againBtn.lastElementChild.textContent = betting ? `Bet again · ${fmt(bet.value)}` : 'Fly again';
+      changeBtn.hidden = !betting;
+      boardLobby.hidden = betting;
+      const medal = medalFor(total);
+      const medalEl = board.querySelector('[data-medal]');
+      medalEl.className = `nf-medal ${medal || ''}`;
+      medalEl.innerHTML = medal ? `<span class="nf-medal-face">${anchor}</span><span class="sr-only">${MEDAL_NAMES[medal]} medal</span>` : '<span class="nf-medal-slot"></span>';
+      board.querySelector('[data-best]').textContent = best;
+      board.querySelector('.nf-new').hidden = !isBest;
+      const totalEl = board.querySelector('[data-total]');
+      // the score counts up on the card
+      let shown = 0;
+      totalEl.textContent = '0';
+      if (quiet || total === 0) totalEl.textContent = String(total);
+      else {
+        const every = Math.max(16, Math.min(60, 900 / total));
+        countTimer = setInterval(() => {
+          shown = Math.min(total, shown + Math.max(1, Math.ceil(total / 40)));
+          totalEl.textContent = String(shown);
+          if (shown >= total) clearInterval(countTimer);
+        }, every);
+      }
+      status.textContent = `${won ? 'Cleared' : 'Flight over'}. ${total} gates. Best ${best}.${medal ? ` ${MEDAL_NAMES[medal]} medal.` : ''}`;
+      againBtn.focus({ preventScroll: true });
+    }
+    /** Place a bet and get the bird ready over the gates it lays out. */
+    async function startBet() {
+      if (busy || (phase !== 'title' && phase !== 'over')) return;
+      const t = tryBet('flight', bet);
+      if (!t) return;
+      busy = true;
+      startBtn.disabled = againBtn.disabled = true;
+      const r = await engine.flightStart(t.amount, target);
+      busy = false;
+      startBtn.disabled = againBtn.disabled = false;
+      if (!r?.ok) {
+        serverRefused(t, r, bet);
+        return;
+      }
+      store.confirm(t, r, { debited: t.amount });
+      ticket = t;
+      goal = r.target;
+      if (destroyed) return forfeit();
+      getReady(r.seed);
+    }
+    /** Leaving (or reloading) mid-flight gives the bet up. */
+    function forfeit() {
+      const t = ticket;
+      if (!t) return;
+      ticket = null;
+      const s = course.state;
+      engine.flightEnd(s.start, s.flaps.slice(), s.flown).then((r) => {
+        if (r?.ok) {
+          store.confirm(t, r, { paid: r.payout });
+          store.finish(t, r.entry);
+        } else store.cancel(t);
+      });
     }
     function hold() {
       if (phase !== 'flying' && phase !== 'ready') return;
@@ -341,25 +499,29 @@ export default {
       run();
     }
     function primary() {
-      if (phase === 'title' || phase === 'over') getReady();
+      if (phase === 'title' || phase === 'over') mode === 'bet' ? startBet() : getReady();
       else if (phase === 'paused') resume();
       else if (phase === 'ready') takeOff();
       else if (phase === 'flying') flap();
     }
 
-    listen(startBtn, 'click', () => (phase === 'paused' ? resume() : getReady()));
-    listen(board.querySelector('[data-again]'), 'click', getReady);
+    listen(startBtn, 'click', () => (phase === 'paused' ? resume() : mode === 'bet' ? startBet() : getReady()));
+    listen(againBtn, 'click', () => (mode === 'bet' ? startBet() : getReady()));
+    listen(changeBtn, 'click', () => {
+      clearInterval(countTimer);
+      show('title');
+    });
     listen(pause, 'click', hold);
     listen(sound, 'click', () => {
       setSound(!soundOn());
       updateSound();
     });
     listen(field, 'pointerdown', (e) => {
-      if (e.button !== 0 || !e.isPrimary || e.target.closest('button,a')) return;
+      if (e.button !== 0 || !e.isPrimary || e.target.closest('button,a,input,label,.nf-bet')) return;
       if (phase === 'ready' || phase === 'flying') {
         e.preventDefault();
         primary();
-      } else if (phase === 'title') {
+      } else if (phase === 'title' && mode === 'free') {
         e.preventDefault();
         getReady();
       }
@@ -373,6 +535,7 @@ export default {
         return;
       }
       if (e.code !== 'Space' && e.code !== 'ArrowUp') return;
+      if (e.target.closest?.('input,select,textarea')) return;
       if (e.target.closest?.('button,a') && e.code === 'Space') return;
       e.preventDefault();
       if (!e.repeat && phase !== 'falling') primary();
@@ -388,9 +551,25 @@ export default {
     run();
 
     // For automated play-tests.
-    globalThis.__ccFlight = () => ({ phase, ...course.state, gates: course.state.gates.map((g) => ({ ...g })), scale, worldTop, colLeft });
+    globalThis.__ccFlight = () => ({ phase, mode, goal, betting: !!ticket, ...course.state, gates: course.state.gates.map((g) => ({ ...g })), flaps: course.state.flaps.slice(), scale, worldTop, colLeft });
+
+    // A bet flight left open by a reload can't be resumed: settle it.
+    const left = store.takeRound('flight');
+    if (left) {
+      engine.flightEnd(0, [], 0).then((r) => {
+        store.sync(r);
+        store.refresh();
+        if (r?.ok) toast('Your last bet flight ended when you left the harbor.', { iconName: 'info' });
+      });
+    }
 
     return () => {
+      destroyed = true;
+      if (ticket) {
+        forfeit();
+        toast('You left the harbor, so that bet flight is over.', { iconName: 'info' });
+      }
+      clearTimeout(winTimer);
       clearTimeout(boardTimer);
       clearInterval(countTimer);
       cancelAnimationFrame(raf);

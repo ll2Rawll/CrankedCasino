@@ -1,14 +1,14 @@
 // Lobby: neon marquee sign, searchlights, a hand of holographic game cards,
 // the cashier (stack, ad rewards, promo ticket), recent action, accounts, FAQ.
 
-import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js';
-import { icon } from '../icons.js';
-import { store, on } from '../store.js';
-import { engine, MODE } from '../engine.js';
-import { sfx } from '../sound.js';
-import { promoTicket } from '../ui.js';
-import { openAccount } from '../account.js';
-import { adButton, banner } from '../ads.js';
+import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=714c8b12054c';
+import { icon } from '../icons.js?v=714c8b12054c';
+import { store, on } from '../store.js?v=714c8b12054c';
+import { engine, MODE } from '../engine.js?v=714c8b12054c';
+import { sfx } from '../sound.js?v=714c8b12054c';
+import { promoTicket } from '../ui.js?v=714c8b12054c';
+import { openAccount } from '../account.js?v=714c8b12054c';
+import { adButton, banner } from '../ads.js?v=714c8b12054c';
 
 const GAMES = [
   { id: 'blackjack', name: 'Blackjack', rank: 'A', suit: '♠', red: false, line: 'Beat the dealer to 21.', tags: ['Pays 3:2', 'Split · Double'] },
@@ -17,11 +17,11 @@ const GAMES = [
   { id: 'crash', name: 'Crash', rank: 'J', suit: '♣', red: false, line: 'Cash out before the rocket blows.', tags: ['Up to 10,000×', 'Auto cash-out'] },
   { id: 'plinko', name: 'Plinko', rank: '10', suit: '♥', red: true, line: 'Drop it. Watch it bounce.', tags: ['Up to 1,000×', '3 risk levels'] },
   { id: 'mines', name: 'Mines', rank: '9', suit: '♠', red: false, line: 'Find gems, dodge the bombs.', tags: ['99% RTP', '1–24 mines'] },
-  { id: 'flight', name: 'Night Flight', rank: '7', suit: '♣', red: false, line: 'Flap through the moonlit harbor.', tags: ['Free arcade', 'Chase your best'] },
-  { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Beat your best score.', tags: ['Free score run', 'Chip run up to 81×'] },
+  { id: 'flight', name: 'Night Flight', rank: '7', suit: '♣', red: false, line: 'Flap through the moonlit harbor.', tags: ['Free arcade', 'Bet flights up to 30×'] },
+  { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Bet on the row you reach.', tags: ['Free score run', 'Bet runs up to 30×'] },
 ];
 
-const TICKER = ['New: Night Flight, tap to fly through the harbor', 'Road Rooster, dodge traffic for up to 81×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
+const TICKER = ['New: Night Flight, tap to fly through the harbor', 'Road Rooster, reach row 100 for 30×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
 
 const FAQ = [
   ['Is this real money?', 'No. Chips are pretend and have no cash value. You can’t buy them, win anything real, or withdraw. New players start with 1,000 chips.'],
@@ -322,7 +322,7 @@ export default {
         ? rows
             .map(
               (r) => `<li style="--c:var(--${esc(r.g)})">
-                <span class="rg"><i></i>${esc(r.g === 'rooster' ? 'road rooster' : r.g)}</span>
+                <span class="rg"><i></i>${esc(r.g === 'rooster' ? 'road rooster' : r.g === 'flight' ? 'night flight' : r.g)}</span>
                 <span class="rm ${r.m >= 1 ? 'win-text' : 'dim'}">${fmtMult(r.m)}</span>
                 <span class="rp ${r.p > r.a ? 'win-text' : 'dim'}">${r.p > r.a ? signed(r.p - r.a) : r.p === r.a ? 'push' : '−' + fmt(r.a - r.p)}</span>
                 <span class="rt dim">${timeAgo(r.t)}</span>
