@@ -13,19 +13,23 @@ import { RR, rrLane, rrHit, rrHawk, rrHawkTime, rrMult, rrFront, rrRand } from '
 import { sfx, haptic } from '../sound.js';
 import { burst, PALETTES, coinRain, shake } from '../fx.js';
 import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
+import { scoreLane, platformCenter, onPlatform } from './rooster-course.js';
 import { loadArt } from './rooster-art.js';
 
 const HOP_MS = 120;
 const COUNTDOWN_MS = 1500;
+const BANK_HOLD_MS = 450;
+const ROAD_SLOPE = Math.tan(16 * Math.PI / 180);
 const MILESTONES = [10, 20, 30, 40, 50, 60, 75];
 
 const RULES = `
-  <ol class="rules">
+  <p><strong>Score run</strong> is free. Each new row earns one point. Ride logs, land on lily pads and hold Cash out to keep your score. Keep ahead of the red warning line. Getting caught, hitting traffic or falling into water scores zero. Your best banked score stays in this browser.</p>
+  <h3>Chip run</h3><ol class="rules">
     <li>Pick a <strong>bet</strong> and press <strong>Start run</strong>. Your rooster waits on the casino steps.</li>
     <li><strong>Tap</strong> the road (or press <kbd>↑</kbd> / <kbd>Space</kbd>) to hop forward one lane. <strong>Swipe</strong> or use <kbd>←</kbd> <kbd>→</kbd> <kbd>↓</kbd> to dodge sideways or step back.</li>
     <li>Dodge the cars, buses and trains. Sidewalks are safe, but planters, cones and hydrants block the way.</li>
     <li>Don’t dawdle: a hawk circles behind you and swoops if you fall too far back.</li>
-    <li><strong>Cash out</strong> whenever you like. You’re paid for the furthest row you reached: row 10 gives your bet back, and every row after that adds 7%, all the way to the golden egg on row 75 (81.27×).</li>
+    <li>Hold the <strong>Cash out</strong> button on the road to bank your run. Traffic keeps moving while you hold. You’re paid for the furthest row you reached: row 10 gives your bet back, and every row after that adds 7%, all the way to the golden egg on row 75 (81.27×).</li>
   </ol>
   <p class="dim" style="margin-top:14px;font-size:14px">A skill game: how far you get is up to you. The server lays out the traffic and checks every run before it pays.</p>`;
 
@@ -62,8 +66,14 @@ function tileTile(size) {
 export default {
   title: 'Road Rooster',
   mount(view) {
-    const frame = gameFrame(view, { game: 'rooster', title: 'Road Rooster', kicker: 'Original · skill game', tags: ['Up to 81×', 'Cars · buses · trains'], rules: RULES });
+    const frame = gameFrame(view, { game: 'rooster', title: 'Road Rooster', kicker: 'Original · skill game', tags: ['Score chase', 'Chip run up to 81×'], rules: RULES });
     const { stage, controls } = frame;
+    const modePicker = h(`<fieldset class="rr-modes"><legend class="sr-only">Road Rooster mode</legend>
+      <label><input type="radio" name="rr-mode" value="score" checked> Score run</label>
+      <label><input type="radio" name="rr-mode" value="chips"> Chip run</label></fieldset>`);
+    frame.el.querySelector('.game-head').append(modePicker);
+    let scoreMode = true;
+    let record = Number(storage.get('cc:rooster:score', 0)) || 0;
     let destroyed = false;
     let art = null;
 
@@ -103,6 +113,34 @@ export default {
       <button type="button" data-m="3" aria-label="Right">${icon('arrowRight')}</button>
     </div>`);
     controls.append(bet.el, ladder, readout, playBtn, pad, h(`<p class="hint">Tap or <kbd>↑</kbd> hop · swipe or <kbd>←</kbd><kbd>→</kbd><kbd>↓</kbd> dodge · <kbd>C</kbd> cash out</p>`));
+    const gameDialog = h(`<dialog class="rr-dialog" aria-label="Road Rooster game view">
+      <div class="rr-toolbar"><span>Road Rooster</span><button type="button" data-exit>Exit game view</button></div>
+    </dialog>`);
+    controls.after(gameDialog);
+    const exitView = gameDialog.querySelector('[data-exit]');
+    for (const type of ['gesturestart', 'gesturechange', 'wheel', 'contextmenu']) {
+      gameDialog.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+    }
+    function enterGameView() {
+      if (gameDialog.open || !matchMedia('(any-pointer: coarse)').matches) return;
+      gameDialog.append(viewEl, pad);
+      gameDialog.showModal();
+      document.documentElement.classList.add('rr-playing');
+    }
+    function leaveGameView() {
+      if (!gameDialog.open) return;
+      gameDialog.close();
+      stage.append(viewEl);
+      playBtn.after(pad);
+      document.documentElement.classList.remove('rr-playing');
+      stopHold();
+      if (!destroyed) renderControls();
+    }
+    exitView.addEventListener('click', leaveGameView);
+    gameDialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      leaveGameView();
+    });
     const bestEl = readout.querySelector('[data-best]');
     const valueEl = readout.querySelector('[data-value]');
 
@@ -113,7 +151,7 @@ export default {
     let seed = 1 + Math.floor(Math.random() * 2147483640); // a demo road until the first run
     let lanes = new Map();
     const lane = (r) => {
-      if (!lanes.has(r)) lanes.set(r, rrLane(seed, r));
+      if (!lanes.has(r)) lanes.set(r, scoreMode ? scoreLane(seed, r) : rrLane(seed, r));
       return lanes.get(r);
     };
     let runT0 = performance.now() - 20000; // world clock origin (demo traffic is mid-flow)
@@ -121,6 +159,8 @@ export default {
     let row = 0;
     let col = RR.START_COL;
     let best = 0;
+    let landedAt = 0;
+    const ridingCol = (t) => col + (lane(row).speed || 0) * (t - landedAt);
     let lastCheck = 0;
     let deathAt = null; // { t, cause, x, y }
     let cashedAt = null; // { t, mult, pay }
@@ -135,6 +175,8 @@ export default {
 
     function resetRun() {
       endT = null;
+      cam = -1.6;
+      landedAt = 0;
       lanes = new Map();
       moves = [];
       row = 0;
@@ -165,7 +207,7 @@ export default {
       H = viewEl.clientHeight;
       canvas.width = Math.round(W * dpr);
       canvas.height = Math.round(H * dpr);
-      T = Math.max(34, Math.min(W / RR.COLS, H / 7.4));
+      T = Math.min(W / RR.COLS, H / 7.4);
       boardLeft = (W - RR.COLS * T) / 2;
       glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, T);
       glowGrad.addColorStop(0, 'rgba(255,246,210,.26)');
@@ -173,7 +215,8 @@ export default {
       glowGrad.addColorStop(1, 'rgba(255,240,200,0)');
       const ts = Math.max(16, Math.round(T / 2));
       pats = {
-        asphalt: ctx.createPattern(noiseTile(160, '#1d1822', [[1400, ['rgba(255,255,255,.045)', 'rgba(0,0,0,.18)', 'rgba(140,120,160,.05)'], 1.3], [14, ['rgba(0,0,0,.18)'], 9]]), 'repeat'),
+        asphalt: ctx.createPattern(noiseTile(160, '#424756', [[1400, ['rgba(255,255,255,.045)', 'rgba(0,0,0,.18)', 'rgba(140,120,160,.05)'], 1.3], [14, ['rgba(0,0,0,.18)'], 9]]), 'repeat'),
+        grass: ctx.createPattern(noiseTile(80, '#77a64b', [[90, ['#87b557', '#689742'], 1.7]]), 'repeat'),
         walk: ctx.createPattern(tileTile(ts), 'repeat'),
         gravel: ctx.createPattern(noiseTile(96, '#2a211e', [[900, ['rgba(160,140,120,.14)', 'rgba(0,0,0,.25)', 'rgba(90,80,70,.2)'], 1.6]]), 'repeat'),
         gold: ctx.createPattern(noiseTile(64, '#6b4a10', [[300, ['rgba(255,220,120,.18)', 'rgba(60,30,0,.2)'], 1.4]]), 'repeat'),
@@ -191,6 +234,12 @@ export default {
 
     // ---------------------------------------------------------- HUD + controls
     function renderControls() {
+      viewEl.classList.toggle('rr-score-mode', scoreMode);
+      modePicker.disabled = phase !== 'idle' && phase !== 'over';
+      for (const field of [bet.el, ladder, readout]) field.hidden = scoreMode;
+      const bankValue = scoreMode ? `${best} pts` : fmt(round2((ticket?.amount || 0) * rrMult(best)));
+      viewEl.classList.toggle('rr-result', phase === 'over');
+      if (phase !== 'run') stopHold();
       const live = phase === 'run' || phase === 'countdown';
       playBtn.disabled = phase === 'starting' || phase === 'ending' || (live && best < 1);
       if (phase === 'idle' || phase === 'over') {
@@ -203,26 +252,29 @@ export default {
         playBtn.className = 'btn btn-play is-cash';
         playBtn.innerHTML = '<span>Banking…</span>';
       } else {
-        const val = round2((ticket?.amount || 0) * rrMult(best));
         playBtn.className = best >= 1 ? 'btn btn-play is-cash' : 'btn btn-outline btn-play';
-        playBtn.innerHTML = best >= 1 ? `<span>Cash out</span><span class="sub">${fmt(val)}</span>` : '<span>Hop to start earning</span>';
+        playBtn.innerHTML = best >= 1 ? `<span>Cash out</span><span class="sub">${bankValue}</span>` : '<span>Hop to start earning</span>';
       }
       bet.disable(phase !== 'idle' && phase !== 'over');
       pad.querySelectorAll('button').forEach((b) => (b.disabled = phase !== 'run'));
       // the same action, on the road itself (so phones never have to scroll mid-run)
-      const val = round2((ticket?.amount || 0) * rrMult(best));
       if (phase === 'idle' || phase === 'over') {
         fab.hidden = false;
         fab.className = 'rr-fab';
-        fab.innerHTML = `${phase === 'over' ? 'Run again' : 'Start run'} <span>${fmt(bet.value)}</span>`;
+        fab.innerHTML = phase === 'over' && gameDialog.open ? 'Continue' : `${phase === 'over' ? 'Run again' : 'Start run'} ${scoreMode ? '' : `<span>${fmt(bet.value)}</span>`}`;
       } else if ((phase === 'run' || phase === 'countdown') && best >= 1) {
         fab.hidden = false;
-        fab.className = 'rr-fab is-cash';
-        fab.innerHTML = `Cash out <span>${fmt(val)}</span>`;
+        fab.classList.add('is-cash');
+        fab.innerHTML = `Hold to cash out <span>${bankValue}</span>`;
       } else fab.hidden = true;
     }
     function renderHud() {
       scoreEl.textContent = String(best);
+      if (scoreMode) {
+        multEl.textContent = `Best ${record}`;
+        multEl.classList.remove('is-up');
+        return;
+      }
       const m = rrMult(best);
       multEl.textContent = `×${m.toFixed(2)}`;
       multEl.classList.toggle('is-up', m >= 1);
@@ -238,26 +290,31 @@ export default {
     // ---------------------------------------------------------- run flow
     async function start() {
       if (phase !== 'idle' && phase !== 'over') return;
-      const t = tryBet('rooster', bet);
-      if (!t) return;
-      phase = 'starting';
-      renderControls();
-      const r = await engine.roosterStart(t.amount);
-      if (!r?.ok) {
-        serverRefused(t, r, bet);
-        phase = 'idle';
-        if (!destroyed) renderControls();
-        return;
+      if (scoreMode) {
+        seed = 1 + Math.floor(Math.random() * 2147483640);
+      } else {
+        const t = tryBet('rooster', bet);
+        if (!t) return;
+        phase = 'starting';
+        renderControls();
+        const r = await engine.roosterStart(t.amount);
+        if (!r?.ok) {
+          serverRefused(t, r, bet);
+          phase = 'idle';
+          if (!destroyed) renderControls();
+          return;
+        }
+        store.confirm(t, r, { debited: t.amount });
+        ticket = t;
+        if (destroyed) return forfeit();
+        seed = r.seed;
       }
-      store.confirm(t, r, { debited: t.amount });
-      ticket = t;
-      if (destroyed) return forfeit();
-      seed = r.seed;
       resetRun();
       runT0 = performance.now() + COUNTDOWN_MS;
       phase = 'countdown';
+      enterGameView();
       const vr = viewEl.getBoundingClientRect();
-      if (vr.top < 0 || vr.bottom > window.innerHeight) viewEl.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      if (!gameDialog.open && (vr.top < 0 || vr.bottom > window.innerHeight)) viewEl.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
       center('<b>Ready…</b>', 'big');
       sfx.cluck();
       renderControls();
@@ -272,13 +329,22 @@ export default {
       }, COUNTDOWN_MS);
     }
 
+    const chaseLine = (t) => Math.max(0, (t - 6) * 0.65);
     /** Did anything get us between the last check and t (seconds)? */
     function checkDeath(t) {
       if (phase !== 'run' || t < lastCheck) return false;
       const L = lane(row);
+      if (scoreMode && chaseLine(t) > row + 1) {
+        die(t, 'line');
+        return true;
+      }
+      if (L.kind === 'river' && !onPlatform(L, ridingCol(t), t)) {
+        die(t, 'river');
+        return true;
+      }
       let tHit = rrHit(L, col, lastCheck, t, RR.HB_CLIENT);
       let cause = L.kind;
-      if (row < RR.FINISH) {
+      if (!scoreMode && row < RR.FINISH) {
         const th = Math.max(lastCheck, rrHawkTime(row, RR.HAWK_CLIENT));
         if (th <= t && (tHit < 0 || th < tHit)) {
           tHit = th;
@@ -297,34 +363,42 @@ export default {
       const t = worldT(now);
       if (checkDeath(t)) return;
       let nr = row;
-      let nc = col;
+      let nc = Math.round(ridingCol(t));
       if (m === 0) nr += 1;
       else if (m === 1) nr -= 1;
       else if (m === 2) nc -= 1;
       else if (m === 3) nc += 1;
       if (m === 2) chick.face = -1;
       if (m === 3) chick.face = 1;
-      if (nr < 0 || nr > RR.FINISH || nc < 0 || nc >= RR.COLS || lane(nr).blocked.includes(nc)) {
+      if (nr < 0 || (!scoreMode && nr > RR.FINISH) || nc < 0 || nc >= RR.COLS || lane(nr).blocked.includes(nc)) {
         chick.bumpT0 = now;
         chick.bumpDir = m;
         sfx.tap();
         return;
       }
-      moves.push([Math.round(t * 1000), m]);
+      if (!scoreMode) moves.push([Math.round(t * 1000), m]);
       chick.fromRow = visRow(now);
       chick.fromCol = visCol(now);
       chick.hopT0 = now;
       row = nr;
       col = nc;
+      landedAt = t;
+      if (lane(nr).kind === 'river' && !onPlatform(lane(nr), nc, t)) {
+        die(t, 'river');
+        return;
+      }
       sfx.hop();
       if (row > best) {
         best = row;
+        if (scoreMode && best % 64 === 0) {
+          for (const cachedRow of lanes.keys()) if (cachedRow < best - 64) lanes.delete(cachedRow);
+        }
         renderHud();
         renderControls();
         floats.push({ text: '+1', r: row, c: col, t0: now, color: '#ffd979' });
-        if (MILESTONES.includes(best)) milestone(best);
+        if (!scoreMode && MILESTONES.includes(best)) milestone(best);
       }
-      if (row >= RR.FINISH) finish();
+      if (!scoreMode && row >= RR.FINISH) finish();
     }
 
     function milestone(k) {
@@ -334,7 +408,7 @@ export default {
       setTimeout(() => phase === 'run' && centerEl.classList.contains('mile') && center(''), 1300);
       const { x, y } = chickScreen(performance.now());
       const r = canvas.getBoundingClientRect();
-      burst(r.left + x, r.top + y, { count: 40, colors: PALETTES.gold, speed: [3, 10] });
+      burst(r.left + x, r.top + y + ROAD_SLOPE * (x - W / 2), { count: 40, colors: PALETTES.gold, speed: [3, 10] });
     }
 
     function die(t, cause) {
@@ -389,6 +463,19 @@ export default {
     }
 
     async function endRun(endMs, cashout) {
+      if (scoreMode) {
+        const points = cashout ? best : 0;
+        record = Math.max(record, points, Number(storage.get('cc:rooster:score', 0)) || 0);
+        storage.set('cc:rooster:score', record);
+        phase = 'over';
+        const cause = { line: 'Caught by the red line', river: 'Fell in the river', road: 'Hit by a car', bus: 'Hit by a bus', train: 'Hit by a train' };
+        const illustration = cashout ? art?.happy : art?.flat;
+        const badge = illustration ? `<img class="rr-result-art" alt="" src="${illustration.src}">` : '';
+        center(`${badge}<strong>${cashout ? 'Score banked' : cause[deathAt?.cause] || 'Run ended'}</strong><b>${points}</b><small>Best ${record} · reached row ${best}</small>`, cashout ? 'win' : 'lose');
+        renderHud();
+        renderControls();
+        return;
+      }
       const t = ticket;
       const r = await engine.roosterEnd(moves.slice(), endMs, cashout);
       ticket = null;
@@ -408,10 +495,10 @@ export default {
       if (r.payout > 0) {
         const mult = r.mult;
         const won = r.payout - t.amount;
-        if (!r.finished) center(`<b>${fmtMult(mult)}</b><small>Banked ${fmt(r.payout)} · row ${r.score}${won > 0 ? ` · +${fmt(won)}` : ''}</small>`, 'win');
+        center(`<strong>${r.finished ? 'Golden egg' : 'Score banked'}</strong><b>${r.score}</b><small>${fmtMult(mult)} · ${fmt(r.payout)} chips${won > 0 ? ` · +${fmt(won)}` : ''}</small>`, 'win');
         const { x, y } = chickScreen(performance.now());
         const rc = canvas.getBoundingClientRect();
-        burst(rc.left + x, rc.top + y, { count: mult >= 2 ? 80 : 40, colors: PALETTES.gold, speed: [4, 12], kind: 'coin' });
+        burst(rc.left + x, rc.top + y + ROAD_SLOPE * (x - W / 2), { count: mult >= 2 ? 80 : 40, colors: PALETTES.gold, speed: [4, 12], kind: 'coin' });
         if (mult >= 5) coinRain(mult >= 20 ? 120 : 60);
         if (mult >= 1) sfx.win(mult >= 3 ? 2 : 1);
       } else if (cashout && !r.alive) {
@@ -439,14 +526,57 @@ export default {
       else start();
     };
     playBtn.addEventListener('click', act);
-    fab.addEventListener('click', act);
+    let holdTimer = null;
+    let bankPointer = null;
+    function stopHold() {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+      bankPointer = null;
+      fab.classList.remove('is-holding');
+    }
+    fab.style.setProperty('--hold-duration', `${BANK_HOLD_MS}ms`);
+    fab.addEventListener('pointerdown', (event) => {
+      if (phase !== 'run' || best < 1 || !event.isPrimary || event.button !== 0) return;
+      fab.setPointerCapture(event.pointerId);
+      bankPointer = event.pointerId;
+      fab.classList.add('is-holding');
+      holdTimer = setTimeout(() => {
+        stopHold();
+        cashOut();
+      }, BANK_HOLD_MS);
+    });
+    fab.addEventListener('pointermove', (event) => {
+      if (event.pointerId !== bankPointer) return;
+      const rect = fab.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) stopHold();
+    });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      fab.addEventListener(type, (event) => {
+        if (event.pointerId === bankPointer) stopHold();
+      });
+    }
+    window.addEventListener('blur', stopHold);
+    // A completed hold can settle before the finger lifts. Only a press begun
+    // on Start/Run again may start a new wager when its click arrives.
+    let startPress = false;
+    fab.addEventListener('pointerdown', () => { startPress = phase === 'idle' || phase === 'over'; });
+    fab.addEventListener('click', (event) => {
+      if (event.detail === 0 || startPress) {
+        if (phase === 'over' && gameDialog.open) {
+          leaveGameView();
+        } else act();
+      }
+      startPress = false;
+    });
     pad.addEventListener('click', (e) => {
       const b = e.target.closest('[data-m]');
       if (b) move(Number(b.dataset.m));
     });
     const KEYS = { ArrowUp: 0, KeyW: 0, Space: 0, ArrowDown: 1, KeyS: 1, ArrowLeft: 2, KeyA: 2, ArrowRight: 3, KeyD: 3 };
     const onKey = (e) => {
-      if (e.target.closest('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.querySelector('.modal-root, .drawer.is-open')) return;
+      if (e.target.closest?.('button, a') && ['Space', 'Enter'].includes(e.code)) return;
+      if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === 'KeyC' || e.code === 'Enter') {
         if (phase === 'run') {
           e.preventDefault();
@@ -466,6 +596,8 @@ export default {
     document.addEventListener('keydown', onKey);
     let touch = null;
     canvas.addEventListener('pointerdown', (e) => {
+      if (phase !== 'run' || !e.isPrimary || e.button !== 0) return;
+      canvas.setPointerCapture(e.pointerId);
       touch = { x: e.clientX, y: e.clientY, id: e.pointerId };
     });
     canvas.addEventListener('pointerup', (e) => {
@@ -478,7 +610,9 @@ export default {
       if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 3 : 2);
       else move(dy < 0 ? 0 : 1);
     });
-    canvas.addEventListener('pointercancel', () => (touch = null));
+    canvas.addEventListener('lostpointercapture', (event) => {
+      if (touch?.id === event.pointerId) touch = null;
+    });
 
     // ---------------------------------------------------------- chicken position (with hop easing)
     function hopU(now) {
@@ -490,7 +624,7 @@ export default {
     }
     function visCol(now) {
       const u = hopU(now);
-      return chick.fromCol + (col - chick.fromCol) * u;
+      return chick.fromCol + (ridingCol(endT ?? worldT(now)) - chick.fromCol) * u;
     }
     function chickScreen(now) {
       return { x: sx(visCol(now) + 0.5), y: H - (visRow(now) - cam + 0.5) * T };
@@ -537,7 +671,7 @@ export default {
         return;
       }
       if (k === 'start' || k === 'safe') {
-        ctx.fillStyle = glue(pats.walk);
+        ctx.fillStyle = glue(k === 'safe' ? pats.grass : pats.walk);
         ctx.fillRect(0, top, W, T + 1);
         ctx.fillStyle = 'rgba(255,240,220,.12)';
         ctx.fillRect(0, top, W, 3);
@@ -571,6 +705,33 @@ export default {
         ctx.fillRect(0, top, W, T);
         return;
       }
+      if (k === 'river') {
+        ctx.fillStyle = '#4299bc';
+        ctx.fillRect(0, top, W, T + 1);
+        ctx.fillStyle = '#67b6cc';
+        ctx.fillRect(0, top + 0.08 * T, W, 0.04 * T);
+        const mid = top + T / 2;
+        const spacing = L.period * T;
+        for (let x = sx(platformCenter(L, -boardLeft / T - L.period, t) + 0.5); x < W + spacing; x += spacing) {
+          const half = T * L.width / 2;
+          if (L.pads) {
+            ctx.fillStyle = '#8fca57';
+            ctx.beginPath();
+            ctx.moveTo(x, mid);
+            ctx.ellipse(x, mid, half, T * 0.31, 0, 0.4, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillStyle = '#a85c36';
+            ctx.fillRect(x - half, mid - 0.25 * T, 2 * half, T * 0.5);
+            ctx.fillStyle = '#cf8751';
+            ctx.fillRect(x - half, mid - 0.25 * T, 2 * half, T * 0.11);
+            ctx.beginPath();
+            ctx.ellipse(x + half, mid, T * 0.10, T * 0.25, 0, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+        }
+        return;
+      }
       if (k === 'train') {
         ctx.fillStyle = glue(pats.gravel);
         ctx.fillRect(0, top, W, T + 1);
@@ -596,7 +757,7 @@ export default {
           const dist = L2.dir === 1 ? edge - front : front - edge;
           if ((dist > 0 && dist / L2.v < 1.6) || (lo < RR.COLS + 1 && hi > -1)) soon = true;
         }
-        for (const px of [sx(-0.35), sx(RR.COLS + 0.35)]) {
+        for (const px of [Math.max(12, sx(-0.35)), Math.min(W - 12, sx(RR.COLS + 0.35))]) {
           ctx.fillStyle = '#2a2230';
           ctx.fillRect(px - 2, top + T * 0.12, 4, T * 0.76);
           const flash = soon && Math.floor(now / 220) % 2;
@@ -652,7 +813,7 @@ export default {
       if (!L.blocked.length) return;
       const top = rowTop(r);
       for (const c of L.blocked) {
-        const img = art.obstacles[Math.floor(rrRand(seed, r, 50 + c) * art.obstacles.length)];
+        const img = scoreMode ? art.tree : art.obstacles[Math.floor(rrRand(seed, r, 50 + c) * art.obstacles.length)];
         if (img) ctx.drawImage(img, sx(c) + T * 0.06, top - T * 0.08, T * 0.88, T * 0.88);
       }
     }
@@ -781,7 +942,8 @@ export default {
       g.addColorStop(1, 'rgba(255,236,200,0)');
       ctx.fillStyle = g;
       ctx.fillRect(x - T * 1.3, y - T * 1.3, T * 2.6, T * 2.6);
-      const s = T * 0.98;
+      if (scoreMode) sprite = art.runner;
+      const s = T * (scoreMode ? 0.70 : 0.98);
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(x, y + T * 0.34 - lift);
@@ -890,13 +1052,14 @@ export default {
       const dt = Math.min(0.05, (now - lastNow) / 1000);
       lastNow = now;
       if (!art || !W) return;
-      const t = worldT(now);
+      const t = endT ?? worldT(now);
       if (phase === 'run') checkDeath(t);
       // camera: keep the rooster in the lower third, never let the hawk line off the bottom
       const vr = visRow(now);
-      let target = vr - 2.2;
-      if (phase === 'run') target = Math.max(target, rrHawk(Math.max(0, t)) - 1.3, best - 4.6);
-      else if (endT != null && (phase === 'ending' || phase === 'over')) target = Math.max(target, rrHawk(Math.max(0, endT)) - 1.3, best - 4.6);
+      let target = scoreMode ? vr + 0.5 - 0.42 * H / T : vr - 2.2;
+      if (scoreMode && phase === 'run' && t > 6) dangerEl.style.opacity = String(clamp(1 - (row + 1 - chaseLine(t)) / 2, 0, 1));
+      if (!scoreMode && phase === 'run') target = Math.max(target, rrHawk(Math.max(0, t)) - 1.3, best - 4.6);
+      else if (!scoreMode && endT != null && (phase === 'ending' || phase === 'over')) target = Math.max(target, rrHawk(Math.max(0, endT)) - 1.3, best - 4.6);
       if (phase !== 'run') dangerEl.style.opacity = '0';
       target = Math.max(-1.6, target);
       cam += (target - cam) * Math.min(1, dt * 5);
@@ -905,10 +1068,20 @@ export default {
       ctx.clearRect(0, 0, W, H);
       const sk = now - shakeT0 < 400 ? shakeAmp * (1 - (now - shakeT0) / 400) : 0;
       if (sk) ctx.translate((Math.random() - 0.5) * sk, (Math.random() - 0.5) * sk);
-      const r0 = Math.floor(cam) - 1;
-      const r1 = Math.ceil(cam + H / T) + 1;
+      // Project every lane and actor together so the visible gap matches its hitbox.
+      const edgeOffset = ROAD_SLOPE * W / 2;
+      ctx.transform(1, ROAD_SLOPE, 0, 1, 0, -edgeOffset);
+      const r0 = Math.floor(cam - edgeOffset / T) - 1;
+      const r1 = Math.ceil(cam + (H + edgeOffset) / T) + 1;
       for (let r = r0; r <= r1; r++) drawGround(r, t, now);
       // the playfield: side margins sit in shadow
+      if (scoreMode && phase === 'run' && chaseLine(t) > 0) {
+        const lineY = rowTop(chaseLine(t) - 1);
+        ctx.fillStyle = '#ed4a55';
+        ctx.fillRect(0, lineY, W, 3);
+        ctx.fillStyle = 'rgba(154,22,44,.34)';
+        ctx.fillRect(0, lineY + 3, W, Math.max(0, H - lineY + edgeOffset));
+      }
       ctx.fillStyle = 'rgba(6,2,4,.42)';
       ctx.fillRect(0, 0, boardLeft, H);
       ctx.fillRect(boardLeft + RR.COLS * T, 0, W - boardLeft - RR.COLS * T, H);
@@ -916,14 +1089,14 @@ export default {
       ctx.fillRect(boardLeft - 1, 0, 2, H);
       ctx.fillRect(boardLeft + RR.COLS * T - 1, 0, 2, H);
       for (let r = r0; r <= r1; r++) drawObstacles(r);
-      drawEgg(now);
+      if (!scoreMode) drawEgg(now);
       // vehicles below the rooster first, then the rooster, then vehicles above (overlap reads right)
       const cr = Math.round(vr);
       for (let r = r0; r <= r1; r++) if (r <= cr) drawVehicles(r, t);
       drawChicken(now);
       for (let r = r0; r <= r1; r++) if (r > cr) drawVehicles(r, t);
       drawParticles();
-      drawHawk(now);
+      if (!scoreMode) drawHawk(now);
       // night vignette
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const v = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.3, W / 2, H * 0.55, Math.max(W, H) * 0.75);
@@ -950,6 +1123,15 @@ export default {
       });
     }
     // For automated play-tests (everything here is already on screen).
+    modePicker.addEventListener('change', () => {
+      if (modePicker.disabled) return;
+      scoreMode = modePicker.querySelector(':checked').value === 'score';
+      phase = 'idle';
+      resetRun();
+      center(`<b>Road Rooster</b><small>${scoreMode ? 'Cross lanes and bank your points' : 'Set your bet and start a run'}</small>`, 'intro');
+      renderControls();
+      renderHud();
+    });
     globalThis.__ccRooster = () => ({ seed, row, col, best, phase, t: worldT(performance.now()) });
     renderControls();
     renderHud();
@@ -958,6 +1140,10 @@ export default {
 
     return () => {
       destroyed = true;
+      delete globalThis.__ccRooster;
+      stopHold();
+      leaveGameView();
+      window.removeEventListener('blur', stopHold);
       cancelAnimationFrame(raf);
       ro.disconnect();
       document.removeEventListener('keydown', onKey);

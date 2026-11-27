@@ -315,3 +315,54 @@
 .rr-fab:active { transform: translateX(-50%) scale(0.95); }
 .rr-fab.is-cash { background: var(--rooster); color: #1a0a02; animation: pulse-ring 1.5s infinite; }
 .rr-fab[hidden] { display: none; }
+
+/* The modal keeps page links and scrolling out of the touch play surface. */
+html.rr-playing, html.rr-playing body { overflow: hidden; overscroll-behavior: none; }
+.rr-dialog {
+  position: fixed; inset: 0; margin: 0; width: 100%; height: 100%;
+  height: 100dvh; max-width: none; max-height: none; box-sizing: border-box;
+  border: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: #100b12; color: #fff; overflow: hidden; overscroll-behavior: none;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.rr-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.rr-dialog .rr-view { height: 100%; max-height: none; aspect-ratio: auto; }
+.rr-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-weight: 750; }
+.rr-toolbar button { color: #ffdb9b; min-height: 44px; background: transparent; }
+.rr-dialog .rr-pad { padding: 6px 10px; }
+.rr-pad button, .rr-fab { touch-action: manipulation; }
+.rr-dialog .rr-pad button, .rr-dialog .rr-fab { touch-action: none; }
+.rr-fab.is-cash { left: auto; right: 12px; transform: none; overflow: hidden; }
+.rr-fab.is-cash:active { transform: scale(.97); }
+.rr-fab.is-holding::after {
+  content: ''; position: absolute; inset: auto 0 0; height: 5px; background: #231405;
+  transform-origin: left; animation: rr-bank var(--hold-duration) linear forwards;
+}
+@keyframes rr-bank { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.rr-result .rr-center {
+  width: min(84%, 420px); padding: 16px 12px; background: #24313d;
+  border-block: 3px solid #ffd75e; box-shadow: 0 8px 22px #17101880;
+  transform: translate(-50%, -50%) rotate(-3deg);
+}
+.rr-result .rr-center strong { color: #ffdc67; font-size: 1.2rem; }
+.rr-result .rr-center b { font-family: var(--font-display); text-shadow: none; }
+.rr-result .rr-fab { background: #b7e660; color: #193612; }
+.rr-modes { display: flex; flex-wrap: wrap; gap: 8px; border: 0; padding: 0; margin: 0; }
+.rr-modes label { padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 12px; color: var(--text); cursor: pointer; }
+.rr-modes label:has(:checked) { background: var(--panel); border-color: var(--rooster); }
+.rr-modes input { accent-color: var(--rooster); }
+.game--rooster .controls [hidden] { display: none; }
+.rr-score-mode .rr-hud { top: 8%; justify-content: center; }
+.rr-score-mode .rr-score {
+  display: block; width: min(64%, 300px); padding: 6px 14px; text-align: center;
+  border: 3px solid #ede1c6; border-radius: 18px; background: #254650;
+  box-shadow: inset 0 -4px #172e3b, 0 4px 0 #12242b80;
+}
+.rr-score-mode .rr-score b { color: white; font: 800 clamp(28px, 8vmin, 52px)/1 var(--font-display); text-shadow: 0 2px #132932; }
+.rr-score-mode .rr-score span, .rr-score-mode .rr-mult { display: none; }
+.rr-score-mode .rr-fab.is-cash {
+  min-width: 86px; min-height: 72px; height: auto; max-width: 110px; padding: 10px 7px;
+  flex-direction: column; gap: 2px; font-size: 14px; color: white; background: #253d49; border: 2px solid #f5e7ce; border-radius: 18px;
+}
+.rr-score-mode .rr-fab.is-cash::before { content: ''; width: 17px; height: 22px; border-radius: 52% 52% 45% 45% / 66% 66% 36% 36%; background: #fff5d7; }
+.rr-result-art { width: clamp(46px, 12vmin, 84px); height: auto; }

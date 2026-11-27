@@ -1,7 +1,7 @@
 {
   "name": "CrankedCasino",
   "short_name": "Cranked",
-  "description": "Fake-money casino: Mines, Plinko, Slots and Crash.",
+  "description": "Fake-money casino: Road Rooster, Blackjack, Roulette, Mines, Plinko, Slots and Crash.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

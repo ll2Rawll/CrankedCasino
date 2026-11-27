@@ -17,7 +17,7 @@ const GAMES = [
   { id: 'crash', name: 'Crash', rank: 'J', suit: '♣', red: false, line: 'Cash out before the rocket blows.', tags: ['Up to 10,000×', 'Auto cash-out'] },
   { id: 'plinko', name: 'Plinko', rank: '10', suit: '♥', red: true, line: 'Drop it. Watch it bounce.', tags: ['Up to 1,000×', '3 risk levels'] },
   { id: 'mines', name: 'Mines', rank: '9', suit: '♠', red: false, line: 'Find gems, dodge the bombs.', tags: ['99% RTP', '1–24 mines'] },
-  { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Dodge the traffic. Cash out alive.', tags: ['Skill game', 'Up to 81×'] },
+  { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Beat your best score.', tags: ['Free score run', 'Chip run up to 81×'] },
 ];
 
 const TICKER = ['New: Road Rooster, dodge traffic for up to 81×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];

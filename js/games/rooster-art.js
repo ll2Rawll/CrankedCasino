@@ -217,9 +217,26 @@ const HAWK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140">
   <path d="M84 84 L80 96 M116 84 L120 96" stroke="#ffc94d" stroke-width="4" stroke-linecap="round"/>
 </svg>`;
 
+// Rear-facing score runner and roadside tree, drawn for the oblique course.
+const RUNNER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 88">
+  <g stroke-linejoin="round" stroke-width="3">
+    <path fill="#ed9f36" stroke="#8e4d24" d="M26 63h8v16l-10 3-7-3 9-4zM48 63h7v12l9 4-6 3-10-3z"/>
+    <path fill="#e04340" stroke="#94302c" d="M32 23l-3-11 7 2 3-11 6 8 5-5 1 14z"/>
+    <path fill="#fff8e5" stroke="#484754" d="M21 38q3-20 19-20 18 0 20 21l8 15-7 13q-18 13-40 0L12 54z"/>
+    <path fill="#d6d6ce" stroke="#9d9e9e" d="M15 47l12 8-3 10-10-6zM65 46l-12 9 4 9 9-7z"/>
+    <path fill="#fbf0d4" stroke="#afa89b" d="M30 60l4-15 7 8 8-9 1 16-10 7z"/>
+  </g></svg>`;
+const TREE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path fill="#284c40" opacity=".34" d="M24 87l24-13 47 8-23 13z"/>
+  <path fill="#755034" d="M40 46l15 3v37l-8 4-7-4z"/>
+  <path fill="#50914a" d="M15 22l25-13 34 10-23 15z"/>
+  <path fill="#397944" d="M15 22l36 12v36L15 58z"/>
+  <path fill="#2b633d" d="M51 34l23-15v37L51 70z"/>
+  </svg>`;
+
 /** Load every sprite. */
 export async function loadArt() {
-  const [r, b, f, h, flat, barrier, egg, bus, loco, coach, hawk, ...rest] = await Promise.all([
+  const [r, b, f, h, flat, barrier, egg, bus, loco, coach, hawk, runner, tree, ...rest] = await Promise.all([
     svgImg(rooster()),
     svgImg(rooster({ blink: true })),
     svgImg(rooster({ flap: true })),
@@ -231,12 +248,14 @@ export async function loadArt() {
     svgImg(LOCO),
     svgImg(COACH),
     svgImg(HAWK),
+    svgImg(RUNNER),
+    svgImg(TREE),
     ...CAR_TYPES.map((t) => svgImg(car(t))),
     ...OBSTACLES.map(svgImg),
   ]);
   const cars = rest.slice(0, CAR_TYPES.length);
   const obstacles = rest.slice(CAR_TYPES.length);
-  return { rooster: r, blink: b, flap: f, happy: h, flat, barrier, egg, bus, loco, coach, hawk, obstacles, cars: CAR_TYPES.map((t, i) => ({ type: t, img: cars[i] })) };
+  return { rooster: r, blink: b, flap: f, happy: h, flat, barrier, egg, bus, loco, coach, hawk, runner, tree, obstacles, cars: CAR_TYPES.map((t, i) => ({ type: t, img: cars[i] })) };
 }
 
 /** Standalone SVG of the rooster for the lobby card and the page header. */

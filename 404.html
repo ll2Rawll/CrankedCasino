@@ -11,7 +11,7 @@
       var parts = location.pathname.split('/').filter(Boolean);
       var base = location.hostname.endsWith('github.io') && parts.length ? '/' + parts[0] + '/' : '/';
       var last = parts[parts.length - 1] || '';
-      var games = ['mines', 'plinko', 'slots', 'crash', 'leaderboard', 'profile'];
+      var games = ['rooster', 'blackjack', 'roulette', 'mines', 'plinko', 'slots', 'crash', 'leaderboard', 'profile'];
       location.replace(base + (games.indexOf(last) > -1 ? '#/' + last : ''));
     })();
   </script>

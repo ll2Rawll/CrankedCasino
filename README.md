@@ -14,9 +14,9 @@ A free fake-money casino with a neon "after hours" look. Every player picks a us
 | **Crash** | A rocket climbs a live multiplier curve until it explodes. Cash out in time, or set an auto cash-out. | 99% |
 | **Plinko** | Drop balls through 8–16 rows of pegs, three risk levels, up to 1,000×. | ≈99% |
 | **Mines** | Flip tiles on a 5×5 grid, collect gems, dodge 1–24 bombs, cash out whenever you like. | 99% |
-| **Road Rooster** *(new)* | A skill game. Hop a rooster across a neon highway, dodging cars, buses and trains, with a hawk chasing you if you dawdle. Cash out any time for your furthest row: row 10 returns your bet, and every row after adds 7%, up to 81.27× at the golden egg on row 75. | Depends on how well you play |
+| **Road Rooster** *(new)* | Score run is free and tracks your best banked score in this browser. Cross traffic, trains, and rivers on logs and lily pads. Hold the egg to bank points. In chip run, hop a rooster across a neon highway, dodging cars, buses and trains, with a hawk chasing you if you dawdle. Cash out any time for your furthest row: row 10 returns your bet, and every row after adds 7%, up to 81.27× at the golden egg on row 75. | Depends on how well you play |
 
-The server decides every card, spin, bounce and crash with a cryptographic random number generator; the browser only animates the result. Road Rooster is the exception: it's a skill game. The server hands out a seed that lays out the traffic, and when you cash out it replays your moves against the same traffic before paying.
+The server decides every card, spin, bounce and crash with a cryptographic random number generator; the browser only animates the result. Road Rooster is a skill game. Score runs play locally. In chip runs, the server hands out a seed that lays out the traffic, and when you cash out it replays your moves against the same traffic before paying.
 
 **Also included**
 

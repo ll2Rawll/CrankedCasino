@@ -459,7 +459,7 @@ async function boot() {
     } catch {
       /* ignore */
     }
-    if (!seen) setTimeout(() => !store.signedIn && !document.querySelector('.modal-root') && openAccount(), 1400);
+    if (!seen) setTimeout(() => !store.signedIn && currentRoute() !== 'rooster' && !document.querySelector('.modal-root') && openAccount(), 1400);
   }
   navigate();
 }
