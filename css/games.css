@@ -366,3 +366,5 @@ html.rr-playing, html.rr-playing body { overflow: hidden; overscroll-behavior: n
 }
 .rr-score-mode .rr-fab.is-cash::before { content: ''; width: 17px; height: 22px; border-radius: 52% 52% 45% 45% / 66% 66% 36% 36%; background: #fff5d7; }
 .rr-result-art { width: clamp(46px, 12vmin, 84px); height: auto; }
+/* Outside the modal the road is part of a normal, scrollable page. */
+@media (any-pointer: coarse) { .rr-stage .rr-view canvas { touch-action: auto; } }
