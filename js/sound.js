@@ -188,6 +188,25 @@ export const sfx = {
     tone({ freq: 320, slideTo: 820, type: 'sine', dur: 0.16, gain: 0.08 });
     noise({ dur: 0.07, gain: 0.05, freq: 2400, type: 'bandpass', q: 1, delay: 0.02 });
   },
+  // ---- Night Flight
+  wing() {
+    // a quick feathered whip
+    noise({ dur: 0.09, gain: 0.11, freq: 2200, to: 700, type: 'bandpass', q: 1.4, attack: 0.004 });
+    tone({ freq: 520, slideTo: 380, type: 'triangle', dur: 0.05, gain: 0.025 });
+  },
+  point() {
+    tone({ freq: 988, type: 'square', dur: 0.06, gain: 0.035 });
+    tone({ freq: 1319, type: 'square', dur: 0.11, gain: 0.035, delay: 0.055 });
+    tone({ freq: 1319, type: 'sine', dur: 0.16, gain: 0.05, delay: 0.055 });
+  },
+  smack() {
+    noise({ dur: 0.16, gain: 0.32, freq: 1600, to: 220, type: 'lowpass', attack: 0.001 });
+    tone({ freq: 150, slideTo: 60, type: 'sine', dur: 0.16, gain: 0.4 });
+  },
+  plunge() {
+    tone({ freq: 760, slideTo: 140, type: 'triangle', dur: 0.5, gain: 0.07 });
+    noise({ dur: 0.45, gain: 0.04, freq: 1800, to: 300, type: 'bandpass', q: 0.8, attack: 0.05 });
+  },
   thud() {
     noise({ dur: 0.09, gain: 0.08, freq: 700, type: 'lowpass' });
     tone({ freq: 160, slideTo: 90, type: 'sine', dur: 0.08, gain: 0.08 });
