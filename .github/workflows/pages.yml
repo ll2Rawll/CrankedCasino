@@ -1,7 +1,7 @@
-# Publishes the casino to GitHub Pages.
-# Works when Settings → Pages → Source is "GitHub Actions". If the source is
-# "Deploy from a branch" (or Pages is off), this job skips itself and leaves a
-# note in the run summary, so it never fails.
+# Publishes the casino to GitHub Pages when Settings → Pages → Source is
+# "GitHub Actions". With "Deploy from a branch" (the current setting), GitHub's
+# own "pages build and deployment" run publishes the site instead, and the
+# deploy job below is skipped, so this workflow never fails or double-deploys.
 name: Deploy to GitHub Pages
 
 on:
@@ -15,15 +15,14 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-actions
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  check:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      build_type: ${{ steps.source.outputs.build_type }}
     steps:
       - name: Check the Pages source
         id: source
@@ -35,20 +34,21 @@ jobs:
           echo "build_type=$type" >> "$GITHUB_OUTPUT"
           echo "Pages source: $type"
           if [ "$type" != "workflow" ]; then
-            echo "::notice title=Pages not deployed by this workflow::Pages source is '$type'. Set Settings → Pages → Source to 'GitHub Actions' to deploy from here."
+            echo "::notice title=Published by branch deploy::Pages source is '$type', so GitHub's own pages build publishes the site."
           fi
 
+  deploy:
+    needs: check
+    if: needs.check.outputs.build_type == 'workflow'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - uses: actions/checkout@v4
-        if: steps.source.outputs.build_type == 'workflow'
-
       - uses: actions/configure-pages@v5
-        if: steps.source.outputs.build_type == 'workflow'
-
       - uses: actions/upload-pages-artifact@v3
-        if: steps.source.outputs.build_type == 'workflow'
         with:
           path: .
-
       - id: deployment
         uses: actions/deploy-pages@v4
-        if: steps.source.outputs.build_type == 'workflow'
