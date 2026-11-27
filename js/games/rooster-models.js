@@ -19,6 +19,7 @@ function depth([x, y, z]) {
   return (x * sy - y * cy) * cp + z * sp;
 }
 const cache = new Map();
+const silhouettes = new Map();
 const colors = ['#ef5144', '#eab43a', '#60aadb', '#96bd43', '#f38036', '#86bdd0', '#df635a', '#4bb5a6'];
 
 function model(kind, variant, direction) {
@@ -261,7 +262,9 @@ function model(kind, variant, direction) {
 }
 
 export function stamp(kind, variant = 0, direction = 1) {
-  const key = [kind, variant, direction].join('/');
+  if (kind === 'taxi' || kind === 'rock') variant = 0;
+  if (kind === 'pad' && variant !== 0) variant = 1;
+  const key = `${kind}/${variant}/${direction}`;
   if (cache.has(key)) return cache.get(key);
   const { faces, points } = model(kind, variant, direction);
   const coords = points.map(project);
@@ -326,6 +329,17 @@ export function stamp(kind, variant = 0, direction = 1) {
   light.addColorStop(1, 'rgba(38,66,97,.18)');
   g.fillStyle = light;
   g.fillRect(left, top, right - left, bottom - top);
+  // Paint colors share geometry and cast the same shadow.
+  const painted = kind === 'car' || kind === 'bus' || kind === 'truck';
+  const shape = painted ? `${kind}/${direction}` : key;
+  if (!silhouettes.has(shape)) silhouettes.set(shape, castShadow(shape, points));
+  const penumbra = silhouettes.get(shape);
+  const result = { image, penumbra, left, top, width: image.width / resolution, height: image.height / resolution };
+  cache.set(key, result);
+  return result;
+}
+
+function castShadow(key, points) {
   // Project the mesh onto the ground along the sunlight and retain its convex silhouette.
   const cast = points.map(([x, y, z]) => [x + 1.10 * z, y - 0.63 * z]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   function boundary(vertices) {
@@ -360,8 +374,5 @@ export function stamp(kind, variant = 0, direction = 1) {
   sg.shadowBlur=4;
   sg.globalAlpha=.40;
   sg.fill(shadow);
-  const penumbra={image:shadeMap,x:x0,y:y0,w:shadeMap.width/shadowScale,h:shadeMap.height/shadowScale};
-  const result = { image, penumbra, left, top, width: image.width / resolution, height: image.height / resolution };
-  cache.set(key, result);
-  return result;
+  return { key, image: shadeMap, x: x0, y: y0, w: shadeMap.width / shadowScale, h: shadeMap.height / shadowScale };
 }

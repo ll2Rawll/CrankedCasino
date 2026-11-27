@@ -1,17 +1,11 @@
 import { RR, rrFront } from '../math.js';
 import { courseMaterials } from './rooster-materials.js';
 import { plane, stamp, logTop, padTop } from './rooster-models.js';
-
-const road = (k) => k === 'road' || k === 'bus';
-const meadow = (k) => k === 'start' || k === 'safe';
-function variation(seed, row, column) {
-  let h = Math.imul(seed ^ Math.imul(row, 65537), 0x45d9f3b) ^ Math.imul(column, 0x27d4eb2d);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  return (h ^ (h >>> 16)) >>> 0;
-}
+import { road, meadow, variation, rasterLayers } from './rooster-layers.js';
 
 export function landscape(ctx) {
   let materials;
+  const layers = rasterLayers(ctx);
   let cameraRow = 0,
     cameraCol = RR.START_COL,
     scale = 1,
@@ -26,6 +20,7 @@ export function landscape(ctx) {
     };
   }
   function reset() {
+    layers.reset();
     cameraRow = 0;
     cameraCol = RR.START_COL;
   }
@@ -84,9 +79,8 @@ export function landscape(ctx) {
       if (p.x < -4 * scale || p.x > W + 4 * scale || p.y < -2 * scale || p.y > H + 3 * scale) return;
       actors.push({ kind, x, r, p, depth: Math.max(p.y, minDepth), variant, dir, size, lift, stretch });
     }
+    layers.ground({ W, H, dpr, scale, origin, lane, seed, score, materials, minX, maxX, first, last });
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#9fbd50';
-    ctx.fillRect(0, 0, W, H);
     ctx.transform(plane.xx * scale, plane.xy * scale, plane.yx * scale, plane.yy * scale, origin.x, origin.y);
     function strip(x, r, w, h, color) {
       ctx.fillStyle = color;
@@ -104,25 +98,9 @@ export function landscape(ctx) {
     for (let r = first; r <= last; r++) {
       const L = lane(r),
         kind = r === -3 || r === -4 ? 'brook' : L.kind;
-      const salt = variation(seed, r, 19);
       const turf = meadow(kind);
       const water = kind === 'river' || kind === 'brook';
       const asphalt = road(kind);
-      const tone = water
-        ? ['#50b9d5', '#54c0db'][salt % 2]
-        : asphalt
-          ? ['#505961', '#586269'][salt % 2]
-          : kind === 'train'
-            ? '#8b8571'
-            : kind === 'finish'
-              ? '#d6b355'
-              : ['#98af49', '#94ab47', '#a0b451'][salt % 3];
-      strip(minX, r - 0.505, span, 1.013, tone);
-      if (turf || asphalt) {
-        ctx.globalCompositeOperation='soft-light';
-        strip(minX,r-.50,span,1.01,turf ? materials.grass : materials.road);
-        ctx.globalCompositeOperation='source-over';
-      }
       if (turf) {
         // The front edge of the raised sod shows soil above the road or water.
         if (!meadow(lane(r - 1).kind) || r === -2) {
@@ -168,12 +146,6 @@ export function landscape(ctx) {
         } else strip(minX, r + 0.46, span, 0.046, '#858c8d');
       } else if (water) {
         riverMask.rect(minX,r-.5,span,1);
-        const isWater = row => row === -3 || row === -4 || lane(row).kind === 'river';
-        const shore = ctx.createLinearGradient(0, r - .5, 0, r + .5);
-        shore.addColorStop(0, isWater(r - 1) ? '#277791' : '#8bcead');
-        shore.addColorStop(.45, '#329ca8');
-        shore.addColorStop(1, isWater(r + 1) ? '#277791' : '#8bcead');
-        strip(minX, r - .505, span, 1.013, shore);
         strip(minX,r-.5,span,1,materials.water);
         if (impact && touchdown.row === r) {
           ctx.save();
@@ -291,15 +263,12 @@ export function landscape(ctx) {
       ctx.restore();
     }
     ctx.restore();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const a of actors) {
       if (a.kind === 'egg' || a.kind === 'hawk') continue;
       a.sprite = stamp(a.kind, a.variant, a.dir);
-      ctx.save();
-      ctx.translate(a.x + 1.10 * a.lift, a.r - .63 * a.lift);
-      ctx.scale(a.size * a.stretch, a.size);
-      const sh = a.sprite.penumbra;
-      ctx.drawImage(sh.image,sh.x,sh.y,sh.w,sh.h);
-      ctx.restore();
+      const p = point(a.x + 1.10 * a.lift, a.r - .63 * a.lift);
+      layers.shadow(a.sprite.penumbra, p.x * dpr, p.y * dpr, a.size, a.stretch);
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (const a of actors) {
@@ -332,15 +301,8 @@ export function landscape(ctx) {
       ctx.drawImage(s.image, s.left * u, s.top * u, s.width * u, s.height * u);
       ctx.restore();
     }
-    // Wide, soft sunlight and cool skylight frame the course without masking hazards.
-    const sunlight=ctx.createLinearGradient(0,0,W,H*.54);
-    sunlight.addColorStop(0,'rgba(255,218,149,.25)');
-    sunlight.addColorStop(.28,'rgba(251,210,136,.065)');
-    sunlight.addColorStop(.45,'rgba(255,235,177,.14)');
-    sunlight.addColorStop(.66,'rgba(253,222,161,.018)');
-    sunlight.addColorStop(1,'rgba(35,66,99,.10)');
-    ctx.fillStyle=sunlight;
-    ctx.fillRect(0,0,W,H);
+    layers.sunlight();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   return { draw, reset, point };
 }

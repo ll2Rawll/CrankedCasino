@@ -44,8 +44,11 @@ export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+let motionQuery;
 export function reducedMotion() {
-  return document.documentElement.dataset.motion === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (document.documentElement.dataset.motion === 'reduced') return true;
+  motionQuery ??= matchMedia('(prefers-reduced-motion: reduce)');
+  return motionQuery.matches;
 }
 
 export function timeAgo(t) {

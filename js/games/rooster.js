@@ -64,7 +64,7 @@ export default {
       </div>`;
     const viewEl = stage.querySelector('.rr-view');
     const canvas = viewEl.querySelector('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     const scoreEl = stage.querySelector('[data-score]');
     const multEl = stage.querySelector('[data-mult]');
     const centerEl = stage.querySelector('[data-center]');
@@ -179,8 +179,9 @@ export default {
       dpr = Math.min(2, window.devicePixelRatio || 1);
       W = viewEl.clientWidth;
       H = viewEl.clientHeight;
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
+      const width = Math.round(W * dpr), height = Math.round(H * dpr);
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
       T = Math.min(W / 7.25, H / 8.8);
     }
     const ro = new ResizeObserver(() => resize());
