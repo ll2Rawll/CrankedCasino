@@ -1,5 +1,5 @@
 import { RR, rrFront } from '../math.js';
-import { plane, stamp } from './rooster-models.js';
+import { plane, stamp, logTop, padTop } from './rooster-models.js';
 
 const road = (k) => k === 'road' || k === 'bus';
 const meadow = (k) => k === 'start' || k === 'safe';
@@ -71,10 +71,12 @@ export function landscape(ctx) {
     const first = Math.floor(Math.min(...bounds.map((p) => p[1]))) - 1,
       last = Math.ceil(Math.max(...bounds.map((p) => p[1]))) + 1;
     const actors = [];
-    function add(kind, x, r, variant = 0, dir = 1, size = 1, lift = 0, stretch = 1) {
+    let footing = 0;
+    let supportDepth = -Infinity;
+    function add(kind, x, r, variant = 0, dir = 1, size = 1, lift = 0, stretch = 1, minDepth = -Infinity) {
       const p = point(x, r);
       if (p.x < -4 * scale || p.x > W + 4 * scale || p.y < -2 * scale || p.y > H + 3 * scale) return;
-      actors.push({ kind, x, r, p, variant, dir, size, lift, stretch });
+      actors.push({ kind, x, r, p, depth: Math.max(p.y, minDepth), variant, dir, size, lift, stretch });
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#9fbd50';
@@ -171,7 +173,15 @@ export function landscape(ctx) {
               strip(stern - .16, r + side * (.22 + .025 * wave), .32 + .06 * wave, .023, '#a2dfeb');
             }
           }
-          add(L.pads ? 'pad' : 'log', x, r, L.pads ? variation(seed, r, i) % 5 : 0, 1, 1, .016 * wave);
+          const bob = .016 * wave;
+          add(L.pads ? 'pad' : 'log', x, r, L.pads ? variation(seed, r, i) % 5 : 0, 1, 1, bob);
+          const weight = 1 - Math.abs(vr - r);
+          if (weight > 0 && Math.abs(vc - x) <= L.width / 2) {
+            // Blend the two surfaces during a hop. At rest the feet follow the
+            // exact top and bob of this platform, including near either end.
+            footing += weight * ((L.pads ? padTop : logTop) + bob);
+            supportDepth = Math.max(supportDepth, point(x, r).y);
+          }
         }
       } else if (kind === 'train') {
         for (let x = 0.39 * Math.floor(minX / 0.39); x < maxX; x += 0.39) strip(x, r - 0.43, 0.15, 0.86, '#806044');
@@ -212,7 +222,12 @@ export function landscape(ctx) {
     }
     if (score && phase === 'run' && line > 0) strip(minX, line - 1.03, span, 0.075, '#e45c4c');
     const gone = death?.cause === 'hawk';
-    if (!gone) add('hen', vc, vr, death ? 4 : hop > 0.13 ? 2 : 0, facing, 1, death ? 0 : hop + (banked ? 0.1 : 0));
+    if (!gone) {
+      const lift = footing + (death ? 0 : hop + (banked ? 0.1 : 0));
+      // A long log's center may be closer to the camera than its rider. Draw
+      // the hen after her support while allowing nearer traffic to cover her.
+      add('hen', vc, vr, death ? 4 : hop > 0.13 ? 2 : 0, facing, 1, lift, 1, supportDepth);
+    }
     if (!score && Math.abs(vr - RR.FINISH) < 20) add('egg', RR.START_COL, RR.FINISH);
     if (!score && gone) {
       const seconds = (now - death.at) / 1000;
@@ -221,7 +236,7 @@ export function landscape(ctx) {
       add('hen', vc, vr, 0, facing, 1, lift);
       add('hawk', vc + approach * 3, vr - .01, 0, 1, 1, .62 + approach * 4 + lift);
     }
-    actors.sort((a, b) => a.p.y - b.p.y);
+    actors.sort((a, b) => a.depth - b.depth);
     for (const a of actors) {
       if (a.kind === 'egg' || a.kind === 'hawk') continue;
       a.sprite = stamp(a.kind, a.variant, a.dir);

@@ -1,5 +1,9 @@
 // Orthographic model artwork. All positions are in lane units: x across the road,
 // y uphill, z above the ground. The silhouettes are rasterized once per variant.
+const logAxisHeight = 0.03;
+const logRadius = 0.22;
+export const logTop = logAxisHeight + logRadius;
+export const padTop = 0.07;
 const yaw = (23 * Math.PI) / 180;
 const pitch = (41 * Math.PI) / 180;
 const cy = Math.cos(yaw),
@@ -176,7 +180,7 @@ function model(kind, variant, direction) {
   } else if (kind === 'rock') {
     bulb(0, 0, 0.14, 0.37, 0.29, 0.23, '#98a29a', 7);
   } else if (kind === 'log') {
-    tube(0, 0, 0.03, 2.46, 0.22, '#bc7442');
+    tube(0, 0, logAxisHeight, 2.46, logRadius, '#bc7442');
     for (const side of [-1, 1]) {
       tube(side * 1.236, 0, 0.03, 0.025, 0.215, '#e2a365');
       tube(side * 1.251, 0, 0.03, 0.009, 0.135, '#b97b48');
@@ -187,7 +191,7 @@ function model(kind, variant, direction) {
     const arc = Array.from({ length: 15 }, (_, i) => [0.44 * Math.cos(0.4 + i * 0.408), 0.32 * Math.sin(0.4 + i * 0.408)]);
     const shape = [[0, 0], ...arc];
     solid(
-      [0.015, 0.07].map((z) => shape.map(([x, y]) => [x, y, z])),
+      [0.015, padTop].map((z) => shape.map(([x, y]) => [x, y, z])),
       '#86b83d',
     );
     face(
