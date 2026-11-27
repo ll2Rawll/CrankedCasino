@@ -228,6 +228,12 @@ export const sfx = {
     tone({ freq: 880, type: 'triangle', dur: 0.05, gain: 0.05 });
     tone({ freq: 660, type: 'triangle', dur: 0.08, gain: 0.05, delay: 0.06 });
   },
+  splash() {
+    // a body hitting water: a bright spray, a hollow bloop as it goes under, a bubble
+    noise({ dur: 0.34, gain: 0.3, freq: 3400, to: 480, type: 'bandpass', q: 0.7, attack: 0.003 });
+    tone({ freq: 330, slideTo: 115, type: 'sine', dur: 0.24, gain: 0.18, delay: 0.05 });
+    tone({ freq: 560, slideTo: 920, type: 'sine', dur: 0.08, gain: 0.05, delay: 0.27 });
+  },
   splat() {
     noise({ dur: 0.55, gain: 0.5, freq: 2200, to: 110, attack: 0.002 });
     tone({ freq: 170, slideTo: 38, type: 'sine', dur: 0.5, gain: 0.55 });

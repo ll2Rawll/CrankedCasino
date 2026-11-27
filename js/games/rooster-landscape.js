@@ -97,6 +97,12 @@ export function landscape(ctx) {
     }
     const age = touchdown ? (now - touchdown.at) / 500 : 1;
     const impact = age >= 0 && age < 1;
+    // After a run ends: a hop into the river finishes its arc, then the hen splashes in
+    // and sinks. Traffic flattens her where she stands.
+    const sinceImpact = death ? (now - (death.impactAt ?? death.at)) / 1000 : 0;
+    const airborne = !!death && sinceImpact < 0;
+    const drowned = death?.cause === 'river' && !airborne;
+    const flattened = !!death && !airborne && ['road', 'bus', 'train'].includes(death.cause);
     const span = maxX - minX;
     for (let r = first; r <= last; r++) {
       const L = lane(r),
@@ -144,6 +150,22 @@ export function landscape(ctx) {
           const h = variation(seed, r, x);
           const offset = (t * 0.16 + (h % 100) * 0.01) % 1;
           strip(x + offset, r + ((h % 6) - 3) * 0.1, 0.13 + (h % 18) * 0.01, 0.016, '#81d2e0');
+        }
+        if (drowned && death.row === r) {
+          // Foam where she went in, then rings spreading across the current.
+          const foam = Math.max(0, 1 - sinceImpact / 0.45);
+          if (foam > 0) ellipse(vc, r, .2 + .2 * sinceImpact, .14 + .12 * sinceImpact, `rgba(248,255,255,${.6 * foam})`);
+          ctx.save();
+          for (const delay of [0, .16, .34]) {
+            const ring = (sinceImpact - delay) / 1.1;
+            if (ring < 0 || ring >= 1) continue;
+            ctx.lineWidth = .034 * (1 - ring) + .008;
+            ctx.strokeStyle = `rgba(228,255,250,${.85 * (1 - ring)})`;
+            ctx.beginPath();
+            ctx.ellipse(vc, r, .2 + .95 * ring, .15 + .5 * ring, 0, 0, 2 * Math.PI);
+            ctx.stroke();
+          }
+          ctx.restore();
         }
         if (kind === 'brook') {
           add('bridge', RR.START_COL, r);
@@ -211,10 +233,15 @@ export function landscape(ctx) {
     if (score && phase === 'run' && line > 0) strip(minX, line - 1.03, span, 0.075, '#e45c4c');
     const gone = death?.cause === 'hawk';
     if (!gone) {
-      const lift = footing + (death ? 0 : hop + (banked ? 0.1 : 0));
+      const still = death && !airborne;
+      // Sinking: a quick dip, a bob back up, then under (the water surface clips her).
+      const s = sinceImpact;
+      const sink = !drowned ? 0 : s < .18 ? .45 * Math.sin((s / .18) * Math.PI / 2)
+        : s < .36 ? .45 - .15 * Math.sin(((s - .18) / .18) * Math.PI / 2) : Math.min(.95, .3 + (s - .36) * 1.7);
+      const lift = footing - sink + (still ? 0 : hop + (banked ? 0.1 : 0));
       // A long log's center may be closer to the camera than its rider. Draw
       // the hen after her support while allowing nearer traffic to cover her.
-      add('hen', vc, vr, death ? 4 : hop > 0.13 ? 2 : 0, facing, 1, lift, 1, supportDepth);
+      add('hen', vc, vr, still ? 4 : hop > 0.13 ? 2 : 0, facing, 1, lift, 1, supportDepth);
     }
     if (!score && Math.abs(vr - RR.FINISH) < 20) add('egg', RR.START_COL, RR.FINISH);
     if (!score && gone) {
@@ -261,6 +288,7 @@ export function landscape(ctx) {
     for (const a of actors) {
       if (a.kind === 'egg' || a.kind === 'hawk') continue;
       a.sprite = stamp(a.kind, a.variant, a.dir);
+      if (a.kind === 'hen' && drowned) continue; // the water swallows her shadow
       const p = point(a.x + 1.10 * a.lift, a.r - .63 * a.lift);
       layers.shadow(a.sprite.penumbra, p.x * dpr, p.y * dpr, a.size, a.stretch);
     }
@@ -284,8 +312,18 @@ export function landscape(ctx) {
         ctx.ellipse(contact.x, contact.y, scale * .16, scale * .067, .27, 0, 2 * Math.PI);
         ctx.fill();
       }
+      if (a.kind === 'hen' && drowned) {
+        const surface = point(a.x, a.r);
+        ctx.beginPath();
+        ctx.rect(0, 0, width, surface.y + .02 * scale);
+        ctx.clip();
+      }
       ctx.translate(x, y);
-      if (a.kind === 'hen' && !death) ctx.scale(1 + squash, 1 - squash);
+      if (a.kind === 'hen' && flattened) {
+        const k = Math.min(1, sinceImpact / .09);
+        const e = 1 - (1 - k) * (1 - k);
+        ctx.scale(1 + .45 * e, 1 - .74 * e);
+      } else if (a.kind === 'hen' && !death) ctx.scale(1 + squash, 1 - squash);
       if (a.stretch !== 1) {
         const angle = Math.atan2(plane.xy, plane.xx);
         ctx.rotate(angle);

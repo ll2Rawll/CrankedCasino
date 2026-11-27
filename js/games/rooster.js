@@ -11,10 +11,10 @@ import { store } from '../store.js';
 import { engine, errorText } from '../engine.js';
 import { RR, rrLane, rrHit, rrHawk, rrHawkTime, rrMult, rrFront } from '../math.js';
 import { sfx, haptic } from '../sound.js';
-import { burst, PALETTES, coinRain, shake } from '../fx.js';
+import { burst, PALETTES, coinRain } from '../fx.js';
 import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
-import { scoreLane, onPlatform } from './rooster-course.js';
-import { landscape } from './rooster-landscape.js?v=72fac2661382';
+import { scoreLane, onPlatform } from './rooster-course.js?v=c79a63fcecc8';
+import { landscape } from './rooster-landscape.js?v=4d2f85abb0a0';
 import { loadArt } from './rooster-art.js';
 
 const HOP_MS = 110;
@@ -24,6 +24,9 @@ const SCORE_COURSE_SPEED = 0.90;
 const SWIPE_PX = 10;
 const COUNTDOWN_MS = 1500;
 const BANK_HOLD_MS = 450;
+// How long a finished run stays on screen before the result panel rises.
+const RESULT_DEATH_MS = 750;
+const RESULT_BANK_MS = 300;
 const MILESTONES = [10, 20, 30, 40, 50, 60, 75];
 
 const RULES = `
@@ -67,6 +70,7 @@ export default {
     const viewEl = stage.querySelector('.rr-view');
     const canvas = viewEl.querySelector('canvas');
     const ctx = canvas.getContext('2d', { alpha: false });
+    canvas.addEventListener('animationend', () => canvas.classList.remove('is-jolted'));
     const scoreEl = stage.querySelector('[data-score]');
     const multEl = stage.querySelector('[data-mult]');
     const centerEl = stage.querySelector('[data-center]');
@@ -142,7 +146,7 @@ export default {
     let lastTouchdown = null;
     const ridingCol = (t) => col + (lane(row).speed || 0) * (t - landedAt);
     let lastCheck = 0;
-    let deathAt = null; // { t, cause, x, y }
+    let deathAt = null; // { t, cause, at, row, col, impactAt, struck }
     let cashedAt = null; // { t, mult, pay }
     const chick = { fromRow: 0, fromCol: RR.START_COL, fromLift: 0, hopT0: -1e9, duration: HOP_MS, face: 1, bumpT0: -1e9, bumpDir: 0 };
     const scene = landscape(ctx);
@@ -389,26 +393,56 @@ export default {
       phase = 'ending';
       endT = t;
       const now = performance.now();
-      deathAt = { t, cause, at: now, row, col };
+      // A hop that ends the run still finishes its arc: the splash or the strike lands
+      // with the rooster, on the tile where the run ended (see strike, called from tick).
+      deathAt = { t, cause, at: now, row, col, impactAt: Math.max(now, chick.hopT0 + chick.duration) };
       const endMs = Math.max(moves.length ? moves[moves.length - 1][0] : 0, Math.round(t * 1000));
       renderControls();
       if (cause === 'hawk') {
         sfx.screech();
         center('<b>Snatched!</b><small>The hawk caught you dawdling</small>', 'lose');
-      } else {
-        sfx.splat();
-        haptic([40, 30, 70]);
-        shake(stage, true);
-        const { x, y } = chickScreen(now);
-        for (let i = 0; i < 26; i++) {
-          const a = Math.random() * Math.PI * 2;
-          const v = 1.5 + Math.random() * 5;
-          particles.push({ kind: 'feather', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, life: 70 + Math.random() * 50, max: 120, c: i % 3 ? '#fff6e6' : '#e9d6b4' });
-        }
+      } else if (!scoreMode) {
         center(`<b>Splat!</b><small>${cause === 'train' ? 'Hit by a train' : cause === 'bus' ? 'Flattened by a bus' : 'Hit by a car'} on row ${row}</small>`, 'lose');
       }
       renderHud();
       endRun(endMs, false);
+    }
+
+    function strike(cause, now) {
+      const { x, y } = chickScreen(now);
+      if (cause === 'river') {
+        haptic(25);
+        splash(x, y);
+        return;
+      }
+      sfx.splat();
+      haptic([40, 30, 70]);
+      if (!reducedMotion()) {
+        canvas.classList.remove('is-jolted');
+        void canvas.offsetWidth; // restart the animation
+        canvas.classList.add('is-jolted');
+      }
+      featherBurst(x, y, cause === 'train' ? 34 : 26, cause === 'train' ? 1.5 : 1);
+    }
+
+    function featherBurst(x, y, count, power = 1) {
+      for (let i = 0; i < count; i++) {
+        // Burst up and out, then flutter down and settle on the ground around the rooster.
+        const a = -Math.PI * (0.08 + 0.84 * Math.random());
+        const v = (2 + Math.random() * 4.5) * power;
+        particles.push({ kind: 'feather', x, y: y - T * 0.25, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3,
+          sway: Math.random() * 6, floor: y + T * (Math.random() * 0.5 - 0.12), life: 150 + Math.random() * 60, c: i % 3 ? '#fff6e6' : '#e9d6b4' });
+      }
+    }
+
+    function splash(x, y) {
+      sfx.splash?.(); // optional: an older cached sound module may lack it
+      for (let i = 0; i < 22; i++) {
+        const a = -Math.PI * (0.12 + 0.76 * Math.random());
+        const v = 1.6 + Math.random() * 4.2;
+        particles.push({ kind: 'drop', x: x + (Math.random() - 0.5) * T * 0.3, y, vx: Math.cos(a) * v * 0.7, vy: Math.sin(a) * v,
+          floor: y + T * Math.random() * 0.18, life: 70, size: 0.025 + Math.random() * 0.03, c: i % 3 ? '#e9fbff' : '#a9dfee' });
+      }
     }
 
     function finish() {
@@ -439,13 +473,17 @@ export default {
         const points = cashout ? best : 0;
         record = Math.max(record, points, Number(storage.get('cc:rooster:score', 0)) || 0);
         storage.set('cc:rooster:score', record);
-        phase = 'over';
-        const cause = { line: 'Caught by the red line', river: 'Fell in the river', road: 'Hit by a car', bus: 'Hit by a bus', train: 'Hit by a train' };
-        const illustration = cashout ? art?.happy : art?.flat;
-        const badge = illustration ? `<img class="rr-result-art" alt="" src="${illustration.src}">` : '';
-        center(`${badge}<strong>${cashout ? 'Score banked' : cause[deathAt?.cause] || 'Run ended'}</strong><b>${points}</b><small>Best ${record} · reached row ${best}</small>`, cashout ? 'win' : 'lose');
-        renderHud();
-        renderControls();
+        // Let the splash, the flattening or the bank register before the result covers it.
+        setTimeout(() => {
+          if (destroyed || phase !== 'ending') return;
+          phase = 'over';
+          const cause = { line: 'Caught by the red line', river: 'Fell in the river', road: 'Hit by a car', bus: 'Hit by a bus', train: 'Hit by a train' };
+          const illustration = cashout ? art?.happy : art?.flat;
+          const badge = illustration ? `<img class="rr-result-art" alt="" src="${illustration.src}">` : '';
+          center(`${badge}<strong>${cashout ? 'Score banked' : cause[deathAt?.cause] || 'Run ended'}</strong><b>${points}</b><small>Best ${record} · reached row ${best}</small>`, cashout ? 'win' : 'lose');
+          renderHud();
+          renderControls();
+        }, cashout ? RESULT_BANK_MS : RESULT_DEATH_MS);
         return;
       }
       const t = ticket;
@@ -678,23 +716,45 @@ export default {
       const step = dt * 60;
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
-        p.x += p.vx * step;
-        p.y += p.vy * step;
-        p.vx *= 0.96 ** step;
-        p.vy = p.vy * 0.96 ** step + 0.12 * step;
-        p.rot += p.vr * step;
         p.life -= step;
+        if (p.kind === 'drop') {
+          // Spray is heavy: it arcs up and drops straight back into the river.
+          p.x += p.vx * step;
+          p.y += p.vy * step;
+          p.vy += 0.32 * step;
+          if (p.life <= 0 || (p.vy > 0 && p.y > p.floor)) {
+            particles.splice(i, 1);
+            continue;
+          }
+          ctx.globalAlpha = Math.min(1, p.life / 20);
+          ctx.fillStyle = p.c;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, T * p.size, T * p.size * (1 + Math.min(1.5, Math.abs(p.vy) * 0.12)), Math.atan2(p.vy, p.vx) - Math.PI / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          continue;
+        }
         if (p.life <= 0) {
           particles.splice(i, 1);
           continue;
         }
+        if (!p.rest) {
+          // Feathers burst out, then drift down slowly, rocking side to side, and settle.
+          p.sway += 0.16 * step;
+          p.x += (p.vx + Math.sin(p.sway) * 0.7) * step;
+          p.y += p.vy * step;
+          p.vx *= 0.93 ** step;
+          p.vy = Math.min(0.9, p.vy * 0.93 ** step + 0.1 * step);
+          p.rot += (p.vr + Math.cos(p.sway) * 0.04) * step;
+          if (p.vy > 0 && p.y >= p.floor) p.rest = true;
+        }
         ctx.save();
-        ctx.globalAlpha = Math.min(1, p.life / 30);
+        ctx.globalAlpha = Math.min(1, p.life / 40);
         ctx.translate(p.x, p.y);
-        ctx.rotate(p.rot);
+        ctx.rotate(p.rest ? p.rot * 0.2 + 1.2 : p.rot);
         ctx.fillStyle = p.c;
         ctx.beginPath();
-        ctx.ellipse(0, 0, T * 0.09, T * 0.035, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, T * 0.09, T * (p.rest ? 0.026 : 0.035), 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -728,7 +788,12 @@ export default {
       if (phase === 'run') checkDeath(t);
       const line = scoreMode ? chaseLine(t) : rrHawk(t);
       const warning = phase === 'run' && (scoreMode ? t > 6 : t > 4);
-      dangerEl.style.opacity = String(warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0);
+      const caught = deathAt?.cause === 'line' ? clamp(1.4 - (now - deathAt.at) / 700, 0, 1) : 0;
+      dangerEl.style.opacity = String(Math.max(caught, warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0));
+      if (deathAt && deathAt.cause !== 'hawk' && !deathAt.struck && now >= deathAt.impactAt) {
+        deathAt.struck = true;
+        strike(deathAt.cause, now);
+      }
       const bump = clamp((now - chick.bumpT0) / 160, 0, 1);
       const nudge = Math.sin(bump * Math.PI) * .12;
       const player = pose(now);
@@ -780,7 +845,10 @@ export default {
       renderControls();
       renderHud();
     });
-    globalThis.__ccRooster = () => ({ seed, row, col, best, phase, t: worldT(performance.now()) });
+    globalThis.__ccRooster = () => {
+      const t = endT ?? worldT(performance.now());
+      return { seed, row, col, x: ridingCol(t), best, phase, t, cause: deathAt?.cause ?? null, record };
+    };
     renderControls();
     renderHud();
     center('<b>Road Rooster</b><small>Tap to hop · swipe left, right or back</small>', 'intro');

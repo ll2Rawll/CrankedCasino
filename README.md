@@ -14,6 +14,7 @@ A free fake-money casino with a neon "after hours" look. Every player picks a us
 | **Crash** | A rocket climbs a live multiplier curve until it explodes. Cash out in time, or set an auto cash-out. | 99% |
 | **Plinko** | Drop balls through 8–16 rows of pegs, three risk levels, up to 1,000×. | ≈99% |
 | **Mines** | Flip tiles on a 5×5 grid, collect gems, dodge 1–24 bombs, cash out whenever you like. | 99% |
+| **Night Flight** *(new)* | Free score chase. Tap to flap a kingfisher through the harbour's gates, one point a gate, with medals at 10, 20, 30 and 40. The flight follows the classic tap-to-flap arcade rules frame for frame. Your best score stays in this browser. | Free to play |
 | **Road Rooster** *(new)* | Score run is free and tracks your best banked score in this browser. Cross traffic, trains, and rivers on logs and lily pads. Hold the egg to bank points. In chip run, hop a rooster across a neon highway, dodging cars, buses and trains, with a hawk chasing you if you dawdle. Cash out any time for your furthest row: row 10 returns your bet, and every row after adds 7%, up to 81.27× at the golden egg on row 75. | Depends on how well you play |
 
 The server decides every card, spin, bounce and crash with a cryptographic random number generator; the browser only animates the result. Road Rooster is a skill game. Score runs play locally. In chip runs, the server hands out a seed that lays out the traffic, and when you cash out it replays your moves against the same traffic before paying.
@@ -104,6 +105,21 @@ There's no build step. The site is plain HTML, CSS and JavaScript modules, and t
 python3 -m http.server 8080
 # then open http://localhost:8080
 ```
+
+### Tests
+
+The game checks run with Node 18+. The browser tests drive Chromium through `playwright-core` with a fake clock, against a local server or the live site:
+
+```bash
+node tools/test-rooster-course.mjs        # Road Rooster's score course: variety, fairness, every course crossable
+node tools/test-flight-course.mjs         # Night Flight's physics and a proof every course is flyable
+BASE=http://localhost:8080/ node tools/test-rooster-input.mjs   # touch input on a phone screen
+BASE=http://localhost:8080/ node tools/test-rooster-run.mjs     # a pilot plays logs, pads, trains, banking and every way to lose
+BASE=http://localhost:8080/ node tools/test-night-flight.mjs    # a full flight, crash, board and retry
+node tools/stamp-versions.mjs             # after changing a module: refresh the ?v= cache tags
+```
+
+`SHOTS=<folder>` makes `test-rooster-run.mjs` save a screenshot of each moment it checks.
 
 ## Project layout
 

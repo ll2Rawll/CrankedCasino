@@ -110,7 +110,9 @@
 
 /* ---------- reset ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: smooth; overflow-x: hidden; overflow-x: clip; }
+/* Every control draws its own pressed state. The browser's translucent tap flash would
+   otherwise cover a whole game board on each tap (it is inherited, so set it once). */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: smooth; overflow-x: hidden; overflow-x: clip; -webkit-tap-highlight-color: transparent; }
 body {
   margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
   font-family: var(--font-ui); font-size: 16px; line-height: 1.5; font-weight: 430; letter-spacing: -0.005em;

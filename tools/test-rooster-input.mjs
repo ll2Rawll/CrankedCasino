@@ -24,11 +24,12 @@ try {
   await start.waitFor();
 
   await page.clock.pauseAt(new Date('2025-01-01T01:00:00Z'));
-  // Seed 48 has an open path through the first four rows at the times below.
+  // Seed 32 has an open path through the first four rows at the times below
+  // (road, road, bus, road; tools/rooster-pilot.mjs can check a seed's timings).
   await page.evaluate(() => {
     document.querySelector('.rr-fab').addEventListener('click', () => {
       const random = Math.random;
-      Math.random = () => 47.5 / 2147483640;
+      Math.random = () => 31.5 / 2147483640;
       setTimeout(() => { Math.random = random; }, 0);
     }, { capture: true, once: true });
   });
@@ -78,6 +79,8 @@ try {
     await page.clock.runFor(32);
     assert.deepEqual(await page.evaluate(() => [__ccRooster().row, __ccRooster().best]), [row, row]);
   }
+  await page.clock.runFor(300);
+  assert.equal(await page.evaluate(() => __ccRooster().phase), 'run', 'the rooster crossed four lanes unhurt');
   assert.deepEqual(errors, []);
   console.log('Passed takeoff before release, cancellation, one move per swipe and four consecutive forward taps.');
 } finally {

@@ -275,6 +275,16 @@
 .rr-view { position: relative; width: 100%; aspect-ratio: 1 / 1.16; border-radius: inherit; overflow: hidden; background: #0d0710; }
 @media (min-width: 700px) { .rr-view { aspect-ratio: 1 / 0.74; max-height: max(440px, calc(100dvh - 250px)); } }
 .rr-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: pointer; }
+/* A hit jolts the road but not the score. Scaling up first keeps the canvas edges hidden. */
+.rr-view canvas.is-jolted { animation: rr-jolt 0.42s cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes rr-jolt {
+  0%, 100% { transform: none; }
+  10% { transform: scale(1.05) translate(-4px, 2px); }
+  25% { transform: scale(1.05) translate(4px, -2px); }
+  40% { transform: scale(1.04) translate(-3px, 1px); }
+  55% { transform: scale(1.03) translate(2px, -1px); }
+  75% { transform: scale(1.015) translate(-1px, 0); }
+}
 .rr-hud { position: absolute; left: 0; right: 0; top: 0; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 16px; pointer-events: none; }
 .rr-score { display: grid; justify-items: start; line-height: 0.9; }
 .rr-score b { font-family: var(--font-neon); font-size: clamp(40px, 9vw, 62px); color: #fff; text-shadow: 0 0 2px #fff, 0 0 12px var(--rooster), 0 0 30px var(--rooster); }
@@ -374,7 +384,13 @@ html.rr-playing, html.rr-playing body { overflow: hidden; overscroll-behavior: n
   width: 104px; min-height: 72px; height: auto; white-space: normal; text-align: center; line-height: 1.1; padding: 8px;
   flex-direction: column; gap: 2px; font-size: 14px; color: white; background: #253d49; border: 2px solid #f5e7ce; border-radius: 18px;
 }
-.rr-score-mode .rr-fab.is-cash::before { content: ''; width: 17px; height: 22px; border-radius: 52% 52% 45% 45% / 66% 66% 36% 36%; background: #fff5d7; }
+.rr-score-mode .rr-fab.is-cash::before {
+  content: ''; width: 17px; height: 22px; border-radius: 52% 52% 45% 45% / 66% 66% 36% 36%;
+  /* Gold below the halfway line of a double-height fill: holding slides it up the egg. */
+  background: linear-gradient(to top, #ffc94d 50%, #fff5d7 50%) 0 0 / 100% 200%;
+}
+.rr-score-mode .rr-fab.is-cash.is-holding::before { animation: rr-egg-fill var(--hold-duration) linear forwards; }
+@keyframes rr-egg-fill { to { background-position: 0 100%; } }
 .rr-result-art { width: clamp(46px, 12vmin, 84px); height: auto; }
 /* Outside the modal the road is part of a normal, scrollable page. */
 @media (any-pointer: coarse) { .rr-stage .rr-view canvas { touch-action: auto; } }
