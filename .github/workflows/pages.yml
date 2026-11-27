@@ -1,0 +1,54 @@
+# Publishes the casino to GitHub Pages.
+# Works when Settings → Pages → Source is "GitHub Actions". If the source is
+# "Deploy from a branch" (or Pages is off), this job skips itself and leaves a
+# note in the run summary, so it never fails.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, claude/crankedcasino-website-tkxsgz]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check the Pages source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          type=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages" | jq -r '.build_type // "none"' || echo "none")
+          echo "build_type=$type" >> "$GITHUB_OUTPUT"
+          echo "Pages source: $type"
+          if [ "$type" != "workflow" ]; then
+            echo "::notice title=Pages not deployed by this workflow::Pages source is '$type'. Set Settings → Pages → Source to 'GitHub Actions' to deploy from here."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.source.outputs.build_type == 'workflow'
+
+      - uses: actions/configure-pages@v5
+        if: steps.source.outputs.build_type == 'workflow'
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.source.outputs.build_type == 'workflow'
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        if: steps.source.outputs.build_type == 'workflow'
