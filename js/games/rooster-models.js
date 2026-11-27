@@ -35,9 +35,17 @@ function model(kind, variant, direction) {
     points.push(...v);
     if (depth(n) <= 0) return;
     const len = Math.hypot(...n);
-    const light = 0.83 + (0.24 * (-0.47 * n[0] + 0.23 * n[1] + 0.85 * n[2])) / len;
+    const nx=n[0]/len, ny=n[1]/len, nz=n[2]/len;
+    const direct=Math.max(0,-.68*nx+.39*ny+.62*nz);
+    const sky=.5+.5*nz;
+    const gloss = color === '#344f60' || color === '#39586b' || color === '#345269';
+    const enamel = colors.includes(color) || color === '#efb937';
+    const shine = Math.pow(Math.max(0,-.32*nx-.26*ny+.91*nz),gloss ? 12 : 20) * (gloss ? 95 : enamel ? 51 : 8);
     const rgb = parseInt(color.slice(1), 16);
-    const shade = [rgb >> 16, (rgb >> 8) & 255, rgb & 255].map((k) => Math.min(255, Math.round(k * light)));
+    const shade = [rgb >> 16, (rgb >> 8) & 255, rgb & 255].map((k,i) => {
+      const fill=[.43,.51,.65][i] + sky*[.16,.19,.21][i];
+      return Math.min(255, Math.round(k*(fill + direct*[.77,.64,.44][i]) + shine));
+    });
     faces.push({
       v: v.map(project),
       depth: v.reduce((s, p) => s + depth(p), 0) / v.length,
@@ -74,24 +82,29 @@ function model(kind, variant, direction) {
     };
     solid([ring(z, 0.97), ring(z + h * 0.12, 1), ring(z + h * 0.86, taper), ring(z + h, taper * 0.96)], color);
   }
-  function bulb(x, y, z, rx, ry, rz, color, sides = 9) {
-    const rings = [
-      [-0.98, 0.20],
-      [-0.78, 0.62],
-      [-0.44, 0.90],
-      [0.04, 1],
-      [0.48, 0.87],
-      [0.79, 0.61],
-      [0.98, 0.20],
-    ].map(([height, r]) =>
-      Array.from({ length: sides }, (_, i) => {
-        const a = (i * 2 * Math.PI) / sides + 0.17;
-        return [x + rx * r * Math.cos(a), y + ry * r * Math.sin(a), z + height * rz];
-      }),
-    );
-    solid(rings, color);
+  function bulb(x, y, z, rx, ry, rz, color, sides = 14) {
+    // Project an ellipsoid analytically. Its silhouette and shading stay smooth
+    // at every sprite resolution; sample points only for its cast shadow.
+    const turn = ([i,j,k]) => Math.abs(direction) === 2
+      ? [j * direction / 2, -i * direction / 2, k] : [i * direction, j * direction, k];
+    const center3 = turn([x,y,z]);
+    const center = project(center3);
+    const axes = [[rx,0,0],[0,ry,0],[0,0,rz]].map(a => project(turn(a)));
+    const xx = axes.reduce((v,a)=>v+a[0]*a[0],0);
+    const xy = axes.reduce((v,a)=>v+a[0]*a[1],0);
+    const yy = axes.reduce((v,a)=>v+a[1]*a[1],0);
+    const angle=.5*Math.atan2(2*xy,xx-yy);
+    const spread=Math.hypot(xx-yy,2*xy);
+    const major=Math.sqrt((xx+yy+spread)/2), minor=Math.sqrt((xx+yy-spread)/2);
+    for (const latitude of [-1.5,-.85,0,.85,1.5]) {
+      for(let i=0;i<sides;i++){
+        const a=2*Math.PI*i/sides;
+        points.push(turn([x+rx*Math.cos(latitude)*Math.cos(a), y+ry*Math.cos(latitude)*Math.sin(a), z+rz*Math.sin(latitude)]));
+      }
+    }
+    faces.push({oval:{center,major,minor,angle},depth:depth(center3),color});
   }
-  function tube(x, y, z, l, r, color, axis = 'x', sides = 12) {
+  function tube(x, y, z, l, r, color, axis = 'x', sides = 18) {
     const ring = (offset) =>
       Array.from({ length: sides }, (_, i) => {
         const a = (i * 2 * Math.PI) / sides;
@@ -162,9 +175,11 @@ function model(kind, variant, direction) {
       0.43 * size,
       0.6 * size,
       ['#80aa3c', '#689e48', '#98b83f', '#5e9b4e'][variant % 4],
-      8,
+      15,
     );
-    bulb(-0.18, 0.09, 1.08 * size, 0.25, 0.25, 0.32, '#91b947', 7);
+    bulb(.20, -.11, .89*size, .25, .22, .27, '#76a346', 12);
+    bulb(-.19, -.12, .87*size, .25, .22, .30, '#82ab43', 12);
+    bulb(-0.18, 0.09, 1.08 * size, 0.25, 0.25, 0.32, '#91b947', 12);
   } else if (kind === 'bridge') {
     for (let j = 0; j < 6; j++) block(0, -0.425 + j * 0.17, 0.12, 1.1, 0.16, 0.08, j % 3 ? '#c79561' : '#d5aa76', 0.02);
     for (const x of [-0.52, 0.52]) {
@@ -264,12 +279,44 @@ export function stamp(kind, variant = 0, direction = 1) {
   g.lineJoin = 'round';
   g.lineWidth = 0.005;
   for (const f of faces.sort((a, b) => a.depth - b.depth)) {
+    if(f.oval) {
+      const {center:[x,y],major,minor,angle} = f.oval;
+      const rgb=parseInt(f.color.slice(1),16);
+      const channels=[rgb>>16,(rgb>>8)&255,rgb&255];
+      const tint = (gains,add) => 'rgb('+channels.map((v,i)=>Math.min(255,Math.round(v*gains[i]+add[i]))).join(',')+')';
+      const light=g.createRadialGradient(x-.30*major,y-.55*major,.02*minor,x,y,major*1.08);
+      light.addColorStop(0,tint([1.15,1.09,.94],[22,18,8]));
+      light.addColorStop(.43,tint([1.04,1,.90],[7,6,4]));
+      light.addColorStop(.87,tint([.53,.65,.72],[4,7,11]));
+      light.addColorStop(1,tint([.49,.60,.66],[8,10,14]));
+      g.fillStyle=light;
+      g.beginPath(); g.ellipse(x,y,major,minor,angle,0,2*Math.PI); g.fill();
+      continue;
+    }
     g.beginPath();
     f.v.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
     g.closePath();
     g.fillStyle = g.strokeStyle = f.color;
     g.fill();
     g.stroke();
+  }
+  if (kind === 'tree') {
+    // Break up the broad canopy light with small overlapping leaf clusters.
+    // Clip each dab to the baked silhouette, leaving the trunk untouched.
+    g.save();
+    g.globalCompositeOperation = 'source-atop';
+    let state = 3419 + variant;
+    const random = () => {
+      state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    for (let i=0;i<230;i++){
+      const x=left+random()*(right-left), y=top+random()*(bottom-top)*.73;
+      const radius=.009+random()*.023;
+      g.fillStyle=i%3?'rgba(220,232,134,.18)':'rgba(30,69,50,.22)';
+      g.beginPath();g.ellipse(x,y,radius,radius*.52,-.5+random(),0,2*Math.PI);g.fill();
+    }
+    g.restore();
   }
   // Bake soft skylight and bounce light into the sprite once, including its bevels.
   g.globalCompositeOperation = 'source-atop';
@@ -280,7 +327,7 @@ export function stamp(kind, variant = 0, direction = 1) {
   g.fillStyle = light;
   g.fillRect(left, top, right - left, bottom - top);
   // Project the mesh onto the ground along the sunlight and retain its convex silhouette.
-  const cast = points.map(([x, y, z]) => [x + 0.43 * z, y - 0.36 * z]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cast = points.map(([x, y, z]) => [x + 1.10 * z, y - 0.63 * z]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   function boundary(vertices) {
     const edge = [];
     for (const p of vertices) {
@@ -298,7 +345,23 @@ export function stamp(kind, variant = 0, direction = 1) {
   const shadow = new Path2D();
   outline.forEach(([x, y], i) => i ? shadow.lineTo(x, y) : shadow.moveTo(x, y));
   shadow.closePath();
-  const result = { image, shadow, left, top, width: image.width / resolution, height: image.height / resolution };
+  // Rasterize the penumbra in ground coordinates; no per-frame blur filter.
+  const shadowScale=40, margin=.17;
+  const xs=outline.map(p=>p[0]), ys=outline.map(p=>p[1]);
+  const x0=Math.min(...xs)-margin, y0=Math.min(...ys)-margin;
+  const shadeMap=document.createElement('canvas');
+  shadeMap.width=Math.ceil((Math.max(...xs)+margin-x0)*shadowScale);
+  shadeMap.height=Math.ceil((Math.max(...ys)+margin-y0)*shadowScale);
+  const sg=shadeMap.getContext('2d');
+  sg.scale(shadowScale,shadowScale);
+  sg.translate(-x0,-y0);
+  sg.fillStyle='#152a39';
+  sg.shadowColor='#152a39';
+  sg.shadowBlur=4;
+  sg.globalAlpha=.40;
+  sg.fill(shadow);
+  const penumbra={image:shadeMap,x:x0,y:y0,w:shadeMap.width/shadowScale,h:shadeMap.height/shadowScale};
+  const result = { image, penumbra, left, top, width: image.width / resolution, height: image.height / resolution };
   cache.set(key, result);
   return result;
 }

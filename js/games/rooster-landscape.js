@@ -1,4 +1,5 @@
 import { RR, rrFront } from '../math.js';
+import { courseMaterials } from './rooster-materials.js';
 import { plane, stamp, logTop, padTop } from './rooster-models.js';
 
 const road = (k) => k === 'road' || k === 'bus';
@@ -10,6 +11,7 @@ function variation(seed, row, column) {
 }
 
 export function landscape(ctx) {
+  let materials;
   let cameraRow = 0,
     cameraCol = RR.START_COL,
     scale = 1,
@@ -54,6 +56,8 @@ export function landscape(ctx) {
     height = H;
     scale = Math.min(W / 7.25, H / 8.8);
     if (!scale) return;
+    materials ??= courseMaterials(ctx);
+    materials.update(t);
     const follow = 1 - Math.exp(-11 * dt);
     cameraRow += (vr - cameraRow) * follow;
     cameraCol += (vc - cameraCol) * follow;
@@ -72,6 +76,7 @@ export function landscape(ctx) {
     const first = Math.floor(Math.min(...bounds.map((p) => p[1]))) - 1,
       last = Math.ceil(Math.max(...bounds.map((p) => p[1]))) + 1;
     const actors = [];
+    const riverMask = new Path2D();
     let footing = 0;
     let supportDepth = -Infinity;
     function add(kind, x, r, variant = 0, dir = 1, size = 1, lift = 0, stretch = 1, minDepth = -Infinity) {
@@ -106,13 +111,18 @@ export function landscape(ctx) {
       const tone = water
         ? ['#50b9d5', '#54c0db'][salt % 2]
         : asphalt
-          ? ['#646d79', '#69717b'][salt % 2]
+          ? ['#505961', '#586269'][salt % 2]
           : kind === 'train'
             ? '#8b8571'
             : kind === 'finish'
               ? '#d6b355'
-              : ['#a8c550', '#a3c14e', '#a9c854'][salt % 3];
+              : ['#98af49', '#94ab47', '#a0b451'][salt % 3];
       strip(minX, r - 0.505, span, 1.013, tone);
+      if (turf || asphalt) {
+        ctx.globalCompositeOperation='soft-light';
+        strip(minX,r-.50,span,1.01,turf ? materials.grass : materials.road);
+        ctx.globalCompositeOperation='source-over';
+      }
       if (turf) {
         // The front edge of the raised sod shows soil above the road or water.
         if (!meadow(lane(r - 1).kind) || r === -2) {
@@ -157,12 +167,14 @@ export function landscape(ctx) {
           for (let x = 2 * Math.floor(minX / 2); x < maxX; x += 2) strip(x, r + 0.47, 0.72, 0.043, '#c4c8bc');
         } else strip(minX, r + 0.46, span, 0.046, '#858c8d');
       } else if (water) {
+        riverMask.rect(minX,r-.5,span,1);
         const isWater = row => row === -3 || row === -4 || lane(row).kind === 'river';
         const shore = ctx.createLinearGradient(0, r - .5, 0, r + .5);
-        shore.addColorStop(0, isWater(r - 1) ? '#419dbd' : '#83cfc4');
-        shore.addColorStop(.45, '#48adc8');
-        shore.addColorStop(1, isWater(r + 1) ? '#419dbd' : '#83cfc4');
+        shore.addColorStop(0, isWater(r - 1) ? '#277791' : '#8bcead');
+        shore.addColorStop(.45, '#329ca8');
+        shore.addColorStop(1, isWater(r + 1) ? '#277791' : '#8bcead');
         strip(minX, r - .505, span, 1.013, shore);
+        strip(minX,r-.5,span,1,materials.water);
         if (impact && touchdown.row === r) {
           ctx.save();
           ctx.lineWidth = .028 * (1 - age) + .009;
@@ -262,14 +274,31 @@ export function landscape(ctx) {
       add('hawk', vc + approach * 3, vr - .01, 0, 1, 1, .62 + approach * 4 + lift);
     }
     actors.sort((a, b) => a.depth - b.depth);
+    // Mirror near-bank scenery into the water. Clip before switching to screen
+    // coordinates so the reflection can never spill onto a road or a platform.
+    ctx.save();
+    ctx.clip(riverMask);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.globalAlpha=.23;
+    for (const a of actors) {
+      if (!['tree','rock','fence','bridge'].includes(a.kind)) continue;
+      const sprite=stamp(a.kind,a.variant,a.dir);
+      const u=scale*a.size;
+      ctx.save();
+      ctx.translate(a.p.x,a.p.y);
+      ctx.transform(1,0,.08*Math.sin(t*1.8+a.r),-.78,0,0);
+      ctx.drawImage(sprite.image,sprite.left*u,sprite.top*u,sprite.width*u,sprite.height*u);
+      ctx.restore();
+    }
+    ctx.restore();
     for (const a of actors) {
       if (a.kind === 'egg' || a.kind === 'hawk') continue;
       a.sprite = stamp(a.kind, a.variant, a.dir);
       ctx.save();
-      ctx.translate(a.x + .43 * a.lift, a.r - .36 * a.lift);
+      ctx.translate(a.x + 1.10 * a.lift, a.r - .63 * a.lift);
       ctx.scale(a.size * a.stretch, a.size);
-      ctx.fillStyle = '#243e464a';
-      ctx.fill(a.sprite.shadow);
+      const sh = a.sprite.penumbra;
+      ctx.drawImage(sh.image,sh.x,sh.y,sh.w,sh.h);
       ctx.restore();
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -303,6 +332,15 @@ export function landscape(ctx) {
       ctx.drawImage(s.image, s.left * u, s.top * u, s.width * u, s.height * u);
       ctx.restore();
     }
+    // Wide, soft sunlight and cool skylight frame the course without masking hazards.
+    const sunlight=ctx.createLinearGradient(0,0,W,H*.54);
+    sunlight.addColorStop(0,'rgba(255,218,149,.25)');
+    sunlight.addColorStop(.28,'rgba(251,210,136,.065)');
+    sunlight.addColorStop(.45,'rgba(255,235,177,.14)');
+    sunlight.addColorStop(.66,'rgba(253,222,161,.018)');
+    sunlight.addColorStop(1,'rgba(35,66,99,.10)');
+    ctx.fillStyle=sunlight;
+    ctx.fillRect(0,0,W,H);
   }
   return { draw, reset, point };
 }
