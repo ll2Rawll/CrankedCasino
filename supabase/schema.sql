@@ -104,8 +104,8 @@ create table if not exists cc.rooster_runs (
   seed bigint not null,
   started_at timestamptz not null default clock_timestamp()
 );
--- Bet runs aim for a row (10, 25, 50 or 100).
-alter table cc.rooster_runs add column if not exists target integer not null default 10;
+-- Bet runs aim for a row (25, 50, 100 or 200).
+alter table cc.rooster_runs add column if not exists target integer not null default 25;
 
 create table if not exists cc.flight_runs (
   player_id uuid primary key references cc.players (id) on delete cascade,
@@ -1129,7 +1129,7 @@ $$;
 
 -- Bet targets (js/math.js RR_TARGETS and NF_TARGETS): goal → multiplier, 0 for anything else.
 create or replace function cc.rr_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
-  select (case goal when 10 then 1.2 when 25 then 2.2 when 50 then 6 when 100 then 30 else 0 end)::numeric
+  select (case goal when 25 then 1.3 when 50 then 1.8 when 100 then 4 when 200 then 20 else 0 end)::numeric
 $$;
 create or replace function cc.nf_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
   select (case goal when 5 then 1.5 when 10 then 2.5 when 25 then 8 when 50 then 30 else 0 end)::numeric
@@ -1187,7 +1187,7 @@ $$;
 create or replace function cc.rs_grass_draw(seed bigint, r integer) returns boolean language plpgsql immutable set search_path = '' as $$
 begin
   if r <= 0 or cc.rs_river_row(seed, r) >= 0 or cc.rs_level(r) <= 2 then return false; end if;
-  return cc.hash01(seed, r, 0) < 0.2::float8;
+  return cc.hash01(seed, r, 0) < 0.35::float8;
 end $$;
 
 create or replace function cc.rs_lane(seed bigint, r integer) returns cc.rs_lane language plpgsql immutable set search_path = '' as $$
@@ -1210,10 +1210,10 @@ begin
     return L;
   end if;
   lvl := cc.rs_level(r);
-  f := least(1::float8, lvl::float8 / 60::float8);
+  f := least(1::float8, lvl::float8 / 80::float8);
   q := case when cc.rs_grass_draw(seed, r - 1) and cc.rs_grass_draw(seed, r - 2)
-    then 0.2::float8 + 0.8::float8 * cc.hash01(seed, r, 6) else cc.hash01(seed, r, 0) end;
-  L.kind := case when lvl <= 2 then 'road' when q < 0.2::float8 then 'safe' when lvl >= 6 and q < 0.28::float8 then 'train' when q < 0.45::float8 then 'bus' else 'road' end;
+    then 0.35::float8 + 0.65::float8 * cc.hash01(seed, r, 6) else cc.hash01(seed, r, 0) end;
+  L.kind := case when lvl <= 2 then 'road' when q < 0.35::float8 then 'safe' when lvl >= 6 and q < 0.43::float8 then 'train' when q < 0.58::float8 then 'bus' else 'road' end;
   L.dir := case when cc.hash01(seed, r, 1) < 0.5::float8 then 1 else -1 end;
   if L.kind = 'safe' then
     for c in 0..6 loop
@@ -1228,12 +1228,12 @@ begin
     L.p := L.v * (6::float8 + 5::float8 * cc.hash01(seed, r, 4));
   elsif L.kind = 'bus' then
     L.len := 2.6::float8 + 0.6::float8 * cc.hash01(seed, r, 2);
-    L.v := (1.1::float8 + 1.2::float8 * cc.hash01(seed, r, 3)) * (1::float8 + 0.7::float8 * f);
-    L.p := L.len + (3.6::float8 - 1.0::float8 * f) + 3.0::float8 * cc.hash01(seed, r, 4);
+    L.v := (1.0::float8 + 1.0::float8 * cc.hash01(seed, r, 3)) * (1::float8 + 0.5::float8 * f);
+    L.p := L.len + (4.2::float8 - 0.8::float8 * f) + 3.2::float8 * cc.hash01(seed, r, 4);
   else
     L.len := 1.0::float8 + 0.35::float8 * cc.hash01(seed, r, 2);
-    L.v := (1.5::float8 + 2.0::float8 * cc.hash01(seed, r, 3)) * (1::float8 + 0.9::float8 * f);
-    L.p := L.len + (3.2::float8 - 1.0::float8 * f) + 2.6::float8 * cc.hash01(seed, r, 4);
+    L.v := (1.3::float8 + 1.6::float8 * cc.hash01(seed, r, 3)) * (1::float8 + 0.6::float8 * f);
+    L.p := L.len + (3.8::float8 - 0.8::float8 * f) + 3.0::float8 * cc.hash01(seed, r, 4);
   end if;
   L.phase := cc.hash01(seed, r, 5) * L.p;
   return L;
@@ -1254,7 +1254,7 @@ begin
     L := cc.rs_lane(seed, cur);
     at := -1; why := null;
     -- the red line
-    w := greatest(tprev, 6::float8 + ((cur + 1)::float8 + line) / 0.65::float8);
+    w := greatest(tprev, 8::float8 + ((cur + 1)::float8 + line) / 0.5::float8);
     if w <= t then at := w; why := 'line'; end if;
     if L.kind = 'river' then
       -- a log carries her; she drowns if it takes her past the edge of the course
@@ -1306,7 +1306,7 @@ begin
   return jsonb_build_object('ok', true, 'mult', mult, 'payout', pay, 'score', score, 'target', r.target, 'balance', p.balance, 'seq', p.seq, 'entry', entry);
 end $$;
 
--- Start a bet run aiming for row p_target (10, 25, 50 or 100).
+-- Start a bet run aiming for row p_target (25, 50, 100 or 200).
 create or replace function public.cc_rooster_start(p_token text, p_bet numeric, p_target integer) returns jsonb
 language plpgsql volatile security definer set search_path = '' as $$
 declare pid uuid := cc.auth(p_token); p cc.players; s bigint;

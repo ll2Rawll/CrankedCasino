@@ -196,10 +196,10 @@ export const hash01 = (seed, a, b) =>
 
 // Bet targets: [goal, multiplier]. Reach the goal before you're caught to win bet × multiplier.
 // Calibrated with simulated players (a planner with human timing error): a good player
-// about breaks even, an average one loses slowly, and real skill wins. Rooster at 10/25/50/100
-// rows: good 83/52/17/2%, average 72/34/5/0%. Flight at 5/10/25/50 gates: good 62/38/8/1%,
+// about breaks even, an average one loses slowly, and real skill wins. Rooster at 25/50/100/200
+// rows: good 76/56/24/5%, average 64/37/9/1%. Flight at 5/10/25/50 gates: good 62/38/8/1%,
 // average 55/28/4/0%.
-export const RR_TARGETS = [[10, 1.2], [25, 2.2], [50, 6], [100, 30]]; // Road Rooster rows
+export const RR_TARGETS = [[25, 1.3], [50, 1.8], [100, 4], [200, 20]]; // Road Rooster rows
 export const NF_TARGETS = [[5, 1.5], [10, 2.5], [25, 8], [50, 30]]; // Night Flight gates
 export const targetMult = (table, goal) => table.find(([g]) => g === goal)?.[1] ?? 0;
 

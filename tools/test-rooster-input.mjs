@@ -24,12 +24,12 @@ try {
   await start.waitFor();
 
   await page.clock.pauseAt(new Date('2025-01-01T01:00:00Z'));
-  // Seed 32 has an open path through the first four rows at the times below
-  // (road, road, bus, road; tools/rooster-pilot.mjs can check a seed's timings).
+  // Seed 51 has an open path through the first four rows at the times below
+  // (road, road, bus, grass; tools/rooster-pilot.mjs can check a seed's timings).
   await page.evaluate(() => {
     document.querySelector('.rr-fab').addEventListener('click', () => {
       const random = Math.random;
-      Math.random = () => 31.5 / 2147483640;
+      Math.random = () => 50.5 / 2147483640;
       setTimeout(() => { Math.random = random; }, 0);
     }, { capture: true, once: true });
   });

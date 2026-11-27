@@ -5,10 +5,10 @@
 // accounts live in this browser's localStorage. Connect Supabase for accounts that
 // follow players to any browser and can't be reset by clearing site data.
 
-import { random, randInt, sample, weightedPick } from './rng.js?v=714c8b12054c';
-import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=714c8b12054c';
-import { scoreReplay } from './games/rooster-course.js?v=714c8b12054c';
-import { flightReplay, FPS } from './games/flight-course.js?v=714c8b12054c';
+import { random, randInt, sample, weightedPick } from './rng.js?v=4561f955b9ee';
+import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=4561f955b9ee';
+import { scoreReplay } from './games/rooster-course.js?v=4561f955b9ee';
+import { flightReplay, FPS } from './games/flight-course.js?v=4561f955b9ee';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const err = (error, extra = {}) => ({ ok: false, error, ...extra });

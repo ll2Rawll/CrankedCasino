@@ -2,10 +2,10 @@
 // It reads the same lane recipes and collision maths as the game, so any route it
 // finds is one the game accepts. Time is in course seconds (the game's world clock).
 import { RR, rrHit } from '../js/math.js';
-import { scoreLane, platformCenter } from '../js/games/rooster-course.js';
+import { scoreLane, platformCenter, chaseLine } from '../js/games/rooster-course.js';
 
 export const COURSE_SPEED = 0.9; // SCORE_COURSE_SPEED in js/games/rooster.js
-export const chaseLine = (t) => Math.max(0, (t - 6) * 0.65); // the red line, as in rooster.js
+export { chaseLine };
 export const MOVES = { forward: 0, back: 1, left: 2, right: 3 };
 
 /**

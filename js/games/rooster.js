@@ -5,17 +5,17 @@
 // the server hands out the seed that lays out the course, replays the moves, and pays
 // bet × that target's multiplier if the rooster reached it.
 
-import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=714c8b12054c';
-import { icon } from '../icons.js?v=714c8b12054c';
-import { store } from '../store.js?v=714c8b12054c';
-import { engine, errorText } from '../engine.js?v=714c8b12054c';
-import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=714c8b12054c';
-import { sfx, haptic } from '../sound.js?v=714c8b12054c';
-import { burst, PALETTES, coinRain } from '../fx.js?v=714c8b12054c';
-import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=714c8b12054c';
-import { scoreLane, onPlatform, chaseLine } from './rooster-course.js?v=714c8b12054c';
-import { landscape } from './rooster-landscape.js?v=714c8b12054c';
-import { loadArt } from './rooster-art.js?v=714c8b12054c';
+import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=4561f955b9ee';
+import { icon } from '../icons.js?v=4561f955b9ee';
+import { store } from '../store.js?v=4561f955b9ee';
+import { engine, errorText } from '../engine.js?v=4561f955b9ee';
+import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=4561f955b9ee';
+import { sfx, haptic } from '../sound.js?v=4561f955b9ee';
+import { burst, PALETTES, coinRain } from '../fx.js?v=4561f955b9ee';
+import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=4561f955b9ee';
+import { scoreLane, onPlatform, chaseLine, LINE_GRACE } from './rooster-course.js?v=4561f955b9ee';
+import { landscape } from './rooster-landscape.js?v=4561f955b9ee';
+import { loadArt } from './rooster-art.js?v=4561f955b9ee';
 
 const HOP_MS = 110;
 // Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.
@@ -806,7 +806,7 @@ export default {
       const t = endT ?? worldT(now);
       if (phase === 'run') checkDeath(t);
       const line = chaseLine(t);
-      const warning = phase === 'run' && t > 6;
+      const warning = phase === 'run' && t > LINE_GRACE;
       const caught = deathAt?.cause === 'line' ? clamp(1.4 - (now - deathAt.at) / 700, 0, 1) : 0;
       const danger = Math.max(caught, warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0).toFixed(2);
       if (danger !== dangerShown) {

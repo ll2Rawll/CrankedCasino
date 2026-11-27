@@ -1,15 +1,15 @@
 // App shell: header, cashier, drawer, theme, footer and the hash router.
 
-import { $, $$, esc, fmt, signed, storage } from './util.js?v=714c8b12054c';
-import { icon } from './icons.js?v=714c8b12054c';
-import { store, on } from './store.js?v=714c8b12054c';
-import { engine, MODE } from './engine.js?v=714c8b12054c';
-import { CONFIG } from './config.js?v=714c8b12054c';
-import { sfx, unlockAudio, setSound, soundOn } from './sound.js?v=714c8b12054c';
-import { countTo, floatFrom } from './fx.js?v=714c8b12054c';
-import { toast, confirmDialog, promoTicket } from './ui.js?v=714c8b12054c';
-import { openAccount, signOut } from './account.js?v=714c8b12054c';
-import { adButton } from './ads.js?v=714c8b12054c';
+import { $, $$, esc, fmt, signed, storage } from './util.js?v=4561f955b9ee';
+import { icon } from './icons.js?v=4561f955b9ee';
+import { store, on } from './store.js?v=4561f955b9ee';
+import { engine, MODE } from './engine.js?v=4561f955b9ee';
+import { CONFIG } from './config.js?v=4561f955b9ee';
+import { sfx, unlockAudio, setSound, soundOn } from './sound.js?v=4561f955b9ee';
+import { countTo, floatFrom } from './fx.js?v=4561f955b9ee';
+import { toast, confirmDialog, promoTicket } from './ui.js?v=4561f955b9ee';
+import { openAccount, signOut } from './account.js?v=4561f955b9ee';
+import { adButton } from './ads.js?v=4561f955b9ee';
 
 const app = $('#app');
 const root = document.documentElement;
@@ -333,17 +333,17 @@ $('#siteFoot').innerHTML = `
 
 // ---------------------------------------------------------------- router
 const routes = {
-  '': () => import('./pages/lobby.js?v=714c8b12054c'),
-  blackjack: () => import('./games/blackjack.js?v=714c8b12054c'),
-  roulette: () => import('./games/roulette.js?v=714c8b12054c'),
-  mines: () => import('./games/mines.js?v=714c8b12054c'),
-  plinko: () => import('./games/plinko.js?v=714c8b12054c'),
-  slots: () => import('./games/slots.js?v=714c8b12054c'),
-  crash: () => import('./games/crash.js?v=714c8b12054c'),
-  rooster: () => import('./games/rooster.js?v=714c8b12054c'),
-  flight: () => import('./games/flight.js?v=714c8b12054c'),
-  leaderboard: () => import('./pages/leaderboard.js?v=714c8b12054c'),
-  profile: () => import('./pages/profile.js?v=714c8b12054c'),
+  '': () => import('./pages/lobby.js?v=4561f955b9ee'),
+  blackjack: () => import('./games/blackjack.js?v=4561f955b9ee'),
+  roulette: () => import('./games/roulette.js?v=4561f955b9ee'),
+  mines: () => import('./games/mines.js?v=4561f955b9ee'),
+  plinko: () => import('./games/plinko.js?v=4561f955b9ee'),
+  slots: () => import('./games/slots.js?v=4561f955b9ee'),
+  crash: () => import('./games/crash.js?v=4561f955b9ee'),
+  rooster: () => import('./games/rooster.js?v=4561f955b9ee'),
+  flight: () => import('./games/flight.js?v=4561f955b9ee'),
+  leaderboard: () => import('./pages/leaderboard.js?v=4561f955b9ee'),
+  profile: () => import('./pages/profile.js?v=4561f955b9ee'),
 };
 function currentRoute() {
   const r = location.hash.replace(/^#\/?/, '').split(/[?/]/)[0];

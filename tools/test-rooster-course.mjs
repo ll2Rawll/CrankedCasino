@@ -87,7 +87,7 @@ for (const seed of seeds) {
   }
 }
 const share = (k) => count[k] / total;
-assert(share('safe') > 0.12 && share('safe') < 0.2, `grass ${share('safe')}`);
+assert(share('safe') > 0.24 && share('safe') < 0.32, `grass ${share('safe')}`);
 assert(share('train') > 0.04 && share('train') < 0.09, `trains ${share('train')}`);
 assert(share('bus') > 0.1 && share('bus') < 0.18, `buses ${share('bus')}`);
 assert(sameWay / pairs > 0.45 && sameWay / pairs < 0.55, `neighbouring lanes share a direction ${((sameWay / pairs) * 100).toFixed(1)}% of the time`);

@@ -2,21 +2,24 @@
 // its own hash (hash01, shared with the server); an earlier generator stepped linearly from
 // one row to the next and lined whole stretches of road up in the same direction. The
 // server mirrors every function here in SQL (supabase/schema.sql, cc.rs_*).
-import { RR, rrHit, hash01 } from '../math.js?v=714c8b12054c';
+import { RR, rrHit, hash01 } from '../math.js?v=4561f955b9ee';
 
 /** Uniform in [0, 1) for (seed, row, slot). */
 export const scoreRand = hash01;
 
-/** The red line: rows it has swallowed after t course seconds (6 seconds' grace). */
-export const chaseLine = (t) => Math.max(0, (t - 6) * 0.65);
+/** The red line: rows it has swallowed after t course seconds (8 seconds' grace). */
+export const LINE_GRACE = 8;
+export const LINE_SPEED = 0.5; // rows a second
+export const chaseLine = (t) => Math.max(0, (t - LINE_GRACE) * LINE_SPEED);
 
-// Cars, buses, trains and grass. `level` sets the pace.
+// Cars, buses, trains and grass. `level` sets the pace. About a third of these rows are
+// grass, so roads come in short runs with a rest between them.
 // `grass` is false when the two rows below are already grass: three grass rows can
 // line their trees up into a wall, while any two leave a gap (each has 4+ open tiles).
 function traffic(R, level, grass) {
-  const f = Math.min(1, level / 60);
-  const q = grass ? R(0) : 0.2 + 0.8 * R(6);
-  const kind = level <= 2 ? 'road' : q < 0.2 ? 'safe' : level >= 6 && q < 0.28 ? 'train' : q < 0.45 ? 'bus' : 'road';
+  const f = Math.min(1, level / 80);
+  const q = grass ? R(0) : 0.35 + 0.65 * R(6);
+  const kind = level <= 2 ? 'road' : q < 0.35 ? 'safe' : level >= 6 && q < 0.43 ? 'train' : q < 0.58 ? 'bus' : 'road';
   const dir = R(1) < 0.5 ? 1 : -1;
   if (kind === 'safe') {
     const blocked = [];
@@ -30,12 +33,12 @@ function traffic(R, level, grass) {
     P = v * (6 + 5 * R(4));
   } else if (kind === 'bus') {
     len = 2.6 + 0.6 * R(2);
-    v = (1.1 + 1.2 * R(3)) * (1 + 0.7 * f);
-    P = len + (3.6 - 1.0 * f) + 3.0 * R(4);
+    v = (1.0 + 1.0 * R(3)) * (1 + 0.5 * f);
+    P = len + (4.2 - 0.8 * f) + 3.2 * R(4);
   } else {
     len = 1.0 + 0.35 * R(2);
-    v = (1.5 + 2.0 * R(3)) * (1 + 0.9 * f);
-    P = len + (3.2 - 1.0 * f) + 2.6 * R(4);
+    v = (1.3 + 1.6 * R(3)) * (1 + 0.6 * f);
+    P = len + (3.8 - 0.8 * f) + 3.0 * R(4);
   }
   return { kind, dir, len, v, P, phase: R(5) * P, blocked: [] };
 }
@@ -56,7 +59,7 @@ function riverRow(seed, row) {
 // Keep the introduction gentle, then ramp each district towards full pace.
 const level = (row) => (row < 16 ? row : 12 + (row % 16) + Math.min(40, Math.floor(row / 16) * 3));
 // Would this traffic row be grass, before the limit of two in a row?
-const grassDraw = (seed, row) => row > 0 && riverRow(seed, row) < 0 && level(row) > 2 && hash01(seed, row, 0) < 0.2;
+const grassDraw = (seed, row) => row > 0 && riverRow(seed, row) < 0 && level(row) > 2 && hash01(seed, row, 0) < 0.35;
 
 export function scoreLane(seed, row) {
   if (row <= 0) return { kind: 'start', blocked: [] };
@@ -102,7 +105,7 @@ export function scoreReplay(seed, moves, endMs, goal, { hb = RR.HB_SERVER, line 
         cause = why;
       }
     };
-    sooner(Math.max(tprev, 6 + (row + 1 + line) / 0.65), 'line');
+    sooner(Math.max(tprev, LINE_GRACE + (row + 1 + line) / LINE_SPEED), 'line');
     if (L.kind === 'river') {
       // A log carries the rooster; she drowns if it takes her past the edge of the course.
       if (L.speed) sooner(Math.max(tprev, landed + ((L.speed > 0 ? RR.COLS - 0.5 + edge : -0.5 - edge) - col) / L.speed), 'river');

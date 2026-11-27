@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { RR, rrHit, rrFront } from '../js/math.js';
-import { platformCenter } from '../js/games/rooster-course.js';
+import { platformCenter, LINE_GRACE, LINE_SPEED } from '../js/games/rooster-course.js';
 import { pilot, COURSE_SPEED, chaseLine, MOVES } from './rooster-pilot.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright-core');
@@ -233,7 +233,7 @@ try {
   {
     const p = await startRun(1009);
     const st = await drive(p, (st, p) => st.best >= 4 && p.lane(st.row).kind === 'safe');
-    const deadline = 6 + (st.row + 1) / 0.65;
+    const deadline = LINE_GRACE + (st.row + 1) / LINE_SPEED;
     await until(deadline - 0.9);
     assert.equal((await state()).phase, 'run');
     const warning = Number(await page.locator('.rr-danger').evaluate((el) => el.style.opacity));
@@ -279,19 +279,19 @@ try {
     return { p: pilot(st.seed), before };
   }
   {
-    const { p, before } = await startBet(10);
-    const st = await drive(p, (st) => st.phase !== 'run' || st.best >= 10);
+    const { p, before } = await startBet(25);
+    const st = await drive(p, (st) => st.phase !== 'run' || st.best >= 25);
     assert.equal(st.phase, 'ending', 'reaching the target ends the run at once');
     await shot('10-bet-reached');
     await page.clock.runFor(400);
     assert.equal((await state()).phase, 'over');
-    assert.match(await centerText(), /Row 10 reached[\s\S]*\+12\.00/);
-    assert.equal(await balance(), before + 2, 'row 10 pays 1.2×');
+    assert.match(await centerText(), /Row 25 reached[\s\S]*\+13\.00/);
+    assert.equal(await balance(), before + 3, 'row 25 pays 1.3×');
     await page.clock.runFor(600);
     await shot('11-bet-won');
   }
   {
-    const { p, before } = await startBet(25);
+    const { p, before } = await startBet(50);
     let at;
     await drive(p, (st, p) => {
       if (st.best < 3 || p.lane(st.row).kind === 'river') return false;
@@ -302,7 +302,7 @@ try {
     await gesture(MOVES.forward);
     for (let i = 0; i < 60 && (await state()).phase !== 'over'; i++) await page.clock.runFor(25);
     assert.equal((await state()).phase, 'over');
-    assert.match(await centerText(), /Hit by a car[\s\S]*of 25 · bet lost/);
+    assert.match(await centerText(), /Hit by a car[\s\S]*of 50 · bet lost/);
     assert.equal(await balance(), before - 10, 'a hit before the target loses the bet');
     await shot('12-bet-lost');
   }
@@ -312,7 +312,7 @@ try {
   await page.locator('.rr-fab').waitFor();
   assert.equal((await state()).record, record);
   assert.deepEqual(errors, []);
-  console.log(`passed: hopped ${seen.road + seen.bus} traffic lanes, ${seen.train} rail tracks (waiting once for the signal), ${seen.log} logs and ${seen.pad} lily pads to row ${record}, banked it with the egg, ended runs by car, train, river and the red line, won a bet on row 10 and lost one to a car.`);
+  console.log(`passed: hopped ${seen.road + seen.bus} traffic lanes, ${seen.train} rail tracks (waiting once for the signal), ${seen.log} logs and ${seen.pad} lily pads to row ${record}, banked it with the egg, ended runs by car, train, river and the red line, won a bet on row 25 and lost one to a car.`);
 } finally {
   await browser.close();
 }
