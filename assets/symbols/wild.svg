@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <radialGradient id="bg" cx="40%" cy="30%" r="80%"><stop offset="0" stop-color="#3a3a44"/><stop offset=".6" stop-color="#141418"/><stop offset="1" stop-color="#08080a"/></radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1c4"/><stop offset=".35" stop-color="#e0a13a"/><stop offset=".6" stop-color="#ffe7a3"/><stop offset="1" stop-color="#9c6510"/></linearGradient>
+    <linearGradient id="c" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".32" stop-color="#8f95a1"/><stop offset=".52" stop-color="#f6f8fc"/><stop offset=".76" stop-color="#5f6470"/><stop offset="1" stop-color="#eceff4"/></linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="50" fill="url(#bg)" stroke="url(#ring)" stroke-width="6"/>
+  <circle cx="60" cy="60" r="42" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="2"/>
+  <path d="M79 40a27 27 0 1 0 0 40" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="15" stroke-linecap="round" transform="translate(1.5 2.5)"/>
+  <path d="M79 40a27 27 0 1 0 0 40" fill="none" stroke="url(#c)" stroke-width="14" stroke-linecap="round"/>
+  <path d="M42 46a22 22 0 0 1 16-9" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="3" stroke-linecap="round"/>
+</svg>

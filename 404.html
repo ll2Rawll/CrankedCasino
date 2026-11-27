@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CrankedCasino</title>
+  <script>
+    // GitHub Pages serves this for unknown paths. Send people to the lobby,
+    // keeping a game name if the path ends in one (e.g. /CrankedCasino/plinko).
+    (function () {
+      var parts = location.pathname.split('/').filter(Boolean);
+      var base = location.hostname.endsWith('github.io') && parts.length ? '/' + parts[0] + '/' : '/';
+      var last = parts[parts.length - 1] || '';
+      var games = ['mines', 'plinko', 'slots', 'crash', 'leaderboard', 'profile'];
+      location.replace(base + (games.indexOf(last) > -1 ? '#/' + last : ''));
+    })();
+  </script>
+  <style>body{background:#08080a;color:#f3f0ea;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0}</style>
+</head>
+<body><p>Taking you to the casino floor… <a href="./" style="color:inherit">Continue</a></p></body>
+</html>

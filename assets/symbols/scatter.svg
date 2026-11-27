@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ff9ad2" stop-opacity=".9"/><stop offset="1" stop-color="#ff4fae" stop-opacity="0"/></radialGradient>
+    <linearGradient id="st" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe3f3"/><stop offset=".45" stop-color="#ff4fae"/><stop offset="1" stop-color="#b0127a"/></linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#glow)"/>
+  <g fill="#ffd1ea" opacity=".55">
+    <path d="M60 2l3 22h-6z"/><path d="M60 118l-3-22h6z"/><path d="M2 60l22-3v6z"/><path d="M118 60l-22 3v-6z"/>
+    <path d="M19 19l17 14-4 4z"/><path d="M101 101l-17-14 4-4z"/><path d="M101 19l-14 17-4-4z"/><path d="M19 101l14-17 4 4z"/>
+  </g>
+  <path d="M60 18l12.4 25.1 27.7 4-20 19.6 4.7 27.6L60 81.3 35.2 94.3l4.7-27.6-20-19.6 27.7-4Z" fill="url(#st)" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M60 30l7 14" stroke="#fff" stroke-opacity=".8" stroke-width="4" stroke-linecap="round"/>
+</svg>

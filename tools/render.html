@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Asset renderer</title>
+<style>html,body{margin:0;background:transparent} #box{width:600px;height:750px} canvas{width:100%;height:100%;display:block}</style>
+</head>
+<body>
+<div id="box"><canvas id="c"></canvas></div>
+<script type="module">
+  // Renders the chrome objects to PNG. Driven by tools/render-assets.mjs.
+  import { createHero } from '../js/hero3d.js';
+  const box = document.getElementById('box');
+  window.hero = createHero(document.getElementById('c'), { interactive: false });
+  window.setSize = (w, h) => { box.style.width = w + 'px'; box.style.height = h + 'px'; };
+  window.ready = true;
+</script>
+</body>
+</html>
