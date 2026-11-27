@@ -11,9 +11,8 @@ function fresh(seed = 1) {
   return run;
 }
 
-// Sample the same tap at several update rates. At 200 ms the bird should
-// turn down, at 400 ms it should cross launch height, then reach a steady dive.
-for (const hz of [60, 120, 144]) {
+// Check the turn, the recovery window and the speed limit across refresh rates.
+for (const hz of [30, 60, 120, 144]) {
   const flight = fresh();
   const { state } = flight;
   function advance(seconds) {
@@ -26,10 +25,12 @@ for (const hz of [60, 120, 144]) {
   assert(Math.abs(state.velocity) < .01);
   assert(Math.abs(state.y - (START_Y - 43)) < .01);
   advance(.2);
-  assert(Math.abs(state.y - START_Y) < .01);
-  advance(.13);
+  assert(Math.abs(state.y - (START_Y - 20)) < .01, 'still above launch height after 400 ms');
+  advance(.074);
+  assert(Math.abs(state.y - START_Y) < .25);
+  advance(.10);
   const dive = state.velocity;
-  assert(dive > 500 && dive < 600);
+  assert(dive > 350 && dive < 380);
   advance(.04);
   assert.equal(state.velocity, dive);
   const beforeTap = state.y;
@@ -40,6 +41,16 @@ for (const hz of [60, 120, 144]) {
   advance(.01);
   assert(state.y < beforeTap);
 }
+
+// Mobile frames can straddle either the apex or the descent speed limit.
+const uneven = fresh();
+uneven.flap();
+for (const seconds of [.097, .107, .123, .1, .11]) uneven.step(seconds, 300, 100);
+const fine = fresh();
+fine.flap();
+for (let i = 0; i < 537; i++) fine.step(.001, 300, 100);
+assert(Math.abs(uneven.state.y - fine.state.y) < 1e-8);
+assert.equal(uneven.state.velocity, fine.state.velocity);
 
 const freefall = fresh();
 freefall.flap();

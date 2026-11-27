@@ -6,9 +6,10 @@ export const START_Y = 225;
 export const GATE_WIDTH = 40;
 export const SPACING = 158;
 // A tap kicks upwards immediately. It reaches its 43-unit apex in 0.20 s.
-const GRAVITY = 2150;
+const RISE_GRAVITY = 2150;
+const FALL_GRAVITY = 1150;
 const FLAP = -430;
-const MAX_FALL = 545;
+const MAX_FALL = 365;
 const RADIUS_X = 10;
 const RADIUS_Y = 7;
 
@@ -42,12 +43,21 @@ export function flightCourse(random = Math.random) {
     extend(right);
     const speed = 115 + Math.min(30, state.score * 2);
     state.distance += speed * dt;
-    // A step can straddle terminal velocity. Integrate the accelerating part
-    // and the constant-speed part separately, including between input events.
-    const accelerating = Math.min(dt, (MAX_FALL - state.velocity) / GRAVITY);
-    state.y += (state.velocity + GRAVITY * accelerating / 2) * accelerating;
-    state.y += MAX_FALL * (dt - accelerating);
-    state.velocity = Math.min(MAX_FALL, state.velocity + GRAVITY * dt);
+    // Split a step that crosses the apex so the flap feels the same at every
+    // refresh rate. The softer downward pull starts only once the bird crests.
+    let fallTime = dt;
+    if (state.velocity < 0) {
+      const rising = Math.min(dt, -state.velocity / RISE_GRAVITY);
+      state.y += (state.velocity + RISE_GRAVITY * rising / 2) * rising;
+      state.velocity += RISE_GRAVITY * rising;
+      fallTime -= rising;
+    }
+    if (fallTime > 0) {
+      const accelerating = Math.min(fallTime, (MAX_FALL - state.velocity) / FALL_GRAVITY);
+      state.y += (state.velocity + FALL_GRAVITY * accelerating / 2) * accelerating;
+      state.y += MAX_FALL * (fallTime - accelerating);
+      state.velocity = Math.min(MAX_FALL, state.velocity + FALL_GRAVITY * fallTime);
+    }
     if (state.y - RADIUS_Y <= 0) state.hit = 'ceiling';
     else if (state.y + RADIUS_Y >= FLOOR) state.hit = 'quay';
     for (const gate of state.gates) {

@@ -24,8 +24,13 @@ try {
   const tap = () => page.touchscreen.tap(130, 415);
   await tap();
   assert.equal(await phase(), 'flying');
+  const launchY = await birdY();
+  const scale = await page.locator('.nf').evaluate(el => el.clientHeight / 500);
   await page.clock.runFor(410);
-  assert(await pitch() > 70, 'the bird dives after a missed beat');
+  assert(await birdY() < launchY - 12 * scale, 'a late tap still has room to recover');
+  assert(await pitch() > 25, 'the bird has crested and turned down');
+  await page.clock.runFor(150);
+  assert(await pitch() > 70, 'an extended fall becomes a dive');
   await tap();
   assert(await pitch() < -25, 'a touch immediately turns the diving bird upwards');
   const y = await birdY();
