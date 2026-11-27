@@ -16,12 +16,18 @@ freefall.flap();
 freefall.step(dt, 300, 100);
 assert(freefall.state.y < 225);
 for (let i = 0; i < 300; i++) freefall.step(dt, 300, 100);
-assert(freefall.state.hit);
+assert.equal(freefall.state.hit, 'quay');
 assert(freefall.state.y < FLOOR);
 const stopped = { ...freefall.state };
 freefall.flap();
 freefall.step(dt, 300, 100);
 assert.deepEqual(freefall.state, stopped);
+
+const climb = fresh();
+climb.state.y = 7.1;
+climb.flap();
+climb.step(dt, 300, 100);
+assert.equal(climb.state.hit, 'ceiling');
 
 function cross(y) {
   const run = fresh();
@@ -31,10 +37,10 @@ function cross(y) {
   run.step(dt, 300, 100);
   return run;
 }
-assert(cross(g => g.center + g.gap / 2 - 6).state.hit);
+assert.equal(cross(g => g.center + g.gap / 2 - 6).state.hit, 'gate');
 assert(cross(g => g.center - g.gap / 2 + 6).state.hit);
 const safe = cross(g => g.center + g.gap / 2 - 8);
-assert.equal(safe.state.hit, false);
+assert.equal(safe.state.hit, null);
 const gate = safe.state.gates[0];
 safe.state.distance = gate.x + GATE_WIDTH / 2 + 11;
 safe.step(dt, 300, 100);

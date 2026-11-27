@@ -1,10 +1,15 @@
-import { flightCourse, HEIGHT, FLOOR, GATE_WIDTH } from './flight-course.js?v=ff49f0e90fca';
+import { flightCourse, HEIGHT, FLOOR, GATE_WIDTH } from './flight-course.js?v=a5830b13da85';
 import { icon } from '../icons.js';
 import { soundOn, setSound, sfx, unlockAudio } from '../sound.js';
 import { storage, reducedMotion, clamp } from '../util.js';
 
 const BEST = 'cc:flight:best';
 const STEP = 1 / 120;
+const landingText = {
+  gate: 'You clipped a harbor gate.',
+  quay: 'You landed on the quay.',
+  ceiling: 'You flew above the course.',
+};
 const pauseIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
 
 export default {
@@ -74,7 +79,7 @@ export default {
         play.lastElementChild.textContent = 'Resume flight';
       } else {
         heading.textContent = 'Flight over';
-        note.textContent = course.state.score > previousBest ? 'A new personal best.' : 'One point for every gate you clear.';
+        note.textContent = course.state.score > previousBest ? 'A new personal best.' : landingText[course.state.hit];
         $('[data-total]').textContent = course.state.score;
         $('[data-best]').textContent = best;
         play.lastElementChild.textContent = 'Fly again';
@@ -164,6 +169,10 @@ export default {
       }
       if (course.state.score !== oldScore) {
         score.lastElementChild.textContent = course.state.score;
+        if (!quiet) score.lastElementChild.animate(
+          [{ transform: 'scale(1.14)' }, { transform: 'scale(1)' }],
+          { duration: 155, easing: 'ease-out' },
+        );
         sfx.gem(course.state.score % 7);
       }
       if (course.state.hit) { draw(); finish(); return false; }

@@ -11,7 +11,7 @@ const RADIUS_X = 10;
 const RADIUS_Y = 7;
 
 export function flightCourse(random = Math.random) {
-  const state = { y: START_Y, velocity: 0, distance: 0, score: 0, gates: [], hit: false };
+  const state = { y: START_Y, velocity: 0, distance: 0, score: 0, gates: [], hit: null };
   let nextIndex = 0, nextCenter = START_Y;
 
   function extend(right) {
@@ -38,14 +38,15 @@ export function flightCourse(random = Math.random) {
     state.distance += speed * dt;
     state.y += (state.velocity + GRAVITY * dt / 2) * dt;
     state.velocity += GRAVITY * dt;
-    state.hit = state.y - RADIUS_Y <= 0 || state.y + RADIUS_Y >= FLOOR;
+    if (state.y - RADIUS_Y <= 0) state.hit = 'ceiling';
+    else if (state.y + RADIUS_Y >= FLOOR) state.hit = 'quay';
     for (const gate of state.gates) {
       const dx = gate.x - state.distance;
       // Rounded hitbox leaves wingtips and beak free to brush a gate.
       const edge = Math.max(0, Math.abs(dx) - GATE_WIDTH / 2);
       if (edge <= RADIUS_X) {
         const reach = RADIUS_Y * Math.sqrt(1 - (edge / RADIUS_X) ** 2);
-        if (Math.abs(state.y - gate.center) + reach >= gate.gap / 2) state.hit = true;
+        if (!state.hit && Math.abs(state.y - gate.center) + reach >= gate.gap / 2) state.hit = 'gate';
       }
       if (!state.hit && !gate.passed && dx < -GATE_WIDTH / 2 - RADIUS_X) {
         gate.passed = true;
