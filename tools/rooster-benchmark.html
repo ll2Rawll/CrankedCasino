@@ -13,9 +13,9 @@
 </style>
 <canvas aria-label="Fixed-seed Road Rooster course"></canvas>
 <p><button type="button" id="run">Run frame test</button></p>
-<p><output id="result" aria-live="polite">Keep this tab in view for 150 frames.</output></p>
+<p><output id="result" aria-live="polite">Keep this tab in view for 24 forward hops.</output></p>
 <script type="module">
-import { landscape } from '../js/games/rooster-landscape.js';
+import { landscape } from '../js/games/rooster-landscape.js?v=72fac2661382';
 import { scoreLane } from '../js/games/rooster-course.js';
 
 const canvas = document.querySelector('canvas');
@@ -42,23 +42,24 @@ button.onclick = async () => {
     };
     const gaps = [];
     let previous, firstDraw;
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 164; i++) {
       await new Promise(requestAnimationFrame);
       if (interrupted || canvas.clientWidth !== W || canvas.clientHeight !== H) {
         output.textContent = 'The tab or playfield changed. Run the test again.';
         return;
       }
       const start = performance.now();
-      if (i >= 12) gaps.push(start - previous);
+      if (i >= 20) gaps.push(start - previous);
       previous = start;
+      const step = Math.max(0, i - 19), u = (step % 6) / 6;
       scene.draw({ W, H, dpr, dt: .016, seed, lane, t: i / 60, now: i * 1000 / 60,
-        vr: 6 + i / 100, vc: 3 + .4 * Math.sin(i / 40), hop: 0, squash: 0, facing: 1,
-        score: true, phase: 'run', line: 0, trainWarning: () => false });
+        vr: Math.floor(step / 6) + u * (2 - u), vc: 3 + .8 * Math.sin(i / 33), hop: .32 * 4 * u * (1 - u), squash: 0, facing: 1,
+        score: true, phase: i < 20 ? 'countdown' : 'run', line: 0, trainWarning: () => false });
       if (i === 0) firstDraw = performance.now() - start;
     }
     gaps.sort((a, b) => a - b);
     const percentile = p => gaps[Math.floor(gaps.length * p)].toFixed(1);
-    output.textContent = `${canvas.width} × ${canvas.height} pixels. Median frame interval ${percentile(.5)} ms. 95th percentile ${percentile(.95)} ms. First draw call ${firstDraw.toFixed(1)} ms.`;
+    output.textContent = `${canvas.width} × ${canvas.height} pixels over 24 forward hops. Median frame interval ${percentile(.5)} ms. 95th percentile ${percentile(.95)} ms. First draw call ${firstDraw.toFixed(1)} ms.`;
   } finally {
     button.disabled = false;
   }

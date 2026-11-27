@@ -261,11 +261,49 @@ function model(kind, variant, direction) {
   return { faces, points };
 }
 
+// Load the original artwork ahead of new lane reveals. Play can start while it
+// downloads. Every stamp also has a local procedural path for offline play.
+let atlas, loading;
+export function prepareSprites() {
+  if (!loading) {
+    const url = new URL('../../assets/rooster/models.json?v=75edf9c4dd59', import.meta.url);
+    loading = (async () => {
+      const response = await fetch(url);
+      if (!response.ok) return;
+      const { image: file, records, shapes } = await response.json();
+      const image = new Image();
+      image.src = new URL(file, url).href;
+      await image.decode();
+      atlas = { image, records, shapes };
+    })().catch(() => {});
+  }
+  return loading;
+}
+
+function cropSprite([x, y, width, height]) {
+  const image = document.createElement('canvas');
+  image.width = width;
+  image.height = height;
+  image.getContext('2d').drawImage(atlas.image, x, y, width, height, 0, 0, width, height);
+  return image;
+}
+
 export function stamp(kind, variant = 0, direction = 1) {
   if (kind === 'taxi' || kind === 'rock') variant = 0;
   if (kind === 'pad' && variant !== 0) variant = 1;
   const key = `${kind}/${variant}/${direction}`;
   if (cache.has(key)) return cache.get(key);
+  const baked = atlas?.records[key];
+  if (baked) {
+    const { left, top, width, height, shadow } = baked;
+    if (!silhouettes.has(shadow)) {
+      const { x, y, w, h, rect } = atlas.shapes[shadow];
+      silhouettes.set(shadow, { key: shadow, x, y, w, h, image: cropSprite(rect) });
+    }
+    const result = { left, top, width, height, penumbra: silhouettes.get(shadow), image: cropSprite(baked.rect) };
+    cache.set(key, result);
+    return result;
+  }
   const { faces, points } = model(kind, variant, direction);
   const coords = points.map(project);
   const left = Math.min(...coords.map((p) => p[0])) - 0.025,

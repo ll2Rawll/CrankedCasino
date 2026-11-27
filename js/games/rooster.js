@@ -14,7 +14,7 @@ import { sfx, haptic } from '../sound.js';
 import { burst, PALETTES, coinRain, shake } from '../fx.js';
 import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
 import { scoreLane, onPlatform } from './rooster-course.js';
-import { landscape } from './rooster-landscape.js?v=cd54bc6893c5';
+import { landscape } from './rooster-landscape.js?v=72fac2661382';
 import { loadArt } from './rooster-art.js';
 
 const HOP_MS = 110;
@@ -95,20 +95,25 @@ export default {
     for (const type of ['gesturestart', 'gesturechange', 'wheel', 'contextmenu']) {
       gameDialog.addEventListener(type, (event) => event.preventDefault(), { passive: false });
     }
+    let returnScroll;
     function enterGameView() {
       if (gameDialog.open || !matchMedia('(any-pointer: coarse)').matches) return;
+      returnScroll = { left: window.scrollX, top: window.scrollY, behavior: 'instant' };
       gameDialog.append(viewEl);
       gameDialog.showModal();
       document.documentElement.classList.add('rr-playing');
     }
     function leaveGameView() {
       if (!gameDialog.open) return;
+      document.documentElement.classList.remove('rr-playing');
       gameDialog.close();
       stage.append(viewEl);
       clearGesture();
-      document.documentElement.classList.remove('rr-playing');
       stopHold();
-      if (!destroyed) renderControls();
+      if (!destroyed) {
+        renderControls();
+        window.scrollTo(returnScroll);
+      }
     }
     exitView.addEventListener('click', leaveGameView);
     gameDialog.addEventListener('cancel', (event) => {
@@ -715,7 +720,8 @@ export default {
       if (destroyed) return;
       raf = requestAnimationFrame(tick);
       const now = performance.now();
-      const dt = Math.min(0.05, (now - lastNow) / 1000);
+      // The exponential camera follow uses real elapsed time even after a slow frame.
+      const dt = (now - lastNow) / 1000;
       lastNow = now;
       if (!W || !H) return;
       const t = endT ?? worldT(now);
@@ -741,7 +747,7 @@ export default {
       scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: player.lift, squash, touchdown: phase === 'run' ? lastTouchdown : null,
         facing: chick.face, death: deathAt, banked: cashedAt, score: scoreMode, phase, line, art, trainWarning });
       if (phase === 'countdown') scoreLabel();
-      drawParticles(dt);
+      drawParticles(Math.min(.05, dt));
     }
     let raf = requestAnimationFrame(tick);
 

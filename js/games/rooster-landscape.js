@@ -1,9 +1,10 @@
 import { RR, rrFront } from '../math.js';
 import { courseMaterials } from './rooster-materials.js';
-import { plane, stamp, logTop, padTop } from './rooster-models.js';
-import { road, meadow, variation, rasterLayers } from './rooster-layers.js';
+import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=95c341414c5b';
+import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=3e9d4885a9a8';
 
 export function landscape(ctx) {
+  prepareSprites();
   let materials;
   let warmedHop = false;
   const layers = rasterLayers(ctx);
@@ -73,6 +74,7 @@ export function landscape(ctx) {
       last = Math.ceil(Math.max(...bounds.map((p) => p[1]))) + 1;
     const actors = [];
     const riverMask = new Path2D();
+    const waterRows = new Set();
     let footing = 0;
     let supportDepth = -Infinity;
     function add(kind, x, r, variant = 0, dir = 1, size = 1, lift = 0, stretch = 1, minDepth = -Infinity) {
@@ -80,7 +82,7 @@ export function landscape(ctx) {
       if (p.x < -4 * scale || p.x > W + 4 * scale || p.y < -2 * scale || p.y > H + 3 * scale) return;
       actors.push({ kind, x, r, p, depth: Math.max(p.y, minDepth), variant, dir, size, lift, stretch });
     }
-    layers.ground({ W, H, dpr, scale, origin, lane, seed, score, materials, minX, maxX, first, last });
+    layers.ground({ W, H, dpr, scale, origin, lane, seed, score, materials });
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.transform(plane.xx * scale, plane.xy * scale, plane.yx * scale, plane.yy * scale, origin.x, origin.y);
     function strip(x, r, w, h, color) {
@@ -101,29 +103,13 @@ export function landscape(ctx) {
         kind = r === -3 || r === -4 ? 'brook' : L.kind;
       const turf = meadow(kind);
       const water = kind === 'river' || kind === 'brook';
-      const asphalt = road(kind);
       if (turf) {
-        // The front edge of the raised sod shows soil above the road or water.
-        if (!meadow(lane(r - 1).kind) || r === -2) {
-          strip(minX, r - 0.51, span, 0.1, '#947445');
-          strip(minX, r - 0.41, span, 0.06, '#82a744');
-        }
         for (let x = minX; x <= maxX; x++) {
           const h = variation(seed, r, x);
-          const j = x + ((h >>> 7) % 67) / 100 - 0.3,
-            k = r + ((h >>> 14) % 64) / 100 - 0.32;
-          if (h % 5 === 0) {
-            strip(j, k, 0.086, 0.032, '#bbd465');
-            strip(j + 0.1, k + 0.055, 0.045, 0.025, '#86ab45');
-          }
-          const outside = x < 0 || x >= RR.COLS;
-          // Woods continue behind the start; leave an open patch around the rooster.
-          if ((outside || r < 0) && h % 4 === 0 && !(r >= -1 && Math.abs(x - RR.START_COL) < 1.6))
-            add(h % 13 === 0 ? 'rock' : 'tree', j, k, (h >>> 8) % 4, 1, 0.73 + (h % 43) / 100);
-          else if (h % 29 === 0) {
-            ellipse(j, k, 0.046, 0.035, '#fff3bd');
-            ellipse(j + 0.07, k + 0.04, 0.035, 0.025, '#ffe7a1');
-          }
+          if (!wildTree(x, r, h)) continue;
+          const j = x + ((h >>> 7) % 67) / 100 - .3;
+          const k = r + ((h >>> 14) % 64) / 100 - .32;
+          add(h % 13 === 0 ? 'rock' : 'tree', j, k, (h >>> 8) % 4, 1, .73 + (h % 43) / 100);
         }
         if (r === -1) {
           // The fence sits behind the starting tile and leaves the playable route open.
@@ -141,11 +127,8 @@ export function landscape(ctx) {
               .048 * (1 - age), .022 * (1 - age), '#d6df91');
           }
         }
-      } else if (asphalt) {
-        if (road(lane(r + 1).kind)) {
-          for (let x = 2 * Math.floor(minX / 2); x < maxX; x += 2) strip(x, r + 0.47, 0.72, 0.043, '#c4c8bc');
-        } else strip(minX, r + 0.46, span, 0.046, '#858c8d');
       } else if (water) {
+        waterRows.add(r);
         riverMask.rect(minX,r-.5,span,1);
         strip(minX,r-.5,span,1,materials.water);
         if (impact && touchdown.row === r) {
@@ -194,11 +177,6 @@ export function landscape(ctx) {
           }
         }
       } else if (kind === 'train') {
-        for (let x = 0.39 * Math.floor(minX / 0.39); x < maxX; x += 0.39) strip(x, r - 0.43, 0.15, 0.86, '#806044');
-        for (const side of [-0.3, 0.3]) {
-          strip(minX, r + side - 0.04, span, 0.086, '#535958');
-          strip(minX, r + side + 0.005, span, 0.044, '#c4c2af');
-        }
         const warning = trainWarning(L, r, t);
         for (const x of [-0.65, RR.COLS - 0.35]) add('signal', x, r + 0.38, warning && Math.floor(now / 240) % 2 ? 1 : 0);
       }
@@ -249,21 +227,36 @@ export function landscape(ctx) {
     actors.sort((a, b) => a.depth - b.depth);
     // Mirror near-bank scenery into the water. Clip before switching to screen
     // coordinates so the reflection can never spill onto a road or a platform.
-    ctx.save();
-    ctx.clip(riverMask);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.globalAlpha=.23;
-    for (const a of actors) {
-      if (!['tree','rock','fence','bridge'].includes(a.kind)) continue;
-      const sprite=stamp(a.kind,a.variant,a.dir);
-      const u=scale*a.size;
+    if (waterRows.size) {
       ctx.save();
-      ctx.translate(a.p.x,a.p.y);
-      ctx.transform(1,0,.08*Math.sin(t*1.8+a.r),-.78,0,0);
-      ctx.drawImage(sprite.image,sprite.left*u,sprite.top*u,sprite.width*u,sprite.height*u);
+      ctx.clip(riverMask);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = .23;
+      const det = plane.xx * plane.yy - plane.xy * plane.yx;
+      for (const a of actors) {
+        if (!['tree', 'rock', 'fence', 'bridge'].includes(a.kind)) continue;
+        const sprite = stamp(a.kind, a.variant, a.dir);
+        const shear = .08 * Math.sin(t * 1.8 + a.r);
+        // Inverse-project the reflected rectangle to find overlapping river rows.
+        // Both coefficients are positive for this camera at every ripple angle.
+        const dx = -plane.xy * a.size / det;
+        const dy = (-.78 * plane.xx - shear * plane.xy) * a.size / det;
+        const firstRow = a.r + dx * sprite.left + dy * sprite.top;
+        const lastRow = firstRow + dx * sprite.width + dy * sprite.height;
+        let visible = false;
+        for (let r = Math.ceil(firstRow - .5); r <= lastRow + .5; r++) {
+          if (waterRows.has(r)) { visible = true; break; }
+        }
+        if (!visible) continue;
+        const u = scale * a.size;
+        ctx.save();
+        ctx.translate(a.p.x, a.p.y);
+        ctx.transform(1, 0, shear, -.78, 0, 0);
+        ctx.drawImage(sprite.image, sprite.left * u, sprite.top * u, sprite.width * u, sprite.height * u);
+        ctx.restore();
+      }
       ctx.restore();
     }
-    ctx.restore();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const a of actors) {
       if (a.kind === 'egg' || a.kind === 'hawk') continue;

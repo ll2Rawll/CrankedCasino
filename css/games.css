@@ -318,10 +318,11 @@
 
 /* The modal keeps page links and scrolling out of the touch play surface. */
 html.rr-playing, html.rr-playing body { overflow: hidden; overscroll-behavior: none; }
-/* The opaque top-layer dialog covers the casino. Preserve the page layout for
-   Exit while letting the browser skip painting the covered table and chrome. */
-.rr-playing :is(.backdrop, .topbar, .site-foot, .game--rooster) { visibility: hidden; }
-.rr-playing .rr-dialog[open] { visibility: visible; }
+/* The open dialog is opaque. Remove the covered casino layers from layout
+   so WebKit doesn't keep compositing their filters and animations during hops. */
+.rr-playing body > :is(.backdrop, .topbar, .site-foot, .drawer, .popover, .toasts, #fx, .skip-link),
+.rr-playing .game--rooster > :not(.game-body),
+.rr-playing .game--rooster .game-body > :not(.rr-dialog) { display: none; }
 .rr-dialog {
   position: fixed; inset: 0; margin: 0; box-sizing: border-box;
   width: 100vw; height: 100vh;

@@ -9,6 +9,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2,
     isMobile: true, hasTouch: true });
   const errors = [];
+  let modelsUrl;
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.endsWith('/rooster-models.js')) modelsUrl = request.url();
+  });
   page.on('pageerror', error => errors.push(error.message));
   const base = new URL(process.env.BASE || 'http://localhost:8000/');
   base.hash = '/rooster';
@@ -34,8 +38,9 @@ try {
 
   // Observe the actual hen blit. Other animation (water, wheels, HUD) must
   // never satisfy the finger-down feedback check.
-  await page.evaluate(async () => {
-    const { stamp } = await import(new URL('js/games/rooster-models.js', document.baseURI));
+  assert(modelsUrl, 'the game loaded the model renderer');
+  await page.evaluate(async url => {
+    const { stamp } = await import(url);
     const images = new Set([stamp('hen', 0, 1).image, stamp('hen', 2, 1).image]);
     const ctx = document.querySelector('.rr-dialog canvas').getContext('2d');
     const original = ctx.drawImage.bind(ctx);
@@ -43,7 +48,7 @@ try {
       original(image, ...args);
       if (images.has(image)) window.henY = ctx.getTransform().f;
     };
-  });
+  }, modelsUrl);
 
   const input = await page.context().newCDPSession(page);
   const send = (type, x = 120, y = 400) => input.send('Input.dispatchTouchEvent', {
