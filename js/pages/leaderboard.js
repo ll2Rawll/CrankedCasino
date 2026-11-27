@@ -18,7 +18,7 @@ export default {
     view.innerHTML = `
       <section class="wrap page-head">
         <span class="kicker">Hall of fame</span>
-        <h1 class="page-title display">Leader<em style="font-style:italic;color:var(--text-2)">board</em></h1>
+        <h1 class="page-title display">Leader<em>board</em></h1>
         <p class="page-lede">The biggest stacks of fake chips on CrankedCasino. Sign in with GitHub to get your avatar up here.</p>
       </section>
       <section class="wrap" data-body></section>`;

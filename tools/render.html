@@ -8,10 +8,13 @@
 <body>
 <div id="box"><canvas id="c"></canvas></div>
 <script type="module">
-  // Renders the chrome objects to PNG. Driven by tools/render-assets.mjs.
-  import { createHero } from '../js/hero3d.js';
+  // Renders the 3D card art to PNG. Driven by tools/render-assets.mjs.
+  import { createHero } from './art3d.js';
+  const font = new FontFace('Bricolage', 'url(../assets/fonts/bricolage-var.woff2)', { weight: '200 800', stretch: '75% 100%' });
+  await font.load();
+  document.fonts.add(font);
   const box = document.getElementById('box');
-  window.hero = createHero(document.getElementById('c'), { interactive: false });
+  window.hero = createHero(document.getElementById('c'), { interactive: false, initial: 'mines' });
   window.setSize = (w, h) => { box.style.width = w + 'px'; box.style.height = h + 'px'; };
   window.ready = true;
 </script>

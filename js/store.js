@@ -14,7 +14,12 @@ export const START_BALANCE = 1000;
 export const DAILY_BONUS = 1000;
 export const DAILY_MS = 24 * 60 * 60 * 1000;
 export const REFILL_BELOW = 1;
-export const GAMES = ['mines', 'plinko', 'slots', 'crash'];
+export const GAMES = ['blackjack', 'roulette', 'slots', 'crash', 'plinko', 'mines'];
+
+// Promo codes (case-insensitive). Each can be redeemed once per player profile.
+export const PROMOS = {
+  MAXWIN: { chips: 1000, note: 'MaxWin bonus' },
+};
 const HISTORY_MAX = 40;
 const VERSION = 1;
 
@@ -32,6 +37,7 @@ function freshState() {
     history: [],
     dailyAt: 0,
     refills: 0,
+    promos: [],
     createdAt: now,
     savedAt: now,
     mines: null,
@@ -59,6 +65,7 @@ export function sanitize(raw) {
   s.history = Array.isArray(raw.history) ? raw.history.slice(0, HISTORY_MAX) : [];
   s.dailyAt = num(raw.dailyAt);
   s.refills = num(raw.refills);
+  s.promos = Array.isArray(raw.promos) ? raw.promos.filter((x) => typeof x === 'string').slice(0, 50) : [];
   s.createdAt = num(raw.createdAt, base.createdAt);
   s.savedAt = num(raw.savedAt, 0);
   s.mines = raw.mines && typeof raw.mines === 'object' ? raw.mines : null;
@@ -144,6 +151,18 @@ export const store = {
     emit('balance', { delta: -amount, balance: state.balance });
     persist();
     return t;
+  },
+
+  /** Put more chips on a live bet (Blackjack double, split, insurance). */
+  addToBet(t, amount) {
+    amount = round2(amount);
+    if (!t || t.done || !(amount > 0)) return false;
+    if (amount > state.balance + 1e-9) throw new BetError('Not enough chips for that.');
+    state.balance = round2(state.balance - amount);
+    t.amount = round2(t.amount + amount);
+    emit('balance', { delta: -amount, balance: state.balance });
+    persist();
+    return true;
   },
 
   /** Re-attach to a bet whose chips were already taken (e.g. a Mines round restored after reload). */
@@ -239,6 +258,28 @@ export const store = {
     emit('balance', { delta: DAILY_BONUS, balance: state.balance });
     persist();
     return true;
+  },
+
+  /**
+   * Redeem a promo code. Returns { ok, chips, code } or { ok: false, reason }.
+   * reason: 'empty' | 'invalid' | 'used'
+   */
+  redeemPromo(input) {
+    const code = String(input || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!code) return { ok: false, reason: 'empty' };
+    const promo = PROMOS[code];
+    if (!promo) return { ok: false, reason: 'invalid', code };
+    if (state.promos.includes(code)) return { ok: false, reason: 'used', code };
+    state.promos.push(code);
+    state.balance = round2(state.balance + promo.chips);
+    emit('balance', { delta: promo.chips, balance: state.balance });
+    emit('promo', { code, chips: promo.chips });
+    persist();
+    return { ok: true, code, chips: promo.chips, note: promo.note };
+  },
+
+  hasPromo(code) {
+    return state.promos.includes(String(code).toUpperCase());
   },
 
   canRefill() {

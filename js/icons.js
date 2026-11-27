@@ -37,6 +37,16 @@ export const icons = {
   grid: s('<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>'),
   plinko: s('<circle cx="12" cy="4.5" r="1.6"/><circle cx="8.5" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/><circle cx="5" cy="15.5" r="1.2"/><circle cx="12" cy="15.5" r="1.2"/><circle cx="19" cy="15.5" r="1.2"/><path d="M3.5 20.5h17"/>'),
   seven: s('<path d="M6 4.5h12l-6.5 15"/><path d="M9 11h6"/>'),
+  ticket: s('<path d="M3.5 8.5V6.8c0-.7.6-1.3 1.3-1.3h14.4c.7 0 1.3.6 1.3 1.3v1.7a2.5 2.5 0 0 0 0 5v1.7c0 .7-.6 1.3-1.3 1.3H4.8c-.7 0-1.3-.6-1.3-1.3v-1.7a2.5 2.5 0 0 0 0-5Z"/><path d="M14.5 5.5v13" stroke-dasharray="1.6 2.2"/>', 'transform="rotate(-8 12 12)"'),
+  cards: s('<rect x="3.5" y="5" width="11" height="15" rx="2" transform="rotate(-10 9 12.5)"/><rect x="9.5" y="4" width="11" height="15" rx="2" transform="rotate(8 15 11.5)"/>'),
+  wheel: s('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><path d="M12 3v5.8M12 15.2V21M3 12h5.8M15.2 12H21M5.6 5.6l4.1 4.1M14.3 14.3l4.1 4.1M18.4 5.6l-4.1 4.1M9.7 14.3l-4.1 4.1"/>'),
+  undo: s('<path d="M9 7 4.5 11.5 9 16"/><path d="M5 11.5h9.5a5 5 0 0 1 0 10H12"/>'),
+  trash: s('<path d="M4.5 7h15M10 11v6M14 11v6M6 7l1 12.5c.1.8.7 1.5 1.6 1.5h6.8c.9 0 1.5-.7 1.6-1.5L18 7M9 7V4.5h6V7"/>'),
+  x2: s('<path d="M4 8l6 8M10 8l-6 8"/><path d="M14 9.5a2.5 2.5 0 1 1 4.8 1c-.5 1.4-4.8 5.5-4.8 5.5h5.5"/>'),
+  spade: '<svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><path d="M50 4C30 25 6 40 6 60c0 14 11 22 23 22 8 0 15-4 18-10-1 10-6 18-13 23h32c-7-5-12-13-13-23 3 6 10 10 18 10 12 0 23-8 23-22 0-20-24-35-44-56Z"/></svg>',
+  heart: '<svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><path d="M50 92C20 68 4 50 4 31 4 16 16 5 30 5c9 0 16 5 20 12 4-7 11-12 20-12 14 0 26 11 26 26 0 19-16 37-46 61Z"/></svg>',
+  diamond: '<svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><path d="M50 2Q68 30 90 50 68 70 50 98 32 70 10 50 32 30 50 2Z"/></svg>',
+  club: '<svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true"><circle cx="50" cy="27" r="20"/><circle cx="27" cy="57" r="20"/><circle cx="73" cy="57" r="20"/><circle cx="50" cy="52" r="10"/><path d="M47 58c-1 18-5 28-13 37h32c-8-9-12-19-13-37Z"/></svg>',
 };
 
 export const icon = (name) => icons[name] || '';

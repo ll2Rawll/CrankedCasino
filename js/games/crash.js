@@ -441,7 +441,7 @@ export default {
       ctx.globalAlpha = 1;
 
       // grid
-      ctx.font = '700 11px Manrope, system-ui, sans-serif';
+      ctx.font = '700 11px Bricolage, system-ui, sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.38)';
       ctx.strokeStyle = 'rgba(255,255,255,0.06)';
       ctx.lineWidth = 1;
@@ -485,8 +485,8 @@ export default {
         ctx.lineTo(P.l, P.t + gh);
         ctx.closePath();
         const ag = ctx.createLinearGradient(0, tipY, 0, P.t + gh);
-        ag.addColorStop(0, crashed ? 'rgba(255,84,104,0.28)' : 'rgba(90,180,255,0.3)');
-        ag.addColorStop(1, 'rgba(90,180,255,0)');
+        ag.addColorStop(0, crashed ? 'rgba(255,77,109,0.28)' : 'rgba(77,255,195,0.24)');
+        ag.addColorStop(1, 'rgba(77,255,195,0)');
         ctx.fillStyle = ag;
         ctx.fill();
         ctx.restore();
@@ -503,15 +503,15 @@ export default {
           lg.addColorStop(0, '#ff8a95');
           lg.addColorStop(1, '#ff3b55');
         } else {
-          lg.addColorStop(0, '#5ab4ff');
-          lg.addColorStop(0.6, '#8b7bff');
-          lg.addColorStop(1, '#ff4fae');
+          lg.addColorStop(0, '#4dd2ff');
+          lg.addColorStop(0.55, '#4dffc3');
+          lg.addColorStop(1, '#ffc94d');
         }
         ctx.strokeStyle = lg;
         ctx.lineWidth = 4;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.shadowColor = crashed ? 'rgba(255,84,104,0.8)' : 'rgba(139,123,255,0.9)';
+        ctx.shadowColor = crashed ? 'rgba(255,77,109,0.85)' : 'rgba(77,255,195,0.9)';
         ctx.shadowBlur = 18;
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -572,7 +572,7 @@ export default {
       if (phase === 'running') {
         multEl.textContent = fmtMult(Math.min(at(el), E.crashAt));
         multEl.className = 'crash-mult tnum';
-        multEl.style.color = m >= 10 ? 'var(--gold)' : m >= 2 ? '#c8ffe6' : '';
+        multEl.style.setProperty('--neon', m >= 10 ? '#ffc94d' : m >= 2 ? '#4dffc3' : '#4dd2ff');
         subEl.className = 'crash-sub';
         subEl.textContent = E.bet && !E.bet.cashed ? `Cash out ${fmt(round2(E.bet.amount * at(el)))}` : E.bet?.cashed ? `Cashed @ ${fmtMult(E.bet.cashed)}` : 'In flight';
         if (E.bet?.cashed) subEl.className = 'crash-sub win';
@@ -584,7 +584,7 @@ export default {
         const left = Math.max(0, BETTING_MS - el);
         multEl.textContent = `${(left / 1000).toFixed(1)}s`;
         multEl.className = 'crash-mult tnum';
-        multEl.style.color = '';
+        multEl.style.setProperty('--neon', '#ffc94d');
         subEl.className = 'crash-sub';
         subEl.textContent = E.bet ? 'You’re in. Get ready…' : 'Place your bets';
         barEl.hidden = false;
@@ -617,7 +617,6 @@ export default {
         }
         if (E.phase === 'betting') {
           lastLoss = 0;
-          multEl.style.color = '';
         }
         renderControls();
       }
@@ -626,7 +625,7 @@ export default {
         sfx.boom();
         multEl.textContent = fmtMult(E.crashAt);
         multEl.className = 'crash-mult tnum is-crashed';
-        multEl.style.color = '';
+        multEl.style.removeProperty('--neon');
         const lostBet = E.bet && !E.bet.cashed;
         subEl.textContent = lostBet ? `Crashed! −${fmt(E.bet.amount)}` : 'Crashed';
         subEl.className = 'crash-sub loss';

@@ -139,6 +139,8 @@ export default {
         <span class="pill" data-linebet>Line bet <b>0.10</b></span>
       </div>
       <div class="cabinet">
+        <div class="cab-sign" aria-hidden="true"><span class="neon">LUCKY CRANK</span></div>
+        <div class="cab-lights" aria-hidden="true">${'<i></i>'.repeat(16)}</div>
         <div class="reels">
           ${Array.from({ length: 5 }, (_, c) => `<div class="reel" data-c="${c}"><div class="strip"></div><div class="reel-shine"></div></div>`).join('')}
           <svg class="paylines" viewBox="0 0 5 3" preserveAspectRatio="none" aria-hidden="true"></svg>

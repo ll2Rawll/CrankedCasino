@@ -1,30 +1,39 @@
 <!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>OG image</title>
-<link rel="stylesheet" href="../css/base.css">
+<html><head><meta charset="utf-8"><title>OG image</title>
+<link rel="stylesheet" href="../css/base.css"><link rel="stylesheet" href="../css/lobby.css">
 <style>
-  body { margin: 0; width: 1200px; height: 630px; overflow: hidden; display: block; background: #08080a; }
-  .og { position: relative; width: 1200px; height: 630px; overflow: hidden; display: grid; grid-template-columns: 1fr 430px; align-items: center; padding: 0 70px; gap: 30px; }
-  .og::before { content: ""; position: absolute; width: 1500px; height: 1500px; left: -900px; top: -380px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.06), rgba(255,255,255,.025) 80%, transparent); }
-  .og h1 { font-family: var(--font-display); font-weight: 400; font-size: 132px; line-height: .86; letter-spacing: -.025em; color: #f3f0ea; }
-  .og h1 em { color: rgba(243,240,234,.62); }
-  .og p { margin-top: 26px; font-size: 30px; color: rgba(243,240,234,.66); max-width: 22ch; line-height: 1.3; }
-  .og .tags { display: flex; gap: 10px; margin-top: 34px; }
-  .og .tags span { padding: 10px 18px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,.18); color: #f3f0ea; font-weight: 700; font-size: 20px; }
-  .arch { position: relative; width: 400px; border: 1.5px solid rgba(255,255,255,.22); overflow: hidden; background: radial-gradient(120% 70% at 50% 0%, rgba(255,255,255,.07), transparent 60%), linear-gradient(180deg,#1b1b20,#0b0b0e); }
-  .arch img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-</style>
-</head>
+  body{margin:0;width:1200px;height:630px;overflow:hidden;display:block}
+  .og{position:relative;width:1200px;height:630px;overflow:hidden;isolation:isolate;display:grid;grid-template-columns:600px 1fr;align-items:center;padding:0 40px 0 56px}
+  .og .sign{transform:none}
+  .og .sign-neon{font-size:118px}
+  .og .sign-neon .nl{color:#eafff7;text-shadow:var(--glow)}
+  .og .sign-casino{font-size:38px;animation:none!important;opacity:1}
+  .og .sign-neon .nl{animation:none!important}
+  .og p{margin-top:24px;font-size:24px;color:rgba(247,234,208,.72);text-align:center}
+  .fan{position:relative;height:430px;margin-left:70px}
+  .fan .c{position:absolute;left:50%;top:40px;width:200px;aspect-ratio:5/7;margin-left:-100px;transform-origin:50% 240%;border-radius:18px;
+    background:radial-gradient(120% 70% at 50% 0%,color-mix(in oklab,var(--a) 30%,#2a0a12),#14050a 62%);
+    box-shadow:inset 0 0 0 1px rgba(255,201,77,.6),inset 0 0 0 7px #14050a,inset 0 0 0 8px rgba(255,201,77,.22),0 26px 50px -20px #000}
+  .fan .c img{position:absolute;left:10%;right:10%;top:8%;width:80%}
+  .fan .c b{position:absolute;left:16px;bottom:16px;font:800 30px/0.9 var(--font-display);font-stretch:75%;text-transform:uppercase;color:#f7ead0}
+</style></head>
 <body>
-  <div class="og">
-    <div>
-      <h1>Cranked<em>Casino</em></h1>
-      <p>Fake chips, real fun. Saved to your GitHub.</p>
-      <div class="tags"><span>Mines</span><span>Plinko</span><span>Slots</span><span>Crash</span></div>
+<div class="og">
+  <div class="beams" aria-hidden="true"><i></i><i></i></div>
+  <div class="sunburst" style="left:30%;top:46%"></div>
+  <div>
+    <div class="sign bulbs is-lit" style="margin:0 auto;width:max-content">
+      <div class="sign-top"><span>★</span> Welcome to <span>★</span></div>
+      <div class="sign-neon neon">${'CRANKED'}</div>
+      <div class="sign-casino gold-text">CASINO</div>
     </div>
-    <div class="arch"><img src="../assets/img/hero-logo.webp" alt=""></div>
+    <p>Blackjack · Roulette · Slots · Crash · Plinko · Mines</p>
   </div>
-</body>
-</html>
+  <div class="fan">
+    <div class="c" style="--a:#3ee08f;transform:rotate(-16deg)"><img src="../assets/img/card-blackjack.webp"><b>Blackjack</b></div>
+    <div class="c" style="--a:#ff4d6d;transform:rotate(0deg)"><img src="../assets/img/card-roulette.webp"><b>Roulette</b></div>
+    <div class="c" style="--a:#ffc94d;transform:rotate(16deg)"><img src="../assets/img/card-slots.webp"><b>Slots</b></div>
+  </div>
+</div>
+<script>document.querySelector('.sign-neon').innerHTML='CRANKED'.split('').map(c=>'<span class="nl">'+c+'</span>').join('')</script>
+</body></html>

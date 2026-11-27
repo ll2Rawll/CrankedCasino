@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>CrankedCasino · Fake-money casino</title>
-  <meta name="description" content="CrankedCasino is a free, fake-money casino. Play Mines, Plinko, Slots and Crash with chips that are saved to your GitHub account.">
-  <meta name="theme-color" content="#08080a">
+  <title>CrankedCasino · After hours, fake chips</title>
+  <meta name="description" content="CrankedCasino is a free fake-money casino: Blackjack, Roulette, Slots, Crash, Plinko and Mines. Your chips save to your GitHub account.">
+  <meta name="theme-color" content="#0d0507">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
@@ -16,16 +16,17 @@
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="CrankedCasino">
-  <meta property="og:description" content="Mines, Plinko, Slots and Crash. Fake chips, real fun, saved to GitHub.">
+  <meta property="og:description" content="Blackjack, Roulette, Slots, Crash, Plinko and Mines. Fake chips, real adrenaline, saved to GitHub.">
   <meta property="og:image" content="https://ll2rawll.github.io/CrankedCasino/assets/img/og.jpg">
   <meta property="og:url" content="https://ll2rawll.github.io/CrankedCasino/">
   <meta name="twitter:card" content="summary_large_image">
 
-  <link rel="preload" href="assets/fonts/manrope-var.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="assets/fonts/instrument-serif-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/bricolage-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/tilt-neon-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/lobby.css">
   <link rel="stylesheet" href="css/games.css">
+  <link rel="stylesheet" href="css/tables.css">
 
   <script>
     // Apply the saved theme before first paint so there's no flash.
@@ -39,9 +40,8 @@
 </head>
 <body>
   <div class="backdrop" aria-hidden="true">
-    <div class="arc arc-a"></div>
-    <div class="arc arc-b"></div>
-    <div class="arc arc-c"></div>
+    <div class="velvet"></div>
+    <div class="sheen"></div>
     <div class="grain"></div>
   </div>
 
@@ -49,25 +49,26 @@
 
   <header class="topbar" id="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="#/" aria-label="CrankedCasino home">
-        <span class="brand-tile"><img src="assets/img/logo-tile.png" alt="" width="44" height="44" onerror="this.remove()"></span>
-        <span class="brand-name">Cranked<span class="brand-dim">Casino</span></span>
+      <a class="brand" href="#/" aria-label="CrankedCasino lobby">
+        <span class="brand-chip"><span class="chip-ico"></span></span>
+        <span class="brand-name">CRANK<span class="flick">E</span>D</span>
       </a>
       <nav class="topnav" aria-label="Games">
-        <a href="#/mines" data-nav="mines">Mines</a>
-        <a href="#/plinko" data-nav="plinko">Plinko</a>
+        <a href="#/blackjack" data-nav="blackjack">Blackjack</a>
+        <a href="#/roulette" data-nav="roulette">Roulette</a>
         <a href="#/slots" data-nav="slots">Slots</a>
         <a href="#/crash" data-nav="crash">Crash</a>
-        <a href="#/leaderboard" data-nav="leaderboard">Leaderboard</a>
+        <a href="#/plinko" data-nav="plinko">Plinko</a>
+        <a href="#/mines" data-nav="mines">Mines</a>
       </nav>
       <div class="topbar-actions">
-        <button class="balance-pill" id="balanceBtn" type="button" aria-haspopup="dialog" aria-label="Wallet">
+        <button class="balance-pill" id="balanceBtn" type="button" aria-haspopup="dialog" aria-label="Open cashier">
           <span class="chip-ico" aria-hidden="true"></span>
           <span class="bal-num" id="balanceNum">1,000.00</span>
           <span class="sync-dot" id="syncDot" aria-hidden="true"></span>
         </button>
+        <button class="icon-btn" id="promoBtn" type="button" aria-label="Redeem a promo code"></button>
         <button class="icon-btn gh-btn" id="ghBtn" type="button" aria-label="Sign in with GitHub"></button>
-        <button class="icon-btn" id="themeBtn" type="button" aria-label="Toggle light and dark theme"></button>
         <button class="icon-btn" id="menuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"></button>
       </div>
     </div>
@@ -82,7 +83,7 @@
     <aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="Menu"></aside>
   </div>
 
-  <div class="popover" id="wallet" role="dialog" aria-label="Wallet" hidden></div>
+  <div class="popover" id="wallet" role="dialog" aria-label="Cashier" hidden></div>
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
   <canvas id="fx" aria-hidden="true"></canvas>
   <noscript><p class="noscript">CrankedCasino needs JavaScript to deal the cards.</p></noscript>

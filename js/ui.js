@@ -86,12 +86,16 @@ export function confirmDialog({ title, text, confirm = 'Confirm', danger = false
 /**
  * Bet amount field with ½ / 2× / max. Remembers the last bet per game.
  */
-export function betInput(game, { label = 'Bet amount', min = 0.01 } = {}) {
+export const CHIP_VALUES = [1, 5, 10, 25, 100, 500];
+export const chipClass = (v) => (v >= 1000 ? 'c-1k' : v >= 500 ? 'c-500' : v >= 100 ? 'c-100' : v >= 25 ? 'c-25' : v >= 10 ? 'c-10' : v >= 5 ? 'c-5' : 'c-1');
+export const chipLabel = (v) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}K` : String(v));
+
+export function betInput(game, { label = 'Bet amount', min = 0.01, rack = true } = {}) {
   const key = `cc:bet:${game}`;
   let value = storage.get(key, 10);
   const el = h(`
     <div class="field">
-      <div class="field-label"><span>${esc(label)}</span><span class="dim tnum" data-usd></span></div>
+      <div class="field-label"><span>${esc(label)}</span><button type="button" class="dim tnum" data-act="clear" style="font-size:11px;letter-spacing:.1em">CLEAR</button></div>
       <div class="input-group">
         <span class="chip-ico" aria-hidden="true"></span>
         <input type="number" inputmode="decimal" step="0.01" min="${min}" aria-label="${esc(label)}">
@@ -99,6 +103,11 @@ export function betInput(game, { label = 'Bet amount', min = 0.01 } = {}) {
         <button type="button" class="mini" data-act="double" aria-label="Double bet">2×</button>
         <button type="button" class="mini" data-act="max" aria-label="Max bet">Max</button>
       </div>
+      ${
+        rack
+          ? `<div class="rack" aria-label="Add chips">${CHIP_VALUES.map((v) => `<button type="button" class="rack-chip ${chipClass(v)}" data-add="${v}" aria-label="Add ${v}"><span>${chipLabel(v)}</span></button>`).join('')}</div>`
+          : ''
+      }
     </div>`);
   const input = el.querySelector('input');
   const group = el.querySelector('.input-group');
@@ -112,12 +121,28 @@ export function betInput(game, { label = 'Bet amount', min = 0.01 } = {}) {
   input.addEventListener('change', () => set(input.value));
   input.addEventListener('focus', () => input.select());
   el.addEventListener('click', (e) => {
+    const add = e.target.closest('[data-add]');
+    if (add && !add.disabled) {
+      sfx.chip();
+      const fresh = el.dataset.fresh === '1';
+      el.dataset.fresh = '';
+      set(Math.min(Math.floor(store.balance * 100) / 100, (fresh ? 0 : value) + Number(add.dataset.add)) || Number(add.dataset.add));
+      add.animate([{ transform: 'translateY(-10px) rotate(-14deg)' }, { transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+      group.animate([{ boxShadow: '0 0 0 3px rgba(255,201,77,.45)' }, { boxShadow: '0 0 0 0 rgba(255,201,77,0)' }], { duration: 500 });
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
     const b = e.target.closest('[data-act]');
     if (!b || b.disabled) return;
     sfx.click();
     if (b.dataset.act === 'half') set(Math.max(min, value / 2));
     if (b.dataset.act === 'double') set(Math.min(store.balance, value * 2) || min);
     if (b.dataset.act === 'max') set(Math.floor(store.balance * 100) / 100);
+    if (b.dataset.act === 'clear') {
+      set(min);
+      el.dataset.fresh = '1';
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
   });
   return {
     el,
@@ -182,7 +207,8 @@ export function segmented(options, value, onChange, { label } = {}) {
 }
 
 // ---------------------------------------------------------------- game frame
-const GAME_COLORS = { mines: 'var(--mines)', plinko: 'var(--plinko)', slots: 'var(--slots)', crash: 'var(--crash)' };
+const GAME_COLORS = { mines: 'var(--mines)', plinko: 'var(--plinko)', slots: 'var(--slots)', crash: 'var(--crash)', blackjack: 'var(--blackjack)', roulette: 'var(--roulette)' };
+const GAME_SUITS = { blackjack: '♠', roulette: '♦', slots: '♥', crash: '♣', plinko: '♦', mines: '♠' };
 
 /**
  * Standard game page: title row, stage, controls, and a recent-bets table.
@@ -195,7 +221,7 @@ export function gameFrame(root, { game, title, kicker, tags = [], rules }) {
       <div class="game-head wrap">
         <div>
           <div class="kicker">${esc(kicker)}</div>
-          <h1 class="game-title display">${esc(title)}</h1>
+          <h1 class="game-title display"><span class="gt-suit" aria-hidden="true">${GAME_SUITS[game] || '♠'}</span>${esc(title)}</h1>
         </div>
         <div class="game-head-side">
           ${tags.map((t) => `<span class="tag"><span class="dot"></span>${esc(t)}</span>`).join('')}
@@ -251,4 +277,50 @@ export function gameFrame(root, { game, title, kicker, tags = [], rules }) {
       offReset();
     },
   };
+}
+
+// ---------------------------------------------------------------- promo ticket
+/**
+ * Golden ticket with a promo-code field. Redeeming stamps the ticket and pays out.
+ */
+export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it in.' } = {}) {
+  const el = h(`
+    <form class="ticket" autocomplete="off" novalidate>
+      <div class="t-top">
+        <div><div class="t-title">${esc(title)}</div><div class="t-sub">${esc(sub)}</div></div>
+        <span class="t-ico" aria-hidden="true">${icon('ticket')}</span>
+      </div>
+      <div class="t-row">
+        <input type="text" name="code" placeholder="Enter code" aria-label="Promo code" maxlength="24" spellcheck="false" autocapitalize="characters">
+        <button type="submit" class="t-btn">Redeem</button>
+      </div>
+      <div class="t-msg" aria-live="polite"></div>
+    </form>`);
+  const input = el.querySelector('input');
+  const msg = el.querySelector('.t-msg');
+  el.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const r = store.redeemPromo(input.value);
+    el.querySelector('.stamp')?.remove();
+    if (r.ok) {
+      msg.className = 't-msg';
+      msg.textContent = `+${fmt(r.chips)} chips added. Go get 'em.`;
+      el.insertAdjacentHTML('beforeend', '<span class="stamp">Redeemed</span>');
+      input.value = '';
+      sfx.jackpot();
+      import('./fx.js').then(({ coinRain, burstAt, PALETTES }) => {
+        coinRain(120);
+        burstAt(el, { count: 90, colors: PALETTES.gold, speed: [5, 15] });
+      });
+      toast(`Promo ${r.code} redeemed: +${fmt(r.chips)} chips!`, { type: 'win', iconName: 'ticket', timeout: 4200 });
+    } else {
+      msg.className = 't-msg err';
+      msg.textContent = r.reason === 'used' ? `${r.code} is already redeemed on this account.` : r.reason === 'empty' ? 'Type a code first.' : 'That code isn’t valid. Check the spelling?';
+      el.classList.remove('is-error');
+      void el.offsetWidth;
+      el.classList.add('is-error');
+      sfx.lose();
+    }
+  });
+  return el;
 }

@@ -6,9 +6,9 @@ import { store, on, GAMES, DAILY_BONUS } from '../store.js';
 import { cloud, syncLabel } from '../cloud.js';
 import { sfx } from '../sound.js';
 import { burstAt, PALETTES } from '../fx.js';
-import { toast, confirmDialog } from '../ui.js';
+import { toast, confirmDialog, promoTicket } from '../ui.js';
 
-const TITLES = { mines: 'Mines', plinko: 'Plinko', slots: 'Slots', crash: 'Crash' };
+const TITLES = { blackjack: 'Blackjack', roulette: 'Roulette', mines: 'Mines', plinko: 'Plinko', slots: 'Slots', crash: 'Crash' };
 
 export default {
   title: 'Profile',
@@ -24,7 +24,7 @@ export default {
       view.innerHTML = `
         <section class="wrap page-head">
           <span class="kicker">Your table</span>
-          <h1 class="page-title display">Pro<em style="font-style:italic;color:var(--text-2)">file</em></h1>
+          <h1 class="page-title display">Pro<em>file</em></h1>
         </section>
         <section class="wrap profile-top">
           <div class="panel" style="padding:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
@@ -102,6 +102,11 @@ export default {
           </div>
         </section>
 
+        <section class="wrap section" style="padding-bottom:0">
+          <div class="profile-promo ticket-glow" data-promo style="max-width:520px"></div>
+          <p class="dim" style="margin-top:10px;font-size:13px">${s.promos.length ? `Redeemed: ${s.promos.map((c) => esc(c)).join(', ')}` : 'No promo codes redeemed yet.'}</p>
+        </section>
+
         <section class="wrap section">
           <div class="panel danger-zone">
             <div><strong>Start over</strong><p class="dim" style="font-size:14px">Resets balance, stats and history${u ? ' for this GitHub account' : ' on this device'}.</p></div>
@@ -109,7 +114,11 @@ export default {
           </div>
         </section>`;
     };
+    // One ticket element that survives re-renders, so its stamp/message stay visible.
+    const ticketEl = promoTicket({ title: 'Promo code', sub: 'Codes work once per player' });
+    const mountPromo = () => view.querySelector('[data-promo]')?.append(ticketEl);
     render();
+    mountPromo();
 
     view.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-act]');
@@ -135,12 +144,16 @@ export default {
       }
     });
 
-    const offs = [on('balance', render), on('reset', render), cloud.onChange(render)];
+    const rerender = () => {
+      render();
+      mountPromo();
+    };
+    const offs = [on('balance', rerender), on('reset', rerender), cloud.onChange(rerender)];
     timer = setInterval(() => {
       const el = view.querySelector('[data-daily]');
       const wait = store.dailyReadyIn();
       if (el && wait) el.textContent = `Bonus in ${countdown(wait)}`;
-      else if (el && !wait && el.textContent.startsWith('Bonus in')) render();
+      else if (el && !wait && el.textContent.startsWith('Bonus in')) rerender();
     }, 1000);
     return () => {
       clearInterval(timer);

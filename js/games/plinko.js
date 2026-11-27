@@ -393,7 +393,7 @@ export default {
       const bw = L.s * 0.9;
       const wide = bw > 40;
       const fs = clamp(bw * (wide ? 0.27 : 0.34), 7, 14);
-      ctx.font = `800 ${fs}px Manrope, system-ui, sans-serif`;
+      ctx.font = `800 ${fs}px Bricolage, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       for (let k = 0; k <= L.n; k++) {

@@ -1,5 +1,6 @@
-// Real-time chrome objects for the lobby hero (Three.js).
-// Objects: logo (chrome C), mines (gem), plinko (pegs + ball), slots (gold 7), crash (rocket).
+// 3D art for the game cards (Three.js), rendered to images by tools/render-assets.mjs.
+// Objects: mines (gem), plinko (pegs + ball), slots (gold 7), crash (rocket),
+// blackjack (cards + chips), roulette (wheel), logo (chrome C).
 
 import * as THREE from '../vendor/three.module.min.js';
 import { toCreasedNormals } from '../vendor/BufferGeometryUtils.js';
@@ -47,9 +48,9 @@ function buildEnvironment(renderer) {
       side: THREE.BackSide,
       depthWrite: false,
       uniforms: {
-        top: { value: new THREE.Color(0x6b7282) },
-        mid: { value: new THREE.Color(0x14161c) },
-        bottom: { value: new THREE.Color(0x2e3038) },
+        top: { value: new THREE.Color(0x5a1a2c) },
+        mid: { value: new THREE.Color(0x12060a) },
+        bottom: { value: new THREE.Color(0x2c0e18) },
       },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader:
@@ -66,13 +67,13 @@ function buildEnvironment(renderer) {
     m.lookAt(0, 0, 0);
     env.add(m);
   };
-  panel(22, 6, 0xffffff, 8, 0, 12, 5); // overhead softbox
-  panel(5, 22, 0xd6e4ff, 5.5, -12, 2, 4); // cool left strip
-  panel(6, 20, 0xffffff, 6.5, 12, 1, -1); // right strip
-  panel(16, 3, 0xffffff, 4.5, 0, -2.5, 12); // low front strip catches faces
-  panel(26, 6, 0xa9bbff, 1.6, 0, -12, 0); // floor bounce
-  panel(5, 5, 0xffe2c4, 3, 8, -6, 8); // warm kicker
-  panel(12, 12, 0xbfd0ff, 2.2, 0, 3, -14); // back rim light
+  panel(22, 6, 0xfff4e0, 8, 0, 12, 5); // warm overhead softbox
+  panel(5, 22, 0x7dffd8, 4.2, -12, 2, 4); // mint neon strip
+  panel(6, 20, 0xffd9a0, 6, 12, 1, -1); // champagne strip
+  panel(16, 3, 0xffffff, 4.2, 0, -2.5, 12); // low front strip catches faces
+  panel(26, 6, 0xff6fa8, 1.5, 0, -12, 0); // pink floor bounce
+  panel(5, 5, 0xffc46b, 3.2, 8, -6, 8); // gold kicker
+  panel(12, 12, 0xffb3c8, 2, 0, 3, -14); // rosy rim light
   panel(3, 3, 0xffffff, 10, -6, 7, 9); // hot specular spot
   const pmrem = new THREE.PMREMGenerator(renderer);
   const tex = pmrem.fromScene(env, 0.025).texture;
@@ -193,7 +194,7 @@ function makeSeven() {
   s.quadraticCurveTo(-0.24, 0.0, 0.3, 0.62);
   s.lineTo(-0.66, 0.62);
   s.closePath();
-  const mesh = new THREE.Mesh(extrude(s, { depth: 0.3, bevel: 0.12, size: 0.085, segments: 10, curve: 48 }), chrome(0xffcf72, 0.1));
+  const mesh = new THREE.Mesh(extrude(s, { depth: 0.3, bevel: 0.12, size: 0.085, segments: 10, curve: 48 }), chrome(0xffd27a, 0.14, { envMapIntensity: 1.9 }));
   const g = new THREE.Group();
   g.add(mesh);
   g.userData = { rx: 0.12, ry: -0.3, sway: 0.5 };
@@ -266,7 +267,303 @@ function makeRocket() {
   return wrap;
 }
 
-const BUILDERS = { logo: makeLogo, mines: makeGem, plinko: makePlinko, slots: makeSeven, crash: makeRocket };
+// ------------------------------------------------------------------ canvas textures
+const SUIT = {
+  spade: 'M50 4C30 25 6 40 6 60c0 14 11 22 23 22 8 0 15-4 18-10-1 10-6 18-13 23h32c-7-5-12-13-13-23 3 6 10 10 18 10 12 0 23-8 23-22 0-20-24-35-44-56Z',
+  heart: 'M50 92C20 68 4 50 4 31 4 16 16 5 30 5c9 0 16 5 20 12 4-7 11-12 20-12 14 0 26 11 26 26 0 19-16 37-46 61Z',
+};
+function suitAt(g, name, x, y, size, color) {
+  g.save();
+  g.translate(x - size / 2, y - size / 2);
+  g.scale(size / 100, size / 100);
+  g.fillStyle = color;
+  g.fill(new Path2D(SUIT[name]));
+  g.restore();
+}
+function rrect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+function cardTexture(rank, suit) {
+  const W = 500;
+  const H = 700;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d');
+  rrect(g, 4, 4, W - 8, H - 8, 44);
+  g.fillStyle = '#fbf6ea';
+  g.fill();
+  g.save();
+  g.clip();
+  g.fillStyle = 'rgba(120,90,40,0.06)';
+  for (let i = 0; i < 140; i++) g.fillRect(0, i * 5, W, 1);
+  g.restore();
+  g.lineWidth = 3;
+  g.strokeStyle = 'rgba(185,122,18,0.55)';
+  rrect(g, 26, 26, W - 52, H - 52, 26);
+  g.stroke();
+  const red = suit === 'heart';
+  const col = red ? '#d7193f' : '#17111c';
+  g.fillStyle = col;
+  g.font = '800 92px "Bricolage", "Arial Black", sans-serif';
+  g.textAlign = 'center';
+  g.fillText(rank, 78, 120);
+  suitAt(g, suit, 78, 168, 58, col);
+  g.save();
+  g.translate(W, H);
+  g.rotate(Math.PI);
+  g.fillText(rank, 78, 120);
+  suitAt(g, suit, 78, 168, 58, col);
+  g.restore();
+  if (rank === 'A') {
+    g.strokeStyle = 'rgba(185,122,18,0.8)';
+    g.lineWidth = 5;
+    g.beginPath();
+    g.arc(W / 2, H / 2, 150, 0, Math.PI * 2);
+    g.stroke();
+    suitAt(g, suit, W / 2, H / 2 + 6, 210, col);
+  } else {
+    const grad = g.createLinearGradient(0, 200, 0, 500);
+    grad.addColorStop(0, red ? '#ff4d6d' : '#3a2a44');
+    grad.addColorStop(1, red ? '#9c0b2b' : '#120c16');
+    g.fillStyle = grad;
+    rrect(g, 120, 190, W - 240, H - 380, 24);
+    g.fill();
+    g.strokeStyle = '#ffc94d';
+    g.lineWidth = 6;
+    g.stroke();
+    g.fillStyle = '#ffd979';
+    g.font = '800 200px "Bricolage", "Arial Black", sans-serif';
+    g.fillText(rank, W / 2, H / 2 + 72);
+    g.fillStyle = '#ffd979';
+    g.beginPath();
+    g.moveTo(W / 2 - 60, 250);
+    g.lineTo(W / 2 - 40, 210);
+    g.lineTo(W / 2 - 15, 240);
+    g.lineTo(W / 2, 200);
+    g.lineTo(W / 2 + 15, 240);
+    g.lineTo(W / 2 + 40, 210);
+    g.lineTo(W / 2 + 60, 250);
+    g.closePath();
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+function chipTextures(base, stripe) {
+  const top = document.createElement('canvas');
+  top.width = top.height = 512;
+  const g = top.getContext('2d');
+  g.fillStyle = base;
+  g.beginPath();
+  g.arc(256, 256, 256, 0, Math.PI * 2);
+  g.fill();
+  for (let i = 0; i < 8; i++) {
+    g.save();
+    g.translate(256, 256);
+    g.rotate((i / 8) * Math.PI * 2);
+    g.fillStyle = stripe;
+    g.fillRect(-26, -256, 52, 70);
+    g.restore();
+  }
+  g.strokeStyle = stripe;
+  g.lineWidth = 10;
+  g.setLineDash([22, 16]);
+  g.beginPath();
+  g.arc(256, 256, 150, 0, Math.PI * 2);
+  g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.beginPath();
+  g.arc(256, 256, 130, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = stripe;
+  g.font = '800 150px "Bricolage", "Arial Black", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('C', 256, 266);
+  const side = document.createElement('canvas');
+  side.width = 1024;
+  side.height = 64;
+  const s2 = side.getContext('2d');
+  s2.fillStyle = base;
+  s2.fillRect(0, 0, 1024, 64);
+  s2.fillStyle = stripe;
+  for (let i = 0; i < 16; i++) s2.fillRect(i * 64 + 8, 0, 30, 64);
+  const tt = new THREE.CanvasTexture(top);
+  const ts = new THREE.CanvasTexture(side);
+  tt.colorSpace = ts.colorSpace = THREE.SRGBColorSpace;
+  return { top: tt, side: ts };
+}
+function makeChip(base, stripe) {
+  const { top, side } = chipTextures(base, stripe);
+  const mSide = new THREE.MeshPhysicalMaterial({ map: side, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.2 });
+  const mTop = new THREE.MeshPhysicalMaterial({ map: top, roughness: 0.32, clearcoat: 0.9, clearcoatRoughness: 0.15 });
+  return new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 72, 1), [mSide, mTop, mTop]);
+}
+
+function makeBlackjack() {
+  const g = new THREE.Group();
+  const cardGeo = new THREE.PlaneGeometry(1.15, 1.61);
+  const mk = (rank, suit) => {
+    const m = new THREE.Mesh(
+      cardGeo,
+      new THREE.MeshPhysicalMaterial({ map: cardTexture(rank, suit), transparent: true, alphaTest: 0.5, roughness: 0.38, clearcoat: 0.7, clearcoatRoughness: 0.12, side: THREE.DoubleSide }),
+    );
+    return m;
+  };
+  const a = mk('A', 'spade');
+  a.position.set(-0.34, 0.2, 0);
+  a.rotation.z = 0.16;
+  const k = mk('K', 'heart');
+  k.position.set(0.32, 0.14, 0.04);
+  k.rotation.z = -0.18;
+  g.add(a, k);
+  const chips = new THREE.Group();
+  [
+    ['#c8102e', '#f7ead0'],
+    ['#17121a', '#ffc94d'],
+    ['#0e8a5a', '#f7ead0'],
+    ['#6c2bd9', '#ffe7a6'],
+  ].forEach(([b, s2], i) => {
+    const ch = makeChip(b, s2);
+    ch.position.y = i * 0.105;
+    ch.rotation.y = i * 0.7;
+    chips.add(ch);
+  });
+  chips.position.set(0.55, -0.86, 0.55);
+  chips.rotation.x = 0.5;
+  chips.scale.setScalar(0.9);
+  g.add(chips);
+  const lone = makeChip('#d18d12', '#2a0a12');
+  lone.position.set(-0.62, -0.84, 0.6);
+  lone.rotation.set(1.05, 0, 0.35);
+  lone.scale.setScalar(0.82);
+  g.add(lone);
+  g.userData = { rx: -0.08, ry: -0.18, sway: 0.25 };
+  return g;
+}
+
+const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
+const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+function wheelTexture() {
+  const S = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const cx = S / 2;
+  const n = WHEEL.length;
+  const step = (Math.PI * 2) / n;
+  g.fillStyle = '#2a0e06';
+  g.fillRect(0, 0, S, S);
+  for (let i = 0; i < n; i++) {
+    const num = WHEEL[i];
+    const a0 = -Math.PI / 2 + i * step - step / 2;
+    const col = num === 0 ? '#0a8a4a' : REDS.has(num) ? '#c8102e' : '#141014';
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(cx, cx, 500, a0, a0 + step);
+    g.arc(cx, cx, 330, a0 + step, a0, true);
+    g.closePath();
+    g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.beginPath();
+    g.arc(cx, cx, 380, a0, a0 + step);
+    g.arc(cx, cx, 330, a0 + step, a0, true);
+    g.closePath();
+    g.fill();
+    g.save();
+    g.translate(cx, cx);
+    g.rotate(a0 + step / 2 + Math.PI / 2);
+    g.fillStyle = '#fbf6ea';
+    g.font = '800 46px "Bricolage", "Arial Black", sans-serif';
+    g.textAlign = 'center';
+    g.fillText(String(num), 0, -430);
+    g.restore();
+  }
+  g.strokeStyle = '#e0a02a';
+  g.lineWidth = 6;
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + i * step - step / 2;
+    g.beginPath();
+    g.moveTo(cx + Math.cos(a) * 330, cx + Math.sin(a) * 330);
+    g.lineTo(cx + Math.cos(a) * 500, cx + Math.sin(a) * 500);
+    g.stroke();
+  }
+  [330, 380, 500].forEach((r) => {
+    g.beginPath();
+    g.arc(cx, cx, r, 0, Math.PI * 2);
+    g.stroke();
+  });
+  const grad = g.createRadialGradient(cx, cx, 0, cx, cx, 330);
+  grad.addColorStop(0, '#6b2a12');
+  grad.addColorStop(0.7, '#3d1409');
+  grad.addColorStop(1, '#2a0e06');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(cx, cx, 328, 0, Math.PI * 2);
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+function makeRoulette() {
+  const g = new THREE.Group();
+  const gold = chrome(0xffc46b, 0.16);
+  const wood = new THREE.MeshPhysicalMaterial({ color: 0x5a1f0e, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.08 });
+  const bowl = new THREE.Mesh(
+    new THREE.LatheGeometry(
+      [new THREE.Vector2(1.5, -0.12), new THREE.Vector2(1.56, 0.02), new THREE.Vector2(1.52, 0.12), new THREE.Vector2(1.32, 0.1), new THREE.Vector2(1.2, 0.04), new THREE.Vector2(1.06, 0.0)],
+      96,
+    ),
+    wood,
+  );
+  g.add(bowl);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.54, 0.035, 16, 128), gold);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.1;
+  g.add(rim);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.06, 128), new THREE.MeshPhysicalMaterial({ map: wheelTexture(), roughness: 0.35, clearcoat: 0.9, clearcoatRoughness: 0.1 }));
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.005;
+  g.add(disc);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.32, 48), gold);
+  cone.position.y = 0.16;
+  g.add(cone);
+  for (let i = 0; i < 4; i++) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.62, 16), gold);
+    arm.rotation.z = Math.PI / 2;
+    arm.rotation.y = (i * Math.PI) / 2;
+    arm.position.y = 0.2;
+    g.add(arm);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 24, 12), gold);
+    knob.position.set(Math.cos((i * Math.PI) / 2) * 0.31, 0.2, -Math.sin((i * Math.PI) / 2) * 0.31);
+    g.add(knob);
+  }
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.07, 24, 12), gold);
+  top.position.y = 0.34;
+  g.add(top);
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.06, 32, 16), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.15, clearcoat: 1 }));
+  ball.position.set(0.82, 0.06, 0.32);
+  g.add(ball);
+  const wrap = new THREE.Group();
+  wrap.add(g);
+  g.rotation.x = 0.95;
+  wrap.scale.setScalar(0.95);
+  wrap.userData = { rx: 0.0, ry: 0, spin: 0.35, sway: 0.1 };
+  return wrap;
+}
+
+const BUILDERS = { logo: makeLogo, mines: makeGem, plinko: makePlinko, slots: makeSeven, crash: makeRocket, blackjack: makeBlackjack, roulette: makeRoulette };
 
 // ------------------------------------------------------------------ hero
 export function createHero(canvas, { initial = 'logo', interactive = true } = {}) {

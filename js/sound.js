@@ -6,8 +6,10 @@ let ctx = null;
 let master = null;
 let enabled = storage.get('cc:sound', true);
 let noiseBuf = null;
+let gestured = false; // browsers only allow audio after the first tap/keypress
 
 function ac() {
+  if (!gestured) return null;
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
@@ -25,14 +27,17 @@ function ac() {
 }
 
 export function unlockAudio() {
+  gestured = true;
   if (enabled) ac();
 }
 export const soundOn = () => enabled;
 export function setSound(on) {
   enabled = !!on;
   storage.set('cc:sound', enabled);
-  if (!enabled) engine.stop();
-  else ac();
+  if (!enabled) {
+    engine.stop();
+    roll.stop();
+  } else ac();
 }
 
 function tone({ freq = 440, type = 'sine', dur = 0.15, gain = 0.2, attack = 0.004, slideTo, delay = 0, detune = 0 }) {
@@ -149,6 +154,79 @@ export const sfx = {
   },
   countdown() {
     tone({ freq: 1200, type: 'sine', dur: 0.06, gain: 0.04 });
+  },
+  chip() {
+    // two ceramic chips clacking
+    noise({ dur: 0.05, gain: 0.22, freq: 3200, type: 'bandpass', q: 3 });
+    tone({ freq: 2100 + Math.random() * 300, type: 'triangle', dur: 0.04, gain: 0.05 });
+    noise({ dur: 0.04, gain: 0.14, freq: 4200, type: 'bandpass', q: 4, delay: 0.045 });
+  },
+  card() {
+    // card sliding off the shoe
+    noise({ dur: 0.16, gain: 0.16, freq: 2600, to: 5200, type: 'highpass', q: 0.5, attack: 0.01 });
+  },
+  flip() {
+    noise({ dur: 0.06, gain: 0.18, freq: 1800, type: 'bandpass', q: 1.5 });
+    tone({ freq: 420, type: 'sine', dur: 0.05, gain: 0.04 });
+  },
+  shuffle() {
+    for (let i = 0; i < 14; i++) noise({ dur: 0.03, gain: 0.08, freq: 2400 + Math.random() * 1600, type: 'bandpass', q: 2, delay: i * 0.045 });
+  },
+  clack() {
+    tone({ freq: 2600 + Math.random() * 600, type: 'square', dur: 0.02, gain: 0.03 });
+    noise({ dur: 0.03, gain: 0.1, freq: 3500, type: 'bandpass', q: 5 });
+  },
+  jackpot() {
+    const base = 523.25;
+    [0, 7, 12, 16, 19, 24, 28, 31].forEach((s2, i) => {
+      tone({ freq: note(base, s2), type: 'triangle', dur: 0.3, gain: 0.08, delay: i * 0.065 });
+      tone({ freq: note(base, s2) * 2, type: 'sine', dur: 0.25, gain: 0.03, delay: i * 0.065 + 0.02 });
+    });
+    for (let i = 0; i < 10; i++) tone({ freq: 2600 + Math.random() * 1800, type: 'sine', dur: 0.12, gain: 0.025, delay: 0.5 + i * 0.07 });
+  },
+};
+
+// Continuous rolling noise for the roulette ball.
+export const roll = {
+  src: null,
+  gain: null,
+  filter: null,
+  start() {
+    if (!enabled || this.src) return;
+    const c = ac();
+    if (!c) return;
+    if (!noiseBuf) {
+      noiseBuf = c.createBuffer(1, c.sampleRate * 1.5, c.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    this.src = c.createBufferSource();
+    this.src.buffer = noiseBuf;
+    this.src.loop = true;
+    this.filter = c.createBiquadFilter();
+    this.filter.type = 'bandpass';
+    this.filter.Q.value = 0.9;
+    this.filter.frequency.value = 900;
+    this.gain = c.createGain();
+    this.gain.gain.setValueAtTime(0.0001, c.currentTime);
+    this.gain.gain.exponentialRampToValueAtTime(0.09, c.currentTime + 0.3);
+    this.src.connect(this.filter).connect(this.gain).connect(master);
+    this.src.start();
+  },
+  set(speed) {
+    if (!this.src || !ctx) return;
+    const t = ctx.currentTime;
+    this.filter.frequency.setTargetAtTime(300 + speed * 900, t, 0.1);
+    this.gain.gain.setTargetAtTime(Math.max(0.0001, 0.02 + speed * 0.08), t, 0.1);
+  },
+  stop() {
+    if (!this.src || !ctx) return;
+    const t = ctx.currentTime;
+    this.gain.gain.cancelScheduledValues(t);
+    this.gain.gain.setValueAtTime(Math.max(0.0001, this.gain.gain.value), t);
+    this.gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    this.src.stop(t + 0.3);
+    this.src = this.gain = this.filter = null;
   },
 };
 

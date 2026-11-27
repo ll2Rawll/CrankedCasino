@@ -1,13 +1,13 @@
-// App shell: header, wallet, drawer, theme, footer and the hash router.
+// App shell: header, cashier, drawer, theme, footer and the hash router.
 
-import { $, $$, h, esc, fmt, signed, storage, countdown } from './util.js';
+import { $, $$, esc, fmt, signed, storage, countdown } from './util.js';
 import { icon } from './icons.js';
 import { store, on, DAILY_BONUS } from './store.js';
 import { cloud, syncLabel } from './cloud.js';
 import { CONFIG } from './config.js';
 import { sfx, unlockAudio, setSound, soundOn } from './sound.js';
 import { countTo, floatFrom, burstAt, PALETTES } from './fx.js';
-import { toast, confirmDialog } from './ui.js';
+import { toast, confirmDialog, promoTicket } from './ui.js';
 
 const app = $('#app');
 const root = document.documentElement;
@@ -24,19 +24,10 @@ function quiet(vt) {
 function applyTheme(theme) {
   root.dataset.theme = theme;
   storage.set('cc:theme', theme);
-  $('#themeBtn').innerHTML = theme === 'dark' ? icon('sun') : icon('moon');
-  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#08080a' : '#eeebe5';
+  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#0d0507' : '#f4e9d3';
   window.dispatchEvent(new CustomEvent('themechange', { detail: theme }));
 }
 applyTheme(root.dataset.theme === 'light' ? 'light' : 'dark');
-$('#themeBtn').addEventListener('click', () => {
-  sfx.click();
-  const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
-  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    quiet(document.startViewTransition(() => applyTheme(next)));
-  } else applyTheme(next);
-  renderDrawer();
-});
 
 // ---------------------------------------------------------------- balance pill
 const balBtn = $('#balanceBtn');
@@ -58,40 +49,59 @@ on('balance', ({ delta, balance, silent }) => {
   clearTimeout(flashTimer);
   flashTimer = setTimeout(() => balBtn.classList.remove('is-up', 'is-down'), 700);
   if (delta > 0) floatFrom(balBtn, signed(delta), 'var(--win)');
-  if (!$('#wallet').hidden) renderWallet();
+  if (!wallet.hidden) renderWalletNumbers();
 });
 
-// ---------------------------------------------------------------- wallet popover
+// ---------------------------------------------------------------- cashier popover
 const wallet = $('#wallet');
 let walletTimer = 0;
 function renderWallet() {
-  const st = store.state.stats;
   const wait = store.dailyReadyIn();
-  const sync = syncLabel();
   wallet.innerHTML = `
-    <div class="wallet-bal"><span class="chip-ico lg"></span><div><div class="dim" style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase">Balance</div><div class="big tnum">${fmt(store.balance)}</div></div></div>
+    <div class="wallet-head"><span class="kicker">Cashier</span><button class="icon-btn" type="button" data-act="close" aria-label="Close cashier">${icon('close')}</button></div>
+    <div class="wallet-bal"><span class="chip-ico lg"></span><div><div class="dim" style="font-size:11px;font-weight:750;letter-spacing:.14em;text-transform:uppercase">Your stack</div><div class="big neon tnum" data-w="bal">${fmt(store.balance)}</div></div></div>
     ${
       store.canRefill()
         ? `<button class="btn btn-primary btn-block" data-act="refill">${icon('refresh')}<span>Out of chips? Refill to 1,000</span></button>`
         : ''
     }
     <button class="btn ${wait ? 'btn-outline' : 'btn-primary'} btn-block" data-act="daily" ${wait ? 'disabled' : ''}>
-      ${icon('gift')}<span>${wait ? `Daily bonus in ${countdown(wait)}` : `Claim daily bonus · +${fmt(DAILY_BONUS)}`}</span>
+      ${icon('gift')}<span data-w="daily">${wait ? `Daily bonus in ${countdown(wait)}` : `Claim daily +${fmt(DAILY_BONUS).replace('.00', '')}`}</span>
     </button>
-    <div class="wallet-meta">
+    <div class="ticket-glow" data-w="promo"></div>
+    <div class="wallet-meta" data-w="meta"></div>
+    <div class="wallet-sync" data-w="sync"></div>
+    <a class="link-arrow" href="#/profile" data-act="profile">Your profile & stats ${icon('arrowRight')}</a>`;
+  wallet.querySelector('[data-w="promo"]').append(promoTicket({ title: 'Promo code', sub: 'Redeem a code for free chips' }));
+  renderWalletNumbers();
+}
+function renderWalletNumbers() {
+  const st = store.state.stats;
+  const bal = wallet.querySelector('[data-w="bal"]');
+  if (bal) bal.textContent = fmt(store.balance);
+  const meta = wallet.querySelector('[data-w="meta"]');
+  if (meta)
+    meta.innerHTML = `
       <div><span>Wagered</span><strong>${fmt(st.wagered)}</strong></div>
       <div><span>Net profit</span><strong class="${st.profit >= 0 ? 'win-text' : 'loss-text'}">${signed(st.profit)}</strong></div>
       <div><span>Biggest win</span><strong>${fmt(st.biggestWin)}</strong></div>
-      <div><span>Bets played</span><strong>${st.bets.toLocaleString('en-US')}</strong></div>
-    </div>
-    <div class="wallet-sync">${icon(sync.icon)}<span>${sync.text}</span></div>
-    <a class="link-arrow" href="#/profile" data-act="profile">Your profile & stats ${icon('arrowRight')}</a>`;
+      <div><span>Bets played</span><strong>${st.bets.toLocaleString('en-US')}</strong></div>`;
+  const sync = wallet.querySelector('[data-w="sync"]');
+  if (sync) {
+    const s = syncLabel();
+    sync.innerHTML = `${icon(s.icon)}<span>${s.text}</span>`;
+  }
 }
-function openWallet() {
+function openWallet({ focusPromo = false } = {}) {
   renderWallet();
   wallet.hidden = false;
   clearInterval(walletTimer);
-  walletTimer = setInterval(() => store.dailyReadyIn() > 0 && renderWallet(), 1000);
+  walletTimer = setInterval(() => {
+    const wait = store.dailyReadyIn();
+    const d = wallet.querySelector('[data-w="daily"]');
+    if (d && wait) d.textContent = `Daily bonus in ${countdown(wait)}`;
+  }, 1000);
+  if (focusPromo) setTimeout(() => wallet.querySelector('.ticket input')?.focus(), 80);
 }
 function closeWallet() {
   wallet.hidden = true;
@@ -99,12 +109,21 @@ function closeWallet() {
 }
 balBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  sfx.click();
+  sfx.chip();
   wallet.hidden ? openWallet() : closeWallet();
+});
+const promoBtn = $('#promoBtn');
+promoBtn.innerHTML = icon('ticket');
+promoBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  sfx.click();
+  if (wallet.hidden) openWallet({ focusPromo: true });
+  else wallet.querySelector('.ticket input')?.focus();
 });
 wallet.addEventListener('click', (e) => {
   e.stopPropagation();
   const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'close') closeWallet();
   if (act === 'daily' && store.claimDaily()) {
     sfx.win(2);
     burstAt(e.target.closest('button'), { count: 70, colors: PALETTES.gold });
@@ -119,8 +138,15 @@ wallet.addEventListener('click', (e) => {
   if (act === 'profile') closeWallet();
 });
 document.addEventListener('click', (e) => {
-  if (!wallet.hidden && !wallet.contains(e.target)) closeWallet();
+  if (!wallet.hidden && !wallet.contains(e.target) && e.target.isConnected) closeWallet();
 });
+const updatePromoBadge = () => {
+  promoBtn.querySelector('.badge')?.remove();
+  if (!store.hasPromo('MAXWIN')) promoBtn.insertAdjacentHTML('beforeend', '<span class="badge"></span>');
+};
+updatePromoBadge();
+on('promo', updatePromoBadge);
+on('reset', updatePromoBadge);
 
 // ---------------------------------------------------------------- github button
 const ghBtn = $('#ghBtn');
@@ -128,9 +154,7 @@ const syncDot = $('#syncDot');
 function renderAuth() {
   const u = cloud.user;
   if (u) {
-    ghBtn.innerHTML = u.avatar
-      ? `<img class="avatar" src="${esc(u.avatar)}" alt="" referrerpolicy="no-referrer">`
-      : icon('user');
+    ghBtn.innerHTML = u.avatar ? `<img class="avatar" src="${esc(u.avatar)}" alt="" referrerpolicy="no-referrer">` : icon('user');
     ghBtn.setAttribute('aria-label', `Signed in as @${u.login}. Open menu`);
   } else {
     ghBtn.innerHTML = icon('github');
@@ -138,7 +162,7 @@ function renderAuth() {
   }
   syncDot.dataset.state = u ? cloud.status : '';
   syncDot.title = syncLabel().text.replace(/<[^>]+>/g, '');
-  if (!wallet.hidden) renderWallet();
+  if (!wallet.hidden) renderWalletNumbers();
   renderDrawer();
 }
 ghBtn.addEventListener('click', () => {
@@ -154,13 +178,15 @@ const drawerPanel = $('.drawer-panel', drawer);
 const menuBtn = $('#menuBtn');
 menuBtn.innerHTML = icon('menu');
 const NAV = [
-  ['', 'Lobby'],
-  ['mines', 'Mines'],
-  ['plinko', 'Plinko'],
-  ['slots', 'Slots'],
-  ['crash', 'Crash'],
-  ['leaderboard', 'Leaderboard'],
-  ['profile', 'Profile'],
+  ['', 'Lobby', '★'],
+  ['blackjack', 'Blackjack', '♠'],
+  ['roulette', 'Roulette', '♦'],
+  ['slots', 'Slots', '♥'],
+  ['crash', 'Crash', '♣'],
+  ['plinko', 'Plinko', '♦'],
+  ['mines', 'Mines', '♠'],
+  ['leaderboard', 'Leaderboard', '♛'],
+  ['profile', 'Profile', '☺'],
 ];
 function renderDrawer() {
   const u = cloud.user;
@@ -168,13 +194,13 @@ function renderDrawer() {
   const route = currentRoute();
   drawerPanel.innerHTML = `
     <div class="drawer-top">
-      <span class="kicker">Menu</span>
+      <span class="kicker">The floor</span>
       <button class="icon-btn" type="button" data-close aria-label="Close menu">${icon('close')}</button>
     </div>
     <nav class="drawer-nav" aria-label="Main">
       ${NAV.map(
-        ([r, label], i) =>
-          `<a href="#/${r}" ${r === route ? 'aria-current="page"' : ''}><span class="num">0${i + 1}</span>${label}<span class="go">${icon('arrowUpRight')}</span></a>`,
+        ([r, label, suit]) =>
+          `<a href="#/${r}" ${r === route ? 'aria-current="page"' : ''}><span class="suit" aria-hidden="true">${suit}</span>${label}<span class="go">${icon('arrowUpRight')}</span></a>`,
       ).join('')}
     </nav>
     <div class="drawer-card">
@@ -189,14 +215,18 @@ function renderDrawer() {
       }
     </div>
     <div class="drawer-card" style="margin-top:12px">
+      <button class="drawer-row" type="button" data-act="promo" style="text-align:left"><span>Redeem a promo code<div class="sub">Free chips, if you know the word</div></span><span style="color:var(--gold)">${icon('ticket')}</span></button>
+    </div>
+    <div class="drawer-card" style="margin-top:12px">
       <label class="drawer-row"><span>Sound effects<div class="sub">Synth bleeps, no downloads</div></span><span class="switch"><input type="checkbox" data-set="sound" ${soundOn() ? 'checked' : ''}><span></span></span></label>
-      <label class="drawer-row"><span>Light mode</span><span class="switch"><input type="checkbox" data-set="light" ${root.dataset.theme === 'light' ? 'checked' : ''}><span></span></span></label>
+      <label class="drawer-row"><span>Daylight mode<div class="sub">Champagne instead of velvet</div></span><span class="switch"><input type="checkbox" data-set="light" ${root.dataset.theme === 'light' ? 'checked' : ''}><span></span></span></label>
       <label class="drawer-row"><span>Reduce motion</span><span class="switch"><input type="checkbox" data-set="motion" ${root.dataset.motion === 'reduced' ? 'checked' : ''}><span></span></span></label>
     </div>
     <div class="drawer-foot">
       <p>Chips are pretend. No deposits, no withdrawals, no prizes.</p>
       <p><a href="${esc(CONFIG.repoUrl)}" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>`;
+  drawerPanel.querySelectorAll('.drawer-row svg').forEach((s) => s.setAttribute('width', '22'));
 }
 function openDrawer() {
   renderDrawer();
@@ -215,7 +245,7 @@ menuBtn.addEventListener('click', () => {
   sfx.click();
   drawer.classList.contains('is-open') ? closeDrawer() : openDrawer();
 });
-drawer.addEventListener('click', async (e) => {
+drawer.addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) return closeDrawer();
   if (e.target.closest('.drawer-nav a')) return closeDrawer();
   const act = e.target.closest('[data-act]')?.dataset.act;
@@ -227,6 +257,10 @@ drawer.addEventListener('click', async (e) => {
     closeDrawer();
     cloud.signOut();
   }
+  if (act === 'promo') {
+    closeDrawer();
+    setTimeout(() => openWallet({ focusPromo: true }), 120);
+  }
 });
 drawer.addEventListener('change', (e) => {
   const k = e.target.dataset.set;
@@ -234,7 +268,11 @@ drawer.addEventListener('change', (e) => {
     setSound(e.target.checked);
     if (e.target.checked) sfx.bet();
   }
-  if (k === 'light') applyTheme(e.target.checked ? 'light' : 'dark');
+  if (k === 'light') {
+    const next = e.target.checked ? 'light' : 'dark';
+    if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) quiet(document.startViewTransition(() => applyTheme(next)));
+    else applyTheme(next);
+  }
   if (k === 'motion') {
     if (e.target.checked) root.dataset.motion = 'reduced';
     else delete root.dataset.motion;
@@ -251,11 +289,14 @@ document.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------- footer
 $('#siteFoot').innerHTML = `
   <div class="wrap foot-inner">
-    <div class="foot-big" aria-hidden="true">CrankedCasino</div>
+    <div class="foot-sign" aria-hidden="true">
+      <span class="neon">OP<span class="off">E</span>N</span>
+      <span class="hours gold-text">24 / 7<br>All night</span>
+    </div>
     <div class="foot-grid">
       <div class="foot-links">
-        <a href="#/mines">Mines</a><a href="#/plinko">Plinko</a><a href="#/slots">Slots</a><a href="#/crash">Crash</a>
-        <a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
+        <a href="#/blackjack">Blackjack</a><a href="#/roulette">Roulette</a><a href="#/slots">Slots</a><a href="#/crash">Crash</a>
+        <a href="#/plinko">Plinko</a><a href="#/mines">Mines</a><a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
         <a href="${esc(CONFIG.repoUrl)}" target="_blank" rel="noopener">GitHub</a>
       </div>
       <p class="foot-note">CrankedCasino is a free game that uses fake chips with no cash value. Nothing can be bought, won or withdrawn. If real-money gambling ever stops being fun, talk to someone. <a href="https://www.begambleaware.org/" target="_blank" rel="noopener">BeGambleAware</a> can help.</p>
@@ -265,6 +306,8 @@ $('#siteFoot').innerHTML = `
 // ---------------------------------------------------------------- router
 const routes = {
   '': () => import('./pages/lobby.js'),
+  blackjack: () => import('./games/blackjack.js'),
+  roulette: () => import('./games/roulette.js'),
   mines: () => import('./games/mines.js'),
   plinko: () => import('./games/plinko.js'),
   slots: () => import('./games/slots.js'),
@@ -318,7 +361,7 @@ async function navigate() {
     app.append(view);
     const cleanup = mod.mount(view);
     current = { name, cleanup };
-    document.title = mod.title ? `${mod.title} · CrankedCasino` : 'CrankedCasino · Fake-money casino';
+    document.title = mod.title ? `${mod.title} · CrankedCasino` : 'CrankedCasino · After hours, fake chips';
     window.scrollTo({ top: 0, behavior: 'instant' });
     $$('[data-nav]').forEach((a) => (a.dataset.nav === name ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
     $$('[data-reveal]', view).forEach((el) => revealObserver.observe(el));
@@ -329,7 +372,6 @@ async function navigate() {
 }
 window.addEventListener('hashchange', navigate);
 
-// Skip link focuses main without touching the hash router.
 $('.skip-link').addEventListener('click', (e) => {
   e.preventDefault();
   app.focus();
@@ -347,7 +389,7 @@ setTimeout(() => {
     } catch {
       /* ignore */
     }
-    toast('Your daily bonus is ready. Tap your balance to claim it.', { iconName: 'gift', timeout: 4500 });
+    toast('Your daily bonus is ready. Tap your stack to claim it.', { iconName: 'gift', timeout: 4500 });
   }
 }, 2500);
 
@@ -355,5 +397,4 @@ renderAuth();
 navigate();
 cloud.init().then(renderAuth);
 
-// Expose a tiny debug handle for testing in the console.
-window.__cc = { store, cloud, confirmDialog };
+window.__cc = { store, cloud, confirmDialog, openWallet };
