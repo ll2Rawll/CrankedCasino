@@ -187,6 +187,8 @@ function model(kind, variant, direction) {
       tube(side * 1.26, 0, 0.03, 0.011, 0.09, '#e8af71');
     }
     block(-0.35, 0.035, 0.24, 0.82, 0.032, 0.012, '#e19b60');
+    block(.57, -.10, .216, .66, .024, .010, '#db9865');
+    block(-.22, -.203, .093, 1.85, .015, .018, '#825136');
   } else if (kind === 'pad') {
     const arc = Array.from({ length: 15 }, (_, i) => [0.44 * Math.cos(0.4 + i * 0.408), 0.32 * Math.sin(0.4 + i * 0.408)]);
     const shape = [[0, 0], ...arc];
@@ -211,16 +213,20 @@ function model(kind, variant, direction) {
   } else if (kind === 'hen') {
     const crouch = variant === 4;
     const z = crouch ? -0.08 : 0;
-    for (const side of [-1, 1]) block(side * 0.104, 0.025, 0.015, 0.1, 0.215, 0.07, '#e7a32b', 0.23);
+    const flying = variant === 2;
+    for (const side of [-1, 1]) {
+      block(side * .104, flying ? -.05 : .025, flying ? .13 : .015,
+        .10, flying ? .15 : .215, .07, '#e7a32b', .23);
+    }
     bulb(0, -0.036, 0.25 + z, 0.242, 0.235, 0.23, '#fff4d9');
     bulb(0, 0.12, 0.47 + z, 0.19, 0.16, 0.18, '#fff9e9');
     bulb(0, 0.27, 0.455 + z, 0.071, 0.11, 0.063, '#f4ae36', 7);
     for (const side of [-1, 1]) {
       bulb(
-        side * (variant === 2 ? 0.245 : 0.2),
+        side * (flying ? 0.285 : 0.2),
         -0.055,
-        (variant === 2 ? 0.36 : 0.28) + z,
-        0.077,
+        (flying ? 0.38 : 0.28) + z,
+        flying ? .13 : .077,
         0.135,
         0.13,
         '#eadcbd',

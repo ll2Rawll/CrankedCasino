@@ -40,6 +40,7 @@ export function landscape(ctx) {
     vc,
     hop,
     squash,
+    touchdown,
     facing,
     death,
     banked,
@@ -92,6 +93,8 @@ export function landscape(ctx) {
       ctx.ellipse(x, r, rx, ry, 0, 0, Math.PI * 2);
       ctx.fill();
     }
+    const age = touchdown ? (now - touchdown.at) / 500 : 1;
+    const impact = age >= 0 && age < 1;
     const span = maxX - minX;
     for (let r = first; r <= last; r++) {
       const L = lane(r),
@@ -143,12 +146,32 @@ export function landscape(ctx) {
           const h = variation(seed, r, c);
           add(h % 4 === 0 ? 'rock' : 'tree', c, r, h % 4);
         }
+        if (impact && touchdown.row === r) {
+          for (const side of [-1, 1]) {
+            ellipse(touchdown.x + side * (.13 + .22 * age), r + .10 * Math.sin(Math.PI * age),
+              .048 * (1 - age), .022 * (1 - age), '#d6df91');
+          }
+        }
       } else if (asphalt) {
         if (road(lane(r + 1).kind)) {
           for (let x = 2 * Math.floor(minX / 2); x < maxX; x += 2) strip(x, r + 0.47, 0.72, 0.043, '#c4c8bc');
         } else strip(minX, r + 0.46, span, 0.046, '#858c8d');
       } else if (water) {
-        strip(minX, r - 0.5, span, 0.042, '#409fb9');
+        const isWater = row => row === -3 || row === -4 || lane(row).kind === 'river';
+        const shore = ctx.createLinearGradient(0, r - .5, 0, r + .5);
+        shore.addColorStop(0, isWater(r - 1) ? '#419dbd' : '#83cfc4');
+        shore.addColorStop(.45, '#48adc8');
+        shore.addColorStop(1, isWater(r + 1) ? '#419dbd' : '#83cfc4');
+        strip(minX, r - .505, span, 1.013, shore);
+        if (impact && touchdown.row === r) {
+          ctx.save();
+          ctx.lineWidth = .028 * (1 - age) + .009;
+          ctx.strokeStyle = `rgba(220,255,248,${.82 * (1 - age)})`;
+          ctx.beginPath();
+          ctx.ellipse(touchdown.x, r, .24 + .72 * age, .17 + .38 * age, 0, 0, 2 * Math.PI);
+          ctx.stroke();
+          ctx.restore();
+        }
         for (let x = 2 * Math.floor(minX / 2); x < maxX; x += 2) {
           const h = variation(seed, r, x);
           const offset = (t * 0.16 + (h % 100) * 0.01) % 1;
@@ -173,7 +196,9 @@ export function landscape(ctx) {
               strip(stern - .16, r + side * (.22 + .025 * wave), .32 + .06 * wave, .023, '#a2dfeb');
             }
           }
-          const bob = .016 * wave;
+          const responding = impact && touchdown.row === r && touchdown.platform === i;
+          const dip = responding ? Math.sin(Math.PI * Math.min(1, age * 2)) * (1 - age) : 0;
+          const bob = .016 * wave - dip * (L.pads ? .065 : .028);
           add(L.pads ? 'pad' : 'log', x, r, L.pads ? variation(seed, r, i) % 5 : 0, 1, 1, bob);
           const weight = 1 - Math.abs(vr - r);
           if (weight > 0 && Math.abs(vc - x) <= L.width / 2) {
@@ -260,6 +285,13 @@ export function landscape(ctx) {
       const u = scale * a.size;
       // Stretch along the projected traffic axis so the front stays on its replay hitbox.
       ctx.save();
+      if (a.kind === 'hen' && footing > 0 && !death) {
+        const contact = point(vc, vr, footing);
+        ctx.fillStyle = `rgba(50,40,23,${.30 / (1 + 7 * hop)})`;
+        ctx.beginPath();
+        ctx.ellipse(contact.x, contact.y, scale * .16, scale * .067, .27, 0, 2 * Math.PI);
+        ctx.fill();
+      }
       ctx.translate(x, y);
       if (a.kind === 'hen' && !death) ctx.scale(1 + squash, 1 - squash);
       if (a.stretch !== 1) {

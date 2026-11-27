@@ -131,6 +131,7 @@ export default {
     let col = RR.START_COL;
     let best = 0;
     let landedAt = 0;
+    let lastTouchdown = null;
     const ridingCol = (t) => col + (lane(row).speed || 0) * (t - landedAt);
     let lastCheck = 0;
     let deathAt = null; // { t, cause, x, y }
@@ -145,6 +146,7 @@ export default {
     function resetRun() {
       endT = null;
       scene.reset();
+      lastTouchdown = null;
       landedAt = 0;
       lanes = new Map();
       moves = [];
@@ -690,7 +692,15 @@ export default {
       const landing = clamp((now - chick.hopT0 - HOP_MS) / 75, 0, 1);
       const press = touch && phase === 'run' ? Math.min(1, (now - touch.at) / 38) : 0;
       const squash = reducedMotion() ? 0 : 0.10 * Math.max(press, Math.sin(Math.PI * landing));
-      scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: hopHeight(now), squash,
+      const touchdownAt = chick.hopT0 + HOP_MS;
+      if (phase === 'run' && !reducedMotion() && now >= touchdownAt && now - touchdownAt < 500 &&
+          lastTouchdown?.at !== touchdownAt) {
+        const L = lane(row);
+        const x = ridingCol(worldT(touchdownAt));
+        const platform = L.kind === 'river' ? Math.round((col - L.offset - L.speed * landedAt) / L.period) : null;
+        lastTouchdown = { at: touchdownAt, row, x, platform };
+      }
+      scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: hopHeight(now), squash, touchdown: phase === 'run' ? lastTouchdown : null,
         facing: chick.face, death: deathAt, banked: cashedAt, score: scoreMode, phase, line, art, trainWarning });
       drawParticles(dt);
     }
