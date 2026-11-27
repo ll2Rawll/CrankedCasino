@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { flightCourse, FLOOR, GATE_WIDTH } from '../js/games/flight-course.js';
+import { flightCourse, FLOOR, GATE_WIDTH, START_Y } from '../js/games/flight-course.js';
 
 function random(seed) {
   return () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
@@ -9,6 +9,36 @@ function fresh(seed = 1) {
   const run = flightCourse(random(seed));
   run.extend(300);
   return run;
+}
+
+// Sample the same tap at several update rates. At 200 ms the bird should
+// turn down, at 400 ms it should cross launch height, then reach a steady dive.
+for (const hz of [60, 120, 144]) {
+  const flight = fresh();
+  const { state } = flight;
+  function advance(seconds) {
+    const steps = Math.ceil(seconds * hz);
+    for (let i = 0; i < steps; i++) flight.step(seconds / steps, 300, 100);
+  }
+  flight.flap();
+  const kick = state.velocity;
+  advance(.2);
+  assert(Math.abs(state.velocity) < .01);
+  assert(Math.abs(state.y - (START_Y - 43)) < .01);
+  advance(.2);
+  assert(Math.abs(state.y - START_Y) < .01);
+  advance(.13);
+  const dive = state.velocity;
+  assert(dive > 500 && dive < 600);
+  advance(.04);
+  assert.equal(state.velocity, dive);
+  const beforeTap = state.y;
+  flight.flap();
+  flight.flap();
+  assert.equal(state.y, beforeTap);
+  assert.equal(state.velocity, kick);
+  advance(.01);
+  assert(state.y < beforeTap);
 }
 
 const freefall = fresh();

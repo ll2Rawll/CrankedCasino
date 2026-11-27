@@ -1,4 +1,4 @@
-import { flightCourse, HEIGHT, FLOOR, GATE_WIDTH } from './flight-course.js?v=04ff585fd48d';
+import { flightCourse, HEIGHT, FLOOR, GATE_WIDTH } from './flight-course.js?v=04dfb825af0a';
 import { icon } from '../icons.js';
 import { soundOn, setSound, sfx, unlockAudio } from '../sound.js';
 import { storage, reducedMotion, clamp } from '../util.js';
@@ -118,14 +118,14 @@ export default {
       for (const [index, el] of gates) {
         if (index < first) { release(el); gates.delete(index); }
       }
-      const pitch = quiet ? 0 : clamp((s.velocity + 70) / 8, -18, 62);
       const idle = phase === 'ready';
+      const pitch = quiet || idle ? 0 : clamp(-28 + .31 * s.velocity, -28, 84);
       const x = idle ? width * (width > height ? .67 : .76) : anchor;
       const y = idle ? height * .49 : s.y * scale;
       bird.style.transform = `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${pitch.toFixed(1)}deg)`;
       if (!idle) {
         const age = liftTime;
-        const frame = quiet ? 1 : age < .085 ? 2 : age < .18 ? 1 : 0;
+        const frame = quiet ? 1 : age < .06 ? 2 : age < .13 ? 0 : 1;
         bird.firstElementChild.style.backgroundPositionX = frame * 50 + '%';
       }
       if (!quiet) quay.style.transform = `translate3d(${-((s.distance * scale * .76) % 320).toFixed(2)}px,0,0)`;

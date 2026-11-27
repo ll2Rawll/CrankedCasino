@@ -17,11 +17,17 @@ try {
   await page.clock.pauseAt(new Date('2025-01-01T00:01:00Z'));
   const phase = () => page.locator('.nf').getAttribute('data-phase');
   const birdY = () => page.locator('.nf-bird').evaluate(el => new DOMMatrix(el.style.transform).f);
+  const pitch = () => page.locator('.nf-bird').evaluate(el => {
+    const m = new DOMMatrix(el.style.transform);
+    return Math.atan2(m.b, m.a) * 180 / Math.PI;
+  });
   const tap = () => page.touchscreen.tap(130, 415);
   await tap();
   assert.equal(await phase(), 'flying');
   await page.clock.runFor(410);
+  assert(await pitch() > 70, 'the bird dives after a missed beat');
   await tap();
+  assert(await pitch() < -25, 'a touch immediately turns the diving bird upwards');
   const y = await birdY();
   await page.clock.runFor(20);
   assert(await birdY() < y, 'touch lifts the bird on the next frame');

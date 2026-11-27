@@ -5,8 +5,10 @@ export const HEIGHT = 500;
 export const START_Y = 225;
 export const GATE_WIDTH = 40;
 export const SPACING = 158;
-const GRAVITY = 700;
-const FLAP = -223;
+// A tap kicks upwards immediately. It reaches its 43-unit apex in 0.20 s.
+const GRAVITY = 2150;
+const FLAP = -430;
+const MAX_FALL = 545;
 const RADIUS_X = 10;
 const RADIUS_Y = 7;
 
@@ -40,8 +42,12 @@ export function flightCourse(random = Math.random) {
     extend(right);
     const speed = 115 + Math.min(30, state.score * 2);
     state.distance += speed * dt;
-    state.y += (state.velocity + GRAVITY * dt / 2) * dt;
-    state.velocity += GRAVITY * dt;
+    // A step can straddle terminal velocity. Integrate the accelerating part
+    // and the constant-speed part separately, including between input events.
+    const accelerating = Math.min(dt, (MAX_FALL - state.velocity) / GRAVITY);
+    state.y += (state.velocity + GRAVITY * accelerating / 2) * accelerating;
+    state.y += MAX_FALL * (dt - accelerating);
+    state.velocity = Math.min(MAX_FALL, state.velocity + GRAVITY * dt);
     if (state.y - RADIUS_Y <= 0) state.hit = 'ceiling';
     else if (state.y + RADIUS_Y >= FLOOR) state.hit = 'quay';
     for (const gate of state.gates) {
