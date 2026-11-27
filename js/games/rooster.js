@@ -14,10 +14,12 @@ import { sfx, haptic } from '../sound.js';
 import { burst, PALETTES, coinRain, shake } from '../fx.js';
 import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
 import { scoreLane, onPlatform } from './rooster-course.js';
-import { landscape } from './rooster-landscape.js';
+import { landscape } from './rooster-landscape.js?v=cd54bc6893c5';
 import { loadArt } from './rooster-art.js';
 
 const HOP_MS = 110;
+// Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.
+const TAKEOFF_FRACTION = .16;
 const SCORE_COURSE_SPEED = 0.90;
 const SWIPE_PX = 10;
 const COUNTDOWN_MS = 1500;
@@ -137,7 +139,7 @@ export default {
     let lastCheck = 0;
     let deathAt = null; // { t, cause, x, y }
     let cashedAt = null; // { t, mult, pay }
-    const chick = { fromRow: 0, fromCol: RR.START_COL, fromLift: 0, hopT0: -1e9, face: 1, bumpT0: -1e9, bumpDir: 0 };
+    const chick = { fromRow: 0, fromCol: RR.START_COL, fromLift: 0, hopT0: -1e9, duration: HOP_MS, face: 1, bumpT0: -1e9, bumpDir: 0 };
     const scene = landscape(ctx);
     const particles = [];
     const floats = []; // canvas float texts
@@ -175,6 +177,7 @@ export default {
     let H = 0;
     let dpr = 1;
     let T = 60; // tile size in px
+    let pointLabel;
     function resize() {
       dpr = Math.min(2, window.devicePixelRatio || 1);
       W = viewEl.clientWidth;
@@ -316,7 +319,7 @@ export default {
       return true;
     }
 
-    function move(m) {
+    function move(m, gesture = null) {
       if (phase !== 'run' || destroyed) return;
       const now = performance.now();
       const t = worldT(now);
@@ -335,10 +338,12 @@ export default {
         return;
       }
       if (!scoreMode) moves.push([Math.round(t * 1000), m]);
-      chick.fromRow = visRow(now);
-      chick.fromCol = visCol(now);
-      chick.fromLift = hopHeight(now);
+      const from = pose(now, gesture);
+      chick.fromRow = from.row;
+      chick.fromCol = from.col;
+      chick.fromLift = from.lift;
       chick.hopT0 = now;
+      chick.duration = hopDuration() * (m === 0 ? 1 - from.takeoff : 1);
       row = nr;
       col = nc;
       landedAt = t;
@@ -359,7 +364,7 @@ export default {
           fab.lastElementChild.textContent = label;
           playBtn.lastElementChild.textContent = label;
         }
-        floats.push({ text: '+1', r: row, c: col, t0: now, color: '#ffd979' });
+        floats.push({ r: row, c: col, t0: now });
         if (!scoreMode && MILESTONES.includes(best)) milestone(best);
       }
       if (!scoreMode && row >= RR.FINISH) finish();
@@ -573,7 +578,15 @@ export default {
       const surface = gameDialog.open ? gameDialog : viewEl;
       if (!surface.contains(event.target) || event.target.closest('button')) return;
       surface.setPointerCapture(event.pointerId);
-      touch = { x: event.clientX, y: event.clientY, id: event.pointerId, at: performance.now() };
+      const now = performance.now();
+      // Event delivery can trail contact on a busy frame. Use its monotonic
+      // timestamp for animation only. Collision checks keep their own clock.
+      const at = event.timeStamp > 0 && event.timeStamp <= now ? event.timeStamp : now;
+      const nextCol = Math.round(ridingCol(worldT(now)));
+      touch = {
+        x: event.clientX, y: event.clientY, id: event.pointerId, at,
+        canAdvance: (scoreMode || row < RR.FINISH) && !lane(row + 1).blocked.includes(nextCol),
+      };
     });
     function recognizeMove(event) {
       if (!touch || touch.id !== event.pointerId) return;
@@ -582,10 +595,11 @@ export default {
       const horizontal = Math.abs(dx) > Math.abs(dy);
       const swipe = Math.max(Math.abs(dx), Math.abs(dy)) >= SWIPE_PX;
       if (!swipe && event.type !== 'pointerup') return;
+      const gesture = touch;
       clearGesture();
-      if (!swipe) move(0);
-      else if (horizontal) move(dx > 0 ? 3 : 2);
-      else move(dy > 0 ? 1 : 0);
+      if (!swipe) move(0, gesture);
+      else if (horizontal) move(dx > 0 ? 3 : 2, gesture);
+      else move(dy > 0 ? 1 : 0, gesture);
     }
     view.addEventListener('pointermove', recognizeMove);
     view.addEventListener('pointerup', recognizeMove);
@@ -594,29 +608,30 @@ export default {
     window.addEventListener('blur', clearGesture);
 
     // ---------------------------------------------------------- chicken position (with hop easing)
-    function hopU(now) {
-      return clamp((now - chick.hopT0) / (reducedMotion() ? 40 : HOP_MS), 0, 1);
+    function hopDuration() {
+      return reducedMotion() ? 40 : HOP_MS;
     }
-    function hopHeight(now) {
-      const u = hopU(now);
-      const peak = reducedMotion() ? 0.04 : 0.32;
+    function pose(now, gesture = touch) {
+      const u = clamp((now - chick.hopT0) / chick.duration, 0, 1);
+      const travel = u * (2 - u);
       const arc = 4 * u * (1 - u);
-      return peak * arc + (u < 0.5 ? chick.fromLift * (1 - arc) : 0);
-    }
-    function travel(now) {
-      const u = hopU(now);
-      return u * (2 - u);
-    }
-    function visRow(now) {
-      const u = travel(now);
-      return chick.fromRow + (row - chick.fromRow) * u;
-    }
-    function visCol(now) {
-      const u = travel(now);
-      return chick.fromCol + (ridingCol(endT ?? worldT(now)) - chick.fromCol) * u;
+      const peak = reducedMotion() ? .04 : .32;
+      const lift = peak * arc + (u < .5 ? chick.fromLift * (1 - arc) : 0);
+      // Ease towards the edge of the tile. Quick taps blend straight into the
+      // full hop, and a slower swipe can still steer from the displayed pose.
+      const held = gesture?.canAdvance && phase === 'run' ? Math.max(0, now - gesture.at) : 0;
+      const takeoff = TAKEOFF_FRACTION * (1 - Math.exp(-held / 28));
+      const x = ridingCol(endT ?? worldT(now));
+      return {
+        row: chick.fromRow + (row - chick.fromRow) * travel + takeoff * (2 - takeoff),
+        col: chick.fromCol + (x - chick.fromCol) * travel,
+        lift: lift + (peak - lift) * 4 * takeoff * (1 - takeoff),
+        takeoff,
+      };
     }
     function chickScreen(now) {
-      return scene.point(visCol(now), visRow(now));
+      const p = pose(now);
+      return scene.point(p.col, p.row);
     }
 
     function trainWarning(L, r, t) {
@@ -630,6 +645,28 @@ export default {
       }
       if (!soon) trainsWarned.delete(r);
       return soon;
+    }
+
+    // Every point uses the same glowing glyph. Rasterize it at the board's
+    // density once instead of filtering text on the playfield during every hop.
+    function scoreLabel() {
+      const size = Math.max(1, Math.round(T * .3));
+      if (pointLabel?.size === size && pointLabel.dpr === dpr) return pointLabel;
+      const image = document.createElement('canvas');
+      const padding = 24; // backing pixels, including the blur
+      const halfWidth = Math.ceil(size * dpr) + padding;
+      const baseline = Math.ceil(size * dpr) + padding;
+      image.width = 2 * halfWidth;
+      image.height = baseline + padding + Math.ceil(size * dpr * .4);
+      const g = image.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, halfWidth, baseline);
+      g.font = `800 ${size}px Bricolage, system-ui, sans-serif`;
+      g.textAlign = 'center';
+      g.fillStyle = g.shadowColor = '#ffd979';
+      g.shadowBlur = 10;
+      g.fillText('+1', 0, 0);
+      pointLabel = { image, size, dpr, x: halfWidth / dpr, y: baseline / dpr };
+      return pointLabel;
     }
 
     function drawParticles(dt) {
@@ -664,23 +701,20 @@ export default {
           continue;
         }
         ctx.globalAlpha = 1 - k;
-        ctx.font = `800 ${Math.round(T * 0.3)}px Bricolage, system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = f.color;
-        ctx.shadowColor = f.color;
-        ctx.shadowBlur = 10;
+        const label = scoreLabel();
         const p = scene.point(f.c, f.r, 0.9 + k * 0.7);
-        ctx.fillText(f.text, p.x, p.y);
-        ctx.shadowBlur = 0;
+        ctx.drawImage(label.image, p.x - label.x, p.y - label.y,
+          label.image.width / dpr, label.image.height / dpr);
         ctx.globalAlpha = 1;
       }
     }
 
     let lastNow = performance.now();
     let endT = null; // world time the run ended (freezes the camera)
-    function tick(now) {
+    function tick() {
       if (destroyed) return;
       raf = requestAnimationFrame(tick);
+      const now = performance.now();
       const dt = Math.min(0.05, (now - lastNow) / 1000);
       lastNow = now;
       if (!W || !H) return;
@@ -691,12 +725,12 @@ export default {
       dangerEl.style.opacity = String(warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0);
       const bump = clamp((now - chick.bumpT0) / 160, 0, 1);
       const nudge = Math.sin(bump * Math.PI) * .12;
-      const vr = visRow(now) + (chick.bumpDir === 0 ? nudge : chick.bumpDir === 1 ? -nudge : 0);
-      const vc = visCol(now) + (chick.bumpDir === 3 ? nudge : chick.bumpDir === 2 ? -nudge : 0);
-      const landing = clamp((now - chick.hopT0 - HOP_MS) / 75, 0, 1);
-      const press = touch && phase === 'run' ? Math.min(1, (now - touch.at) / 38) : 0;
-      const squash = reducedMotion() ? 0 : 0.10 * Math.max(press, Math.sin(Math.PI * landing));
-      const touchdownAt = chick.hopT0 + HOP_MS;
+      const player = pose(now);
+      const vr = player.row + (chick.bumpDir === 0 ? nudge : chick.bumpDir === 1 ? -nudge : 0);
+      const vc = player.col + (chick.bumpDir === 3 ? nudge : chick.bumpDir === 2 ? -nudge : 0);
+      const touchdownAt = chick.hopT0 + chick.duration;
+      const landing = clamp((now - touchdownAt) / 75, 0, 1);
+      const squash = reducedMotion() ? 0 : 0.10 * Math.sin(Math.PI * landing);
       if (phase === 'run' && !reducedMotion() && now >= touchdownAt && now - touchdownAt < 500 &&
           lastTouchdown?.at !== touchdownAt) {
         const L = lane(row);
@@ -704,8 +738,9 @@ export default {
         const platform = L.kind === 'river' ? Math.round((col - L.offset - L.speed * landedAt) / L.period) : null;
         lastTouchdown = { at: touchdownAt, row, x, platform };
       }
-      scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: hopHeight(now), squash, touchdown: phase === 'run' ? lastTouchdown : null,
+      scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: player.lift, squash, touchdown: phase === 'run' ? lastTouchdown : null,
         facing: chick.face, death: deathAt, banked: cashedAt, score: scoreMode, phase, line, art, trainWarning });
+      if (phase === 'countdown') scoreLabel();
       drawParticles(dt);
     }
     let raf = requestAnimationFrame(tick);
@@ -714,7 +749,11 @@ export default {
       if (destroyed) return;
       art = a;
     });
-    document.fonts?.ready.then(() => !destroyed && resize());
+    document.fonts?.ready.then(() => {
+      if (destroyed) return;
+      pointLabel = null;
+      resize();
+    });
 
     // A run left open by a reload can't be resumed: settle it.
     const left = store.takeRound('rooster');

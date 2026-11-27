@@ -5,6 +5,7 @@ import { road, meadow, variation, rasterLayers } from './rooster-layers.js';
 
 export function landscape(ctx) {
   let materials;
+  let warmedHop = false;
   const layers = rasterLayers(ctx);
   let cameraRow = 0,
     cameraCol = RR.START_COL,
@@ -302,6 +303,10 @@ export function landscape(ctx) {
       ctx.restore();
     }
     layers.sunlight();
+    if (phase === 'countdown' && !warmedHop) {
+      stamp('hen', 2, 1);
+      warmedHop = true;
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   return { draw, reset, point };

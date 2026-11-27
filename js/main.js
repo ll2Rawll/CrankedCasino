@@ -339,7 +339,7 @@ const routes = {
   plinko: () => import('./games/plinko.js'),
   slots: () => import('./games/slots.js'),
   crash: () => import('./games/crash.js'),
-  rooster: () => import('./games/rooster.js'),
+  rooster: () => import('./games/rooster.js?v=10583c57a9d0'),
   leaderboard: () => import('./pages/leaderboard.js'),
   profile: () => import('./pages/profile.js'),
 };
