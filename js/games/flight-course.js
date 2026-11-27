@@ -4,7 +4,7 @@ export const FLOOR = 468;
 export const HEIGHT = 500;
 export const START_Y = 225;
 export const GATE_WIDTH = 40;
-export const SPACING = 174;
+export const SPACING = 158;
 const GRAVITY = 700;
 const FLAP = -223;
 const RADIUS_X = 10;
@@ -16,13 +16,17 @@ export function flightCourse(random = Math.random) {
 
   function extend(right) {
     while (225 + nextIndex * SPACING <= state.distance + right + SPACING) {
-      const difficulty = Math.min(1, nextIndex / 25);
+      const difficulty = Math.min(1, nextIndex / 16);
       if (nextIndex > 0) {
-        const shift = (random() * 2 - 1) * (45 + difficulty * 32);
-        nextCenter = Math.max(131, Math.min(332, nextCenter + shift));
+        const direction = random() < .5 ? -1 : 1;
+        const shift = direction * (32 + random() * 34);
+        // Turn back toward the middle at the edge. Clamping here would give
+        // the player several level gates after a run of climbs or descents.
+        const proposed = nextCenter + shift;
+        nextCenter = proposed < 120 || proposed > 340 ? nextCenter - shift : proposed;
       }
       state.gates.push({ index: nextIndex, x: 225 + nextIndex * SPACING,
-        center: nextCenter, gap: 158 - difficulty * 39, passed: false });
+        center: nextCenter, gap: 116 - difficulty * 26, passed: false });
       nextIndex++;
     }
   }
@@ -34,7 +38,7 @@ export function flightCourse(random = Math.random) {
   function step(dt, right, left) {
     if (state.hit) return;
     extend(right);
-    const speed = 93 + Math.min(28, state.score * 1.25);
+    const speed = 115 + Math.min(30, state.score * 2);
     state.distance += speed * dt;
     state.y += (state.velocity + GRAVITY * dt / 2) * dt;
     state.velocity += GRAVITY * dt;

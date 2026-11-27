@@ -1,4 +1,4 @@
-import { flightCourse, HEIGHT, FLOOR, GATE_WIDTH } from './flight-course.js?v=a5830b13da85';
+import { flightCourse, HEIGHT, FLOOR, GATE_WIDTH } from './flight-course.js?v=04ff585fd48d';
 import { icon } from '../icons.js';
 import { soundOn, setSound, sfx, unlockAudio } from '../sound.js';
 import { storage, reducedMotion, clamp } from '../util.js';

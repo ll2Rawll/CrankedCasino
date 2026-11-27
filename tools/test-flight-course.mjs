@@ -47,6 +47,20 @@ safe.step(dt, 300, 100);
 safe.step(dt, 300, 100);
 assert.equal(safe.state.score, 1);
 
+// A sustained run of requested climbs or dives must still turn at each edge.
+for (const roll of [0, .999999]) {
+  const run = flightCourse(() => roll);
+  run.extend(5000);
+  const { gates } = run.state;
+  assert(gates[0].gap > gates.at(-1).gap);
+  for (let i = 1; i < gates.length; i++) {
+    const change = Math.abs(gates[i].center - gates[i - 1].center);
+    assert(change >= 32 && change <= 66);
+    assert(gates[i].center - gates[i].gap / 2 > 0);
+    assert(gates[i].center + gates[i].gap / 2 < FLOOR);
+  }
+}
+
 for (let seed = 1; seed <= 32; seed++) {
   const run = fresh(seed);
   const { state } = run;
