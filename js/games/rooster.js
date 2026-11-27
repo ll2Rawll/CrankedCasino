@@ -595,6 +595,13 @@ export default {
     };
     document.addEventListener('keydown', onKey);
     let touch = null;
+    const cancelMultiTouch = (event) => {
+      if (event.pointerType === 'touch' && !event.isPrimary) {
+        touch = null;
+        stopHold();
+      }
+    };
+    view.addEventListener('pointerdown', cancelMultiTouch, true);
     canvas.addEventListener('pointerdown', (e) => {
       if (phase !== 'run' || !e.isPrimary || e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
@@ -1141,6 +1148,7 @@ export default {
     return () => {
       destroyed = true;
       delete globalThis.__ccRooster;
+      view.removeEventListener('pointerdown', cancelMultiTouch, true);
       stopHold();
       leaveGameView();
       window.removeEventListener('blur', stopHold);
