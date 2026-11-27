@@ -9,59 +9,29 @@ import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.
 import { icon } from '../icons.js';
 import { store } from '../store.js';
 import { engine, errorText } from '../engine.js';
-import { RR, rrLane, rrHit, rrHawk, rrHawkTime, rrMult, rrFront, rrRand } from '../math.js';
+import { RR, rrLane, rrHit, rrHawk, rrHawkTime, rrMult, rrFront } from '../math.js';
 import { sfx, haptic } from '../sound.js';
 import { burst, PALETTES, coinRain, shake } from '../fx.js';
 import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
-import { scoreLane, platformCenter, onPlatform } from './rooster-course.js';
+import { scoreLane, onPlatform } from './rooster-course.js';
+import { landscape } from './rooster-landscape.js';
 import { loadArt } from './rooster-art.js';
 
 const HOP_MS = 120;
 const COUNTDOWN_MS = 1500;
 const BANK_HOLD_MS = 450;
-const ROAD_SLOPE = Math.tan(16 * Math.PI / 180);
 const MILESTONES = [10, 20, 30, 40, 50, 60, 75];
 
 const RULES = `
   <p><strong>Score run</strong> is free. Each new row earns one point. Ride logs, land on lily pads and hold Cash out to keep your score. Keep ahead of the red warning line. Getting caught, hitting traffic or falling into water scores zero. Your best banked score stays in this browser.</p>
   <h3>Chip run</h3><ol class="rules">
-    <li>Pick a <strong>bet</strong> and press <strong>Start run</strong>. Your rooster waits on the casino steps.</li>
+    <li>Pick a <strong>bet</strong> and press <strong>Start run</strong>. Your rooster waits on the grassy verge.</li>
     <li><strong>Tap</strong> the road (or press <kbd>↑</kbd> / <kbd>Space</kbd>) to hop forward one lane. <strong>Swipe</strong> or use <kbd>←</kbd> <kbd>→</kbd> <kbd>↓</kbd> to dodge sideways or step back.</li>
-    <li>Dodge the cars, buses and trains. Sidewalks are safe, but planters, cones and hydrants block the way.</li>
+    <li>Dodge the cars, buses and trains. Grass verges are safe, but trees and rocks block the way.</li>
     <li>Don’t dawdle: a hawk circles behind you and swoops if you fall too far back.</li>
     <li>Hold the <strong>Cash out</strong> button on the road to bank your run. Traffic keeps moving while you hold. You’re paid for the furthest row you reached: row 10 gives your bet back, and every row after that adds 7%, all the way to the golden egg on row 75 (81.27×).</li>
   </ol>
   <p class="dim" style="margin-top:14px;font-size:14px">A skill game: how far you get is up to you. The server lays out the traffic and checks every run before it pays.</p>`;
-
-// ------------------------------------------------------------------ textures
-function noiseTile(size, base, dots) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const g = c.getContext('2d');
-  g.fillStyle = base;
-  g.fillRect(0, 0, size, size);
-  for (const [n, colors, rmax] of dots) {
-    for (let i = 0; i < n; i++) {
-      g.fillStyle = colors[i % colors.length];
-      const r = Math.random() * rmax;
-      g.beginPath();
-      g.arc(Math.random() * size, Math.random() * size, r, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
-  return c;
-}
-function tileTile(size) {
-  const c = noiseTile(size, '#3b3340', [[260, ['rgba(255,255,255,.05)', 'rgba(0,0,0,.12)'], 1.4]]);
-  const g = c.getContext('2d');
-  g.strokeStyle = 'rgba(10,4,8,.55)';
-  g.lineWidth = 2;
-  g.strokeRect(1, 1, size - 2, size - 2);
-  g.strokeStyle = 'rgba(255,240,220,.07)';
-  g.lineWidth = 1;
-  g.strokeRect(3, 3, size - 6, size - 6);
-  return c;
-}
 
 export default {
   title: 'Road Rooster',
@@ -114,7 +84,7 @@ export default {
     </div>`);
     controls.append(bet.el, ladder, readout, playBtn, pad, h(`<p class="hint">Tap or <kbd>↑</kbd> hop · swipe or <kbd>←</kbd><kbd>→</kbd><kbd>↓</kbd> dodge · <kbd>C</kbd> cash out</p>`));
     const gameDialog = h(`<dialog class="rr-dialog" aria-label="Road Rooster game view">
-      <div class="rr-toolbar"><span>Road Rooster</span><button type="button" data-exit>Exit game view</button></div>
+      <div class="rr-toolbar"><button type="button" data-exit aria-label="Exit game view">Exit</button></div>
     </dialog>`);
     controls.after(gameDialog);
     const exitView = gameDialog.querySelector('[data-exit]');
@@ -165,9 +135,7 @@ export default {
     let deathAt = null; // { t, cause, x, y }
     let cashedAt = null; // { t, mult, pay }
     const chick = { fromRow: 0, fromCol: RR.START_COL, hopT0: -1e9, face: 1, bumpT0: -1e9, bumpDir: 0 };
-    let cam = -1.6;
-    let shakeT0 = -1e9;
-    let shakeAmp = 0;
+    const scene = landscape(ctx);
     const particles = [];
     const floats = []; // canvas float texts
     const trainsWarned = new Set();
@@ -175,7 +143,7 @@ export default {
 
     function resetRun() {
       endT = null;
-      cam = -1.6;
+      scene.reset();
       landedAt = 0;
       lanes = new Map();
       moves = [];
@@ -199,38 +167,17 @@ export default {
     let H = 0;
     let dpr = 1;
     let T = 60; // tile size in px
-    let boardLeft = 0;
-    let pats = null;
     function resize() {
       dpr = Math.min(2, window.devicePixelRatio || 1);
       W = viewEl.clientWidth;
       H = viewEl.clientHeight;
       canvas.width = Math.round(W * dpr);
       canvas.height = Math.round(H * dpr);
-      T = Math.min(W / RR.COLS, H / 7.4);
-      boardLeft = (W - RR.COLS * T) / 2;
-      glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, T);
-      glowGrad.addColorStop(0, 'rgba(255,246,210,.26)');
-      glowGrad.addColorStop(0.6, 'rgba(255,240,200,.08)');
-      glowGrad.addColorStop(1, 'rgba(255,240,200,0)');
-      const ts = Math.max(16, Math.round(T / 2));
-      pats = {
-        asphalt: ctx.createPattern(noiseTile(160, '#424756', [[1400, ['rgba(255,255,255,.045)', 'rgba(0,0,0,.18)', 'rgba(140,120,160,.05)'], 1.3], [14, ['rgba(0,0,0,.18)'], 9]]), 'repeat'),
-        grass: ctx.createPattern(noiseTile(80, '#77a64b', [[90, ['#87b557', '#689742'], 1.7]]), 'repeat'),
-        walk: ctx.createPattern(tileTile(ts), 'repeat'),
-        gravel: ctx.createPattern(noiseTile(96, '#2a211e', [[900, ['rgba(160,140,120,.14)', 'rgba(0,0,0,.25)', 'rgba(90,80,70,.2)'], 1.6]]), 'repeat'),
-        gold: ctx.createPattern(noiseTile(64, '#6b4a10', [[300, ['rgba(255,220,120,.18)', 'rgba(60,30,0,.2)'], 1.4]]), 'repeat'),
-      };
+      T = Math.min(W / 7.25, H / 8.8);
     }
-    let glowGrad = null;
     const ro = new ResizeObserver(() => resize());
     ro.observe(viewEl);
     resize();
-
-    // world → screen
-    const sx = (c) => boardLeft + c * T; // column units → px
-    const rowTop = (r) => H - (r - cam + 1) * T;
-    const rowMid = (r) => H - (r - cam + 0.5) * T;
 
     // ---------------------------------------------------------- HUD + controls
     function renderControls() {
@@ -368,8 +315,7 @@ export default {
       else if (m === 1) nr -= 1;
       else if (m === 2) nc -= 1;
       else if (m === 3) nc += 1;
-      if (m === 2) chick.face = -1;
-      if (m === 3) chick.face = 1;
+      chick.face = [1, -1, -2, 2][m];
       if (nr < 0 || (!scoreMode && nr > RR.FINISH) || nc < 0 || nc >= RR.COLS || lane(nr).blocked.includes(nc)) {
         chick.bumpT0 = now;
         chick.bumpDir = m;
@@ -408,7 +354,7 @@ export default {
       setTimeout(() => phase === 'run' && centerEl.classList.contains('mile') && center(''), 1300);
       const { x, y } = chickScreen(performance.now());
       const r = canvas.getBoundingClientRect();
-      burst(r.left + x, r.top + y + ROAD_SLOPE * (x - W / 2), { count: 40, colors: PALETTES.gold, speed: [3, 10] });
+      burst(r.left + x, r.top + y, { count: 40, colors: PALETTES.gold, speed: [3, 10] });
     }
 
     function die(t, cause) {
@@ -424,8 +370,6 @@ export default {
       } else {
         sfx.splat();
         haptic([40, 30, 70]);
-        shakeT0 = now;
-        shakeAmp = 14;
         shake(stage, true);
         const { x, y } = chickScreen(now);
         for (let i = 0; i < 26; i++) {
@@ -498,7 +442,7 @@ export default {
         center(`<strong>${r.finished ? 'Golden egg' : 'Score banked'}</strong><b>${r.score}</b><small>${fmtMult(mult)} · ${fmt(r.payout)} chips${won > 0 ? ` · +${fmt(won)}` : ''}</small>`, 'win');
         const { x, y } = chickScreen(performance.now());
         const rc = canvas.getBoundingClientRect();
-        burst(rc.left + x, rc.top + y + ROAD_SLOPE * (x - W / 2), { count: mult >= 2 ? 80 : 40, colors: PALETTES.gold, speed: [4, 12], kind: 'coin' });
+        burst(rc.left + x, rc.top + y, { count: mult >= 2 ? 80 : 40, colors: PALETTES.gold, speed: [4, 12], kind: 'coin' });
         if (mult >= 5) coinRain(mult >= 20 ? 120 : 60);
         if (mult >= 1) sfx.win(mult >= 3 ? 2 : 1);
       } else if (cashout && !r.alive) {
@@ -634,379 +578,20 @@ export default {
       return chick.fromCol + (ridingCol(endT ?? worldT(now)) - chick.fromCol) * u;
     }
     function chickScreen(now) {
-      return { x: sx(visCol(now) + 0.5), y: H - (visRow(now) - cam + 0.5) * T };
+      return scene.point(visCol(now), visRow(now));
     }
 
-    // ---------------------------------------------------------- drawing
-    const carIdx = (r, n) => Math.floor(rrRand(seed, r, 1000 + (((n % 997) + 997) % 997)) * art.cars.length);
-
-    function drawGround(r, t, now) {
-      const top = rowTop(r);
-      const L = lane(r);
-      const k = L.kind;
-      const off = H + cam * T; // keeps textures glued to the road while the camera moves
-      const glue = (pat) => {
-        pat.setTransform?.(new DOMMatrix([1, 0, 0, 1, 0, off]));
-        return pat;
-      };
-      if (r < 0) {
-        // the casino: facade, neon and bulbs
-        ctx.fillStyle = '#12050a';
-        ctx.fillRect(0, top, W, T + 1);
-        if (r === -1) {
-          ctx.fillStyle = '#2a0a12';
-          ctx.fillRect(0, top + T * 0.55, W, T * 0.45);
-          for (let i = 0; i < Math.ceil(W / 18); i++) {
-            const on = (Math.floor(now / 160) + i) % 3 !== 0;
-            ctx.fillStyle = on ? '#ffd979' : '#5a3a10';
-            ctx.shadowColor = '#ffc94d';
-            ctx.shadowBlur = on ? 8 : 0;
-            ctx.beginPath();
-            ctx.arc(i * 18 + 9, top + T * 0.62, 2.6, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.shadowBlur = 0;
-          ctx.font = `400 ${Math.round(T * 0.42)}px "Tilt Neon", system-ui, sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = '#ffd6de';
-          ctx.shadowColor = '#ff4d6d';
-          ctx.shadowBlur = 16;
-          ctx.fillText('CRANKED CASINO', W / 2, top + T * 0.28);
-          ctx.shadowBlur = 0;
-        }
-        return;
+    function trainWarning(L, r, t) {
+      const edge = L.dir === 1 ? 0 : RR.COLS;
+      const ahead = (edge - rrFront(L, t, 0)) * L.dir;
+      const distance = ((ahead % L.P) + L.P) % L.P;
+      const soon = distance < 1.6 * L.v || L.P - distance < L.len + RR.COLS;
+      if (soon && !trainsWarned.has(r) && phase === 'run' && Math.abs(r - row) <= 4) {
+        trainsWarned.add(r);
+        sfx.honk();
       }
-      if (k === 'start' || k === 'safe') {
-        ctx.fillStyle = glue(k === 'safe' ? pats.grass : pats.walk);
-        ctx.fillRect(0, top, W, T + 1);
-        ctx.fillStyle = 'rgba(255,240,220,.12)';
-        ctx.fillRect(0, top, W, 3);
-        ctx.fillStyle = 'rgba(0,0,0,.35)';
-        ctx.fillRect(0, top + T - 3, W, 3);
-        if (k === 'start') {
-          ctx.font = `800 ${Math.round(T * 0.3)}px Bricolage, system-ui, sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = 'rgba(255,201,77,.35)';
-          ctx.fillText('START', sx(0.9), top + T / 2);
-          ctx.fillText('START', sx(RR.COLS - 0.9), top + T / 2);
-        }
-        // lamp pools at the kerb
-        for (const lx of [sx(-0.6), sx(RR.COLS + 0.6)]) {
-          const g = ctx.createRadialGradient(lx, top + T / 2, 0, lx, top + T / 2, T * 1.2);
-          g.addColorStop(0, 'rgba(255,214,140,.2)');
-          g.addColorStop(1, 'rgba(255,214,140,0)');
-          ctx.fillStyle = g;
-          ctx.fillRect(lx - T * 1.2, top, T * 2.4, T);
-        }
-        return;
-      }
-      if (k === 'finish') {
-        ctx.fillStyle = glue(pats.gold);
-        ctx.fillRect(0, top, W, T + 1);
-        const g = ctx.createLinearGradient(0, top, 0, top + T);
-        g.addColorStop(0, 'rgba(255,240,180,.25)');
-        g.addColorStop(1, 'rgba(255,201,77,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, top, W, T);
-        return;
-      }
-      if (k === 'river') {
-        ctx.fillStyle = '#4299bc';
-        ctx.fillRect(0, top, W, T + 1);
-        ctx.fillStyle = '#67b6cc';
-        ctx.fillRect(0, top + 0.08 * T, W, 0.04 * T);
-        const mid = top + T / 2;
-        const spacing = L.period * T;
-        for (let x = sx(platformCenter(L, -boardLeft / T - L.period, t) + 0.5); x < W + spacing; x += spacing) {
-          const half = T * L.width / 2;
-          if (L.pads) {
-            ctx.fillStyle = '#8fca57';
-            ctx.beginPath();
-            ctx.moveTo(x, mid);
-            ctx.ellipse(x, mid, half, T * 0.31, 0, 0.4, Math.PI * 2);
-            ctx.fill();
-          } else {
-            ctx.fillStyle = '#a85c36';
-            ctx.fillRect(x - half, mid - 0.25 * T, 2 * half, T * 0.5);
-            ctx.fillStyle = '#cf8751';
-            ctx.fillRect(x - half, mid - 0.25 * T, 2 * half, T * 0.11);
-            ctx.beginPath();
-            ctx.ellipse(x + half, mid, T * 0.10, T * 0.25, 0, 0, 2 * Math.PI);
-            ctx.fill();
-          }
-        }
-        return;
-      }
-      if (k === 'train') {
-        ctx.fillStyle = glue(pats.gravel);
-        ctx.fillRect(0, top, W, T + 1);
-        ctx.fillStyle = '#3a2a1e';
-        for (let x = ((sx(0) % (T * 0.45)) + T * 0.45) % (T * 0.45) - T * 0.45; x < W; x += T * 0.45) ctx.fillRect(x, top + T * 0.14, T * 0.16, T * 0.72);
-        for (const yy of [0.3, 0.7]) {
-          ctx.fillStyle = '#8d8f99';
-          ctx.fillRect(0, top + T * yy - 2, W, 4);
-          ctx.fillStyle = 'rgba(255,255,255,.35)';
-          ctx.fillRect(0, top + T * yy - 2, W, 1);
-        }
-        // warning lights at both ends of the crossing
-        const L2 = L;
-        const base = L2.phase + L2.dir * L2.v * t;
-        // time until the next train reaches the board
-        const edge = L2.dir === 1 ? -0.5 : RR.COLS + 0.5;
-        let soon = false;
-        const n0 = Math.round((edge - base) / L2.P);
-        for (let n = n0 - 1; n <= n0 + 1; n++) {
-          const front = base + n * L2.P;
-          const lo = L2.dir === 1 ? front - L2.len : front;
-          const hi = L2.dir === 1 ? front : front + L2.len;
-          const dist = L2.dir === 1 ? edge - front : front - edge;
-          if ((dist > 0 && dist / L2.v < 1.6) || (lo < RR.COLS + 1 && hi > -1)) soon = true;
-        }
-        for (const px of [Math.max(12, sx(-0.35)), Math.min(W - 12, sx(RR.COLS + 0.35))]) {
-          ctx.fillStyle = '#2a2230';
-          ctx.fillRect(px - 2, top + T * 0.12, 4, T * 0.76);
-          const flash = soon && Math.floor(now / 220) % 2;
-          for (const [i, on] of [[0, flash], [1, soon && !flash]]) {
-            ctx.fillStyle = on ? '#ff3b55' : '#3a1018';
-            ctx.shadowColor = '#ff3b55';
-            ctx.shadowBlur = on ? 16 : 0;
-            ctx.beginPath();
-            ctx.arc(px + (i ? 6 : -6), top + T * 0.2, T * 0.08, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.shadowBlur = 0;
-        }
-        if (soon && !trainsWarned.has(r) && phase === 'run' && Math.abs(r - row) <= 4) {
-          trainsWarned.add(r);
-          sfx.honk();
-        }
-        if (!soon) trainsWarned.delete(r);
-        return;
-      }
-      // road / bus lane
-      ctx.fillStyle = glue(pats.asphalt);
-      ctx.fillRect(0, top, W, T + 1);
-      if (k === 'bus') {
-        ctx.fillStyle = 'rgba(200,30,60,.16)';
-        ctx.fillRect(0, top, W, T);
-        ctx.font = `800 ${Math.round(T * 0.34)}px Bricolage, system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(255,240,220,.14)';
-        for (let c = 1; c < RR.COLS; c += 3) ctx.fillText('BUS', sx(c + 0.5), top + T / 2);
-      }
-      const above = lane(r + 1).kind;
-      const below = lane(r - 1).kind;
-      const isRoad = (x) => x === 'road' || x === 'bus';
-      // lane edges: dashed between two roads, solid kerb otherwise
-      if (isRoad(above)) {
-        ctx.fillStyle = 'rgba(255,245,225,.42)';
-        const dash = T * 0.42;
-        for (let x = ((sx(0) % (dash * 2)) + dash * 2) % (dash * 2) - dash * 2; x < W; x += dash * 2) ctx.fillRect(x, top - 1.5, dash, 3);
-      } else {
-        ctx.fillStyle = 'rgba(255,201,77,.55)';
-        ctx.fillRect(0, top, W, 3);
-      }
-      if (!isRoad(below)) {
-        ctx.fillStyle = 'rgba(255,201,77,.55)';
-        ctx.fillRect(0, top + T - 3, W, 3);
-      }
-    }
-
-    function drawObstacles(r) {
-      const L = lane(r);
-      if (!L.blocked.length) return;
-      const top = rowTop(r);
-      for (const c of L.blocked) {
-        const img = scoreMode ? art.tree : art.obstacles[Math.floor(rrRand(seed, r, 50 + c) * art.obstacles.length)];
-        if (img) ctx.drawImage(img, sx(c) + T * 0.06, top - T * 0.08, T * 0.88, T * 0.88);
-      }
-    }
-
-    function drawVehicles(r, t) {
-      const L = lane(r);
-      if (!L.v) return;
-      const mid = rowMid(r);
-      const base = L.phase + L.dir * L.v * t;
-      const cMin = -boardLeft / T - 1;
-      const cMax = (W - boardLeft) / T + 1;
-      const nMin = Math.ceil((cMin - L.len - base) / L.P) - 1;
-      const nMax = Math.floor((cMax + L.len - base) / L.P) + 1;
-      for (let n = nMin; n <= nMax; n++) {
-        const front = rrFront(L, t, n);
-        const lo = L.dir === 1 ? front - L.len : front;
-        const hi = lo + L.len;
-        if (hi < cMin || lo > cMax) continue;
-        const cx = sx((lo + hi) / 2);
-        const len = L.len * T;
-        const wid = L.kind === 'train' ? T * 0.78 : L.kind === 'bus' ? T * 0.74 : T * 0.6;
-        // headlights spill onto the road ahead
-        const fx = sx(front);
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.translate(fx + L.dir * T * 0.75, mid);
-        ctx.scale(1.7, 0.5);
-        ctx.fillStyle = glowGrad;
-        ctx.beginPath();
-        ctx.arc(0, 0, T, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        // shadow
-        ctx.fillStyle = 'rgba(0,0,0,.4)';
-        ctx.beginPath();
-        ctx.ellipse(cx + 3, mid + 5, len / 2, wid / 2, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.save();
-        ctx.translate(cx, mid);
-        ctx.rotate(L.dir === 1 ? -Math.PI / 2 : Math.PI / 2);
-        if (L.kind === 'train') {
-          // locomotive at the front, coaches behind (sprite y grows towards the front)
-          const locoLen = T * 3;
-          ctx.drawImage(art.loco, -wid / 2, len / 2 - locoLen, wid, locoLen);
-          const coachLen = (len - locoLen) / 4;
-          for (let i = 0; i < 4; i++) ctx.drawImage(art.coach, -wid / 2, len / 2 - locoLen - (i + 1) * coachLen + 2, wid, coachLen - 4);
-        } else if (L.kind === 'bus') {
-          ctx.drawImage(art.bus, -wid / 2, -len / 2, wid, len);
-        } else {
-          ctx.drawImage(art.cars[carIdx(r, n)].img, -wid / 2, -len / 2, wid, len);
-        }
-        ctx.restore();
-      }
-    }
-
-    function drawEgg(now) {
-      const r = RR.FINISH;
-      const y = rowMid(r);
-      if (y < -T || y > H + T) return;
-      const x = sx(RR.START_COL + 0.5);
-      const pulse = 1 + Math.sin(now / 300) * 0.05;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, T * 1.8);
-      g.addColorStop(0, 'rgba(255,220,120,.55)');
-      g.addColorStop(1, 'rgba(255,201,77,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(x - T * 2, y - T * 2, T * 4, T * 4);
-      const s = T * 1.15 * pulse;
-      ctx.drawImage(art.egg, x - s / 2, y - s * 0.72, s, s * 1.25);
-    }
-
-    function drawChicken(now) {
-      if (!art) return;
-      let { x, y } = chickScreen(now);
-      const u = hopU(now);
-      const lift = Math.sin(u * Math.PI) * T * 0.32;
-      let sprite = art.rooster;
-      let sxScale = 1;
-      let syScale = 1;
-      let alpha = 1;
-      let rot = 0;
-      if (deathAt && deathAt.cause !== 'hawk') {
-        // flattened, a little rotated along the traffic
-        const s = T * 1.05;
-        ctx.save();
-        ctx.translate(x, y + T * 0.05);
-        ctx.rotate(((deathAt.row * 37) % 20 - 10) * 0.02);
-        ctx.drawImage(art.flat, -s / 2, -s / 2, s, s);
-        ctx.restore();
-        return;
-      }
-      if (deathAt && deathAt.cause === 'hawk') return; // drawn by the hawk
-      if (cashedAt) {
-        const k = (now - cashedAt.at) / 1000;
-        sprite = art.happy;
-        y -= Math.abs(Math.sin(k * 6)) * T * 0.35 + Math.min(1, k) * T * 0.1;
-      } else if (u < 1) {
-        sprite = art.flap;
-        syScale = 1 + Math.sin(u * Math.PI) * 0.12;
-        sxScale = 1 - Math.sin(u * Math.PI) * 0.08;
-      } else {
-        // idle: breathe, blink, little landing squash
-        const since = now - chick.hopT0 - HOP_MS;
-        const squash = since < 140 ? Math.sin((since / 140) * Math.PI) * 0.1 : 0;
-        syScale = 1 - squash + Math.sin(now / 420) * 0.015;
-        sxScale = 1 + squash;
-        if (Math.floor(now / 2400) % 3 === 0 && now % 2400 < 140) sprite = art.blink;
-        // nervous when traffic is close or the hawk is near
-        if (phase === 'run' && rrHawk(worldT(now)) > row - 0.2) rot = Math.sin(now / 30) * 0.05;
-      }
-      const bump = now - chick.bumpT0;
-      if (bump < 160) {
-        const k = Math.sin((bump / 160) * Math.PI) * T * 0.12;
-        if (chick.bumpDir === 0) y -= k;
-        if (chick.bumpDir === 1) y += k;
-        if (chick.bumpDir === 2) x -= k;
-        if (chick.bumpDir === 3) x += k;
-      }
-      // shadow
-      ctx.fillStyle = `rgba(0,0,0,${0.42 - lift / T * 0.5})`;
-      ctx.beginPath();
-      ctx.ellipse(x, y + T * 0.32, T * 0.3 * (1 - lift / T * 0.6), T * 0.1, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // spotlight
-      const g = ctx.createRadialGradient(x, y, 0, x, y, T * 1.3);
-      g.addColorStop(0, 'rgba(255,236,200,.16)');
-      g.addColorStop(1, 'rgba(255,236,200,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(x - T * 1.3, y - T * 1.3, T * 2.6, T * 2.6);
-      if (scoreMode) sprite = art.runner;
-      const s = T * (scoreMode ? 0.70 : 0.98);
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(x, y + T * 0.34 - lift);
-      ctx.rotate(rot);
-      ctx.scale(chick.face * sxScale, syScale);
-      ctx.drawImage(sprite, -s / 2, -s * 0.93, s, s);
-      ctx.restore();
-    }
-
-    function drawHawk(now) {
-      if (!art) return;
-      const t = worldT(now);
-      if (deathAt?.cause === 'hawk') {
-        // swoop in, grab, carry off
-        const k = (now - deathAt.at) / 1000;
-        const target = { x: sx(deathAt.col + 0.5), y: rowMid(deathAt.row) };
-        let x;
-        let y;
-        if (k < 0.45) {
-          const e = k / 0.45;
-          x = target.x + (1 - e) * W * 0.4;
-          y = -T * 2 + (target.y + T * 2) * (1 - (1 - e) * (1 - e));
-        } else {
-          const e = k - 0.45;
-          x = target.x - e * W * 0.15;
-          y = target.y - e * e * H * 2.2 - e * T * 2;
-          const s = T * 0.9;
-          ctx.save();
-          ctx.translate(x, y + T * 0.45);
-          ctx.rotate(Math.sin(now / 60) * 0.2);
-          ctx.drawImage(art.flap, -s / 2, -s / 2, s, s);
-          ctx.restore();
-        }
-        const hw = T * 2.2;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(Math.PI);
-        ctx.drawImage(art.hawk, -hw / 2, -hw * 0.35, hw, hw * 0.7);
-        ctx.restore();
-        return;
-      }
-      if (phase !== 'run') return;
-      // circling shadow when it's getting close
-      const gap = row + 1 - rrHawk(t);
-      dangerEl.style.opacity = String(clamp(1 - gap / 2.5, 0, 1));
-      if (gap > 2.5) return;
-      const a = now / 700;
-      const cx = sx(col + 0.5) + Math.cos(a) * T * 1.6;
-      const cy = H - T * 0.5 + Math.sin(a) * T * 0.5;
-      const hw = T * 2;
-      ctx.save();
-      ctx.globalAlpha = 0.35 * clamp(1 - gap / 2.5, 0.2, 1);
-      ctx.translate(cx, cy);
-      ctx.rotate(a + Math.PI / 2);
-      ctx.drawImage(art.hawk, -hw / 2, -hw * 0.35, hw, hw * 0.7);
-      ctx.restore();
+      if (!soon) trainsWarned.delete(r);
+      return soon;
     }
 
     function drawParticles() {
@@ -1045,7 +630,8 @@ export default {
         ctx.fillStyle = f.color;
         ctx.shadowColor = f.color;
         ctx.shadowBlur = 10;
-        ctx.fillText(f.text, sx(f.c + 0.5), rowMid(f.r) - T * 0.7 - k * T * 0.6);
+        const p = scene.point(f.c, f.r, 0.9 + k * 0.7);
+        ctx.fillText(f.text, p.x, p.y);
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
       }
@@ -1058,59 +644,19 @@ export default {
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, (now - lastNow) / 1000);
       lastNow = now;
-      if (!art || !W) return;
+      if (!W || !H) return;
       const t = endT ?? worldT(now);
       if (phase === 'run') checkDeath(t);
-      // camera: keep the rooster in the lower third, never let the hawk line off the bottom
-      const vr = visRow(now);
-      let target = scoreMode ? vr + 0.5 - 0.42 * H / T : vr - 2.2;
-      if (scoreMode && phase === 'run' && t > 6) dangerEl.style.opacity = String(clamp(1 - (row + 1 - chaseLine(t)) / 2, 0, 1));
-      if (!scoreMode && phase === 'run') target = Math.max(target, rrHawk(Math.max(0, t)) - 1.3, best - 4.6);
-      else if (!scoreMode && endT != null && (phase === 'ending' || phase === 'over')) target = Math.max(target, rrHawk(Math.max(0, endT)) - 1.3, best - 4.6);
-      if (phase !== 'run') dangerEl.style.opacity = '0';
-      target = Math.max(-1.6, target);
-      cam += (target - cam) * Math.min(1, dt * 5);
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-      const sk = now - shakeT0 < 400 ? shakeAmp * (1 - (now - shakeT0) / 400) : 0;
-      if (sk) ctx.translate((Math.random() - 0.5) * sk, (Math.random() - 0.5) * sk);
-      // Project every lane and actor together so the visible gap matches its hitbox.
-      const edgeOffset = ROAD_SLOPE * W / 2;
-      ctx.transform(1, ROAD_SLOPE, 0, 1, 0, -edgeOffset);
-      const r0 = Math.floor(cam - edgeOffset / T) - 1;
-      const r1 = Math.ceil(cam + (H + edgeOffset) / T) + 1;
-      for (let r = r0; r <= r1; r++) drawGround(r, t, now);
-      // the playfield: side margins sit in shadow
-      if (scoreMode && phase === 'run' && chaseLine(t) > 0) {
-        const lineY = rowTop(chaseLine(t) - 1);
-        ctx.fillStyle = '#ed4a55';
-        ctx.fillRect(0, lineY, W, 3);
-        ctx.fillStyle = 'rgba(154,22,44,.34)';
-        ctx.fillRect(0, lineY + 3, W, Math.max(0, H - lineY + edgeOffset));
-      }
-      ctx.fillStyle = 'rgba(6,2,4,.42)';
-      ctx.fillRect(0, 0, boardLeft, H);
-      ctx.fillRect(boardLeft + RR.COLS * T, 0, W - boardLeft - RR.COLS * T, H);
-      ctx.fillStyle = 'rgba(255,159,67,.22)';
-      ctx.fillRect(boardLeft - 1, 0, 2, H);
-      ctx.fillRect(boardLeft + RR.COLS * T - 1, 0, 2, H);
-      for (let r = r0; r <= r1; r++) drawObstacles(r);
-      if (!scoreMode) drawEgg(now);
-      // vehicles below the rooster first, then the rooster, then vehicles above (overlap reads right)
-      const cr = Math.round(vr);
-      for (let r = r0; r <= r1; r++) if (r <= cr) drawVehicles(r, t);
-      drawChicken(now);
-      for (let r = r0; r <= r1; r++) if (r > cr) drawVehicles(r, t);
+      const line = scoreMode ? chaseLine(t) : rrHawk(t);
+      const warning = phase === 'run' && (scoreMode ? t > 6 : t > 4);
+      dangerEl.style.opacity = String(warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0);
+      const bump = clamp((now - chick.bumpT0) / 160, 0, 1);
+      const nudge = Math.sin(bump * Math.PI) * .12;
+      const vr = visRow(now) + (chick.bumpDir === 0 ? nudge : chick.bumpDir === 1 ? -nudge : 0);
+      const vc = visCol(now) + (chick.bumpDir === 3 ? nudge : chick.bumpDir === 2 ? -nudge : 0);
+      scene.draw({ W, H, dpr, dt, seed, lane, t, now, vr, vc, hop: Math.sin(Math.PI * hopU(now)) * .30,
+        facing: chick.face, death: deathAt, banked: cashedAt, score: scoreMode, phase, line, art, trainWarning });
       drawParticles();
-      if (!scoreMode) drawHawk(now);
-      // night vignette
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const v = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.3, W / 2, H * 0.55, Math.max(W, H) * 0.75);
-      v.addColorStop(0, 'rgba(10,4,16,0)');
-      v.addColorStop(1, 'rgba(10,4,16,.55)');
-      ctx.fillStyle = v;
-      ctx.fillRect(0, 0, W, H);
     }
     let raf = requestAnimationFrame(tick);
 

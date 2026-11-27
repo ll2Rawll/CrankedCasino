@@ -135,14 +135,6 @@ function car(t) {
 }
 
 // ------------------------------------------------------------------ props
-const BARRIER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40">
-  <defs><pattern id="st" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="10" height="20" fill="#ff3b55"/><rect x="10" width="10" height="20" fill="#fff4e0"/></pattern></defs>
-  <rect x="6" y="26" width="8" height="12" rx="2" fill="#2a2230"/><rect x="106" y="26" width="8" height="12" rx="2" fill="#2a2230"/>
-  <rect x="2" y="8" width="116" height="20" rx="5" fill="url(#st)" stroke="#1a0d12" stroke-width="2"/>
-  <rect x="4" y="9" width="112" height="5" rx="2.5" fill="rgba(255,255,255,.25)"/>
-  <circle cx="16" cy="6" r="5" fill="#ffb02e"/><circle cx="104" cy="6" r="5" fill="#ffb02e"/>
-</svg>`;
-
 const EGG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 150">
   <defs>
     <radialGradient id="e" cx="38%" cy="30%" r="80%"><stop offset="0" stop-color="#fffbe6"/><stop offset=".25" stop-color="#ffe27a"/><stop offset=".6" stop-color="#e0a116"/><stop offset="1" stop-color="#7a4a05"/></radialGradient>
@@ -154,54 +146,6 @@ const EGG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 150">
   <ellipse cx="44" cy="44" rx="10" ry="18" fill="#fff" opacity=".55" transform="rotate(-20 44 44)"/>
   <text x="60" y="94" font-family="Arial Black,Arial" font-weight="900" font-size="24" text-anchor="middle" fill="#7a4a05" opacity=".55">$</text>
 </svg>`;
-
-// Bus: top-down, front = bottom. 100 × 300.
-const BUS = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 300">
-  <defs>
-    <linearGradient id="bp" x1="0" x2="1"><stop offset="0" stop-color="#7a4a00"/><stop offset=".18" stop-color="#f5a70a"/><stop offset=".5" stop-color="#ffd76a"/><stop offset=".82" stop-color="#f5a70a"/><stop offset="1" stop-color="#7a4a00"/></linearGradient>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#132536"/><stop offset=".6" stop-color="#2b5574"/><stop offset="1" stop-color="#0b1620"/></linearGradient>
-  </defs>
-  <rect x="2" y="40" width="12" height="34" rx="5" fill="#09080b"/><rect x="86" y="40" width="12" height="34" rx="5" fill="#09080b"/>
-  <rect x="2" y="226" width="12" height="34" rx="5" fill="#09080b"/><rect x="86" y="226" width="12" height="34" rx="5" fill="#09080b"/>
-  <rect x="8" y="6" width="84" height="288" rx="14" fill="url(#bp)" stroke="rgba(0,0,0,.4)" stroke-width="2"/>
-  <rect x="16" y="20" width="68" height="240" rx="8" fill="#e9e2cf"/>
-  <rect x="16" y="20" width="68" height="240" rx="8" fill="none" stroke="rgba(0,0,0,.18)" stroke-width="2"/>
-  <rect x="30" y="60" width="40" height="34" rx="5" fill="#b9b2a0"/><rect x="34" y="64" width="32" height="26" rx="3" fill="#cfc8b5"/>
-  <rect x="30" y="160" width="40" height="34" rx="5" fill="#b9b2a0"/><rect x="34" y="164" width="32" height="26" rx="3" fill="#cfc8b5"/>
-  <g fill="#1a2a3a">${Array.from({ length: 9 }, (_, i) => `<rect x="9" y="${28 + i * 26}" width="6" height="18" rx="2"/><rect x="85" y="${28 + i * 26}" width="6" height="18" rx="2"/>`).join('')}</g>
-  <path d="M16 262 Q50 254 84 262 L88 286 Q50 278 12 286 Z" fill="url(#bg)"/>
-  <rect x="20" y="114" width="60" height="16" rx="4" fill="#ff4d6d"/><text x="50" y="126" font-family="Arial Black,Arial" font-weight="900" font-size="12" text-anchor="middle" fill="#fff">CRANKED</text>
-  <path d="M14 282 Q20 292 34 293 L35 287 Z" fill="#fff8d6"/><path d="M86 282 Q80 292 66 293 L65 287 Z" fill="#fff8d6"/>
-  <rect x="14" y="8" width="16" height="6" rx="3" fill="#ff2e4d"/><rect x="70" y="8" width="16" height="6" rx="3" fill="#ff2e4d"/>
-</svg>`;
-
-// Train pieces: top-down, front = bottom, 100 wide. The locomotive is 300 long, a coach 260.
-const LOCO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 300">
-  <defs><linearGradient id="lp" x1="0" x2="1"><stop offset="0" stop-color="#3a0a1a"/><stop offset=".2" stop-color="#c8102e"/><stop offset=".5" stop-color="#ff5a75"/><stop offset=".8" stop-color="#c8102e"/><stop offset="1" stop-color="#3a0a1a"/></linearGradient></defs>
-  <rect x="6" y="4" width="88" height="292" rx="16" fill="url(#lp)" stroke="#14050a" stroke-width="3"/>
-  <path d="M6 240 Q50 312 94 240 L94 280 Q50 300 6 280 Z" fill="#14050a" opacity=".35"/>
-  <rect x="18" y="20" width="64" height="150" rx="8" fill="#2a0a12" opacity=".55"/>
-  <g fill="#ffc94d" opacity=".9"><rect x="22" y="26" width="56" height="6" rx="3"/><rect x="22" y="40" width="56" height="6" rx="3"/><rect x="22" y="54" width="56" height="6" rx="3"/></g>
-  <circle cx="50" cy="110" r="18" fill="#14050a"/><circle cx="50" cy="110" r="12" fill="#3a3a44"/>
-  <path d="M22 220 Q50 206 78 220 L80 246 Q50 236 20 246 Z" fill="#2b5574"/>
-  <rect x="44" y="6" width="12" height="288" fill="#ffc94d" opacity=".55"/>
-  <circle cx="24" cy="282" r="7" fill="#fff8d6"/><circle cx="76" cy="282" r="7" fill="#fff8d6"/>
-</svg>`;
-const COACH = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 260">
-  <defs><linearGradient id="cp" x1="0" x2="1"><stop offset="0" stop-color="#2a2430"/><stop offset=".2" stop-color="#7d7488"/><stop offset=".5" stop-color="#c9c0d4"/><stop offset=".8" stop-color="#7d7488"/><stop offset="1" stop-color="#2a2430"/></linearGradient></defs>
-  <rect x="8" y="4" width="84" height="252" rx="10" fill="url(#cp)" stroke="#14050a" stroke-width="3"/>
-  <g fill="#3a3348">${Array.from({ length: 7 }, (_, i) => `<rect x="20" y="${18 + i * 34}" width="60" height="22" rx="4"/>`).join('')}</g>
-  <rect x="44" y="6" width="12" height="248" fill="#c8102e" opacity=".75"/>
-  <g fill="#ffc94d">${Array.from({ length: 8 }, (_, i) => `<rect x="9" y="${14 + i * 30}" width="4" height="16" rx="2"/><rect x="87" y="${14 + i * 30}" width="4" height="16" rx="2"/>`).join('')}</g>
-</svg>`;
-
-// Sidewalk obstacles, drawn front-on (they stand up out of the pavement).
-const OBSTACLES = [
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><ellipse cx="50" cy="88" rx="34" ry="9" fill="rgba(0,0,0,.35)"/><path d="M26 84 H74 L70 76 H30 Z" fill="#c94a12"/><path d="M38 76 L46 14 Q50 8 54 14 L62 76 Z" fill="#ff7a2e"/><path d="M41 54 H59 L61 66 H39 Z M44 32 H56 L57 42 H43 Z" fill="#fff4e0"/><path d="M47 16 L44 74" stroke="rgba(255,255,255,.35)" stroke-width="3"/></svg>`,
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><ellipse cx="50" cy="90" rx="30" ry="8" fill="rgba(0,0,0,.35)"/><rect x="34" y="40" width="32" height="48" rx="6" fill="#e11d48"/><path d="M30 40 Q50 14 70 40 Z" fill="#ff4d6d"/><rect x="22" y="52" width="56" height="12" rx="6" fill="#c8102e"/><circle cx="50" cy="58" r="6" fill="#ffd34a"/><rect x="38" y="44" width="8" height="40" rx="4" fill="rgba(255,255,255,.25)"/><rect x="30" y="84" width="40" height="7" rx="3" fill="#8a0a24"/></svg>`,
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><ellipse cx="50" cy="90" rx="40" ry="9" fill="rgba(0,0,0,.35)"/><rect x="16" y="56" width="68" height="32" rx="6" fill="#2a2230" stroke="#4dffc3" stroke-width="2.5"/><circle cx="34" cy="44" r="18" fill="#0f7a52"/><circle cx="58" cy="36" r="22" fill="#14a36b"/><circle cx="70" cy="50" r="15" fill="#0f7a52"/><circle cx="52" cy="30" r="8" fill="#5ff0b8" opacity=".5"/><rect x="16" y="56" width="68" height="6" fill="#4dffc3" opacity=".35"/></svg>`,
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><ellipse cx="50" cy="90" rx="30" ry="8" fill="rgba(0,0,0,.35)"/><path d="M30 30 H70 L66 88 H34 Z" fill="#3b4652"/><rect x="26" y="22" width="48" height="12" rx="4" fill="#56626e"/><g stroke="#2a323b" stroke-width="3"><path d="M40 40 L41 80 M50 40 V80 M60 40 L59 80"/></g><rect x="44" y="16" width="12" height="6" rx="2" fill="#56626e"/></svg>`,
-];
 
 // Hawk, top-down, wings spread, facing down.
 const HAWK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140">
@@ -217,45 +161,13 @@ const HAWK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140">
   <path d="M84 84 L80 96 M116 84 L120 96" stroke="#ffc94d" stroke-width="4" stroke-linecap="round"/>
 </svg>`;
 
-// Rear-facing score runner and roadside tree, drawn for the oblique course.
-const RUNNER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 88">
-  <g stroke-linejoin="round" stroke-width="3">
-    <path fill="#ed9f36" stroke="#8e4d24" d="M26 63h8v16l-10 3-7-3 9-4zM48 63h7v12l9 4-6 3-10-3z"/>
-    <path fill="#e04340" stroke="#94302c" d="M32 23l-3-11 7 2 3-11 6 8 5-5 1 14z"/>
-    <path fill="#fff8e5" stroke="#484754" d="M21 38q3-20 19-20 18 0 20 21l8 15-7 13q-18 13-40 0L12 54z"/>
-    <path fill="#d6d6ce" stroke="#9d9e9e" d="M15 47l12 8-3 10-10-6zM65 46l-12 9 4 9 9-7z"/>
-    <path fill="#fbf0d4" stroke="#afa89b" d="M30 60l4-15 7 8 8-9 1 16-10 7z"/>
-  </g></svg>`;
-const TREE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <path fill="#284c40" opacity=".34" d="M24 87l24-13 47 8-23 13z"/>
-  <path fill="#755034" d="M40 46l15 3v37l-8 4-7-4z"/>
-  <path fill="#50914a" d="M15 22l25-13 34 10-23 15z"/>
-  <path fill="#397944" d="M15 22l36 12v36L15 58z"/>
-  <path fill="#2b633d" d="M51 34l23-15v37L51 70z"/>
-  </svg>`;
-
-/** Load every sprite. */
+// Gameplay models are drawn by rooster-landscape. These illustrations are
+// reserved for the result panel, golden egg and hawk.
 export async function loadArt() {
-  const [r, b, f, h, flat, barrier, egg, bus, loco, coach, hawk, runner, tree, ...rest] = await Promise.all([
-    svgImg(rooster()),
-    svgImg(rooster({ blink: true })),
-    svgImg(rooster({ flap: true })),
-    svgImg(rooster({ flap: true, happy: true })),
-    svgImg(roosterFlat()),
-    svgImg(BARRIER),
-    svgImg(EGG),
-    svgImg(BUS),
-    svgImg(LOCO),
-    svgImg(COACH),
-    svgImg(HAWK),
-    svgImg(RUNNER),
-    svgImg(TREE),
-    ...CAR_TYPES.map((t) => svgImg(car(t))),
-    ...OBSTACLES.map(svgImg),
+  const [happy, flat, egg, hawk] = await Promise.all([
+    svgImg(rooster({flap: true, happy: true})), svgImg(roosterFlat()), svgImg(EGG), svgImg(HAWK),
   ]);
-  const cars = rest.slice(0, CAR_TYPES.length);
-  const obstacles = rest.slice(CAR_TYPES.length);
-  return { rooster: r, blink: b, flap: f, happy: h, flat, barrier, egg, bus, loco, coach, hawk, runner, tree, obstacles, cars: CAR_TYPES.map((t, i) => ({ type: t, img: cars[i] })) };
+  return {happy, flat, egg, hawk};
 }
 
 /** Standalone SVG of the rooster for the lobby card and the page header. */
