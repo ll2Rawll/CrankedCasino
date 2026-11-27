@@ -14,7 +14,7 @@ import { sfx, haptic } from '../sound.js';
 import { burst, PALETTES, coinRain } from '../fx.js';
 import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js';
 import { scoreLane, onPlatform } from './rooster-course.js?v=c79a63fcecc8';
-import { landscape } from './rooster-landscape.js?v=4d2f85abb0a0';
+import { landscape } from './rooster-landscape.js?v=22a28a0d3739';
 import { loadArt } from './rooster-art.js';
 
 const HOP_MS = 110;
@@ -149,7 +149,9 @@ export default {
     let deathAt = null; // { t, cause, at, row, col, impactAt, struck }
     let cashedAt = null; // { t, mult, pay }
     const chick = { fromRow: 0, fromCol: RR.START_COL, fromLift: 0, hopT0: -1e9, duration: HOP_MS, face: 1, bumpT0: -1e9, bumpDir: 0 };
-    const scene = landscape(ctx);
+    // Phones paint a lighter scene at a lower resolution (see resize and pace).
+    const lite = matchMedia('(pointer: coarse)').matches;
+    const scene = landscape(ctx, { lite });
     const particles = [];
     const floats = []; // canvas float texts
     const trainsWarned = new Set();
@@ -187,8 +189,11 @@ export default {
     let dpr = 1;
     let T = 60; // tile size in px
     let pointLabel;
+    // Canvas pixels per CSS pixel. A 3× iPhone screen drawn at 2× spent most of each
+    // frame filling pixels; 1.5× looks nearly the same and costs about 40% less.
+    let resolution = lite ? 1.5 : 2;
     function resize() {
-      dpr = Math.min(2, window.devicePixelRatio || 1);
+      dpr = Math.min(resolution, window.devicePixelRatio || 1);
       W = viewEl.clientWidth;
       H = viewEl.clientHeight;
       const width = Math.round(W * dpr), height = Math.round(H * dpr);
@@ -775,6 +780,25 @@ export default {
     }
 
     let lastNow = performance.now();
+    let dangerShown = '';
+    // If a phone still drops frames during play, step the resolution down (1.5 → 1.25 → 1).
+    // Ignore a steady 30 fps cap (Low Power Mode): only act when frames that should
+    // arrive every 16.7 ms keep slipping, or when they stall outright.
+    const intervals = [];
+    let settle = 0; // frames to skip while a new resolution repaints its ground tiles
+    function pace(now, dt) {
+      if (!lite || phase !== 'run' || resolution <= 1 || document.hidden || dt > 0.25) return;
+      if (settle > 0) return void settle--;
+      intervals.push(dt * 1000);
+      if (intervals.length < 150) return;
+      const sorted = intervals.splice(0).sort((a, b) => a - b);
+      const at = (p) => sorted[Math.floor(sorted.length * p)];
+      if ((at(0.25) < 20 && at(0.75) > 24) || at(0.9) > 45) {
+        resolution = resolution > 1.25 ? 1.25 : 1;
+        settle = 45;
+        resize();
+      }
+    }
     let endT = null; // world time the run ended (freezes the camera)
     function tick() {
       if (destroyed) return;
@@ -789,7 +813,14 @@ export default {
       const line = scoreMode ? chaseLine(t) : rrHawk(t);
       const warning = phase === 'run' && (scoreMode ? t > 6 : t > 4);
       const caught = deathAt?.cause === 'line' ? clamp(1.4 - (now - deathAt.at) / 700, 0, 1) : 0;
-      dangerEl.style.opacity = String(Math.max(caught, warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0));
+      const danger = Math.max(caught, warning ? clamp(1 - (row + 1 - line) / 2, 0, 1) : 0).toFixed(2);
+      if (danger !== dangerShown) {
+        // Style writes every frame cost a style pass; the throb only runs while visible.
+        dangerShown = danger;
+        dangerEl.style.opacity = danger;
+        dangerEl.classList.toggle('is-on', danger !== '0.00');
+      }
+      pace(now, dt);
       if (deathAt && deathAt.cause !== 'hawk' && !deathAt.struck && now >= deathAt.impactAt) {
         deathAt.struck = true;
         strike(deathAt.cause, now);

@@ -1,5 +1,5 @@
-// Full-resolution raster caches for the stationary ground, sunlight and cast
-// shadows. All destinations in this module are expressed in backing pixels.
+// Raster caches for the stationary ground and cast shadows.
+// All destinations in this module are expressed in backing pixels.
 import { RR } from '../math.js';
 import { plane } from './rooster-models.js?v=95c341414c5b';
 
@@ -25,7 +25,7 @@ const TILE = 384;
 
 // The camera only translates. Keep painted tiles fixed in projected world
 // pixels so a hop uncovers a strip of new terrain and reuses the overlap.
-function paintTile(image, tx, ty, unit, lane, seed, materials) {
+function paintTile(image, tx, ty, unit, lane, seed, materials, lite) {
   const g = image.getContext('2d', { alpha: false });
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.fillStyle = '#9fbd50';
@@ -58,10 +58,14 @@ function paintTile(image, tx, ty, unit, lane, seed, materials) {
       shore.addColorStop(.45, '#329ca8');
       shore.addColorStop(1, water(r + 1) ? '#277791' : '#8bcead');
       g.fillStyle = shore;
+      g.fillRect(left, r - .505, span, 1.013);
+      g.fillStyle = materials.water(g);
     } else if (meadow(kind) || road(kind)) {
       const turf = meadow(kind);
       const colors = turf ? grass : asphalt;
-      g.fillStyle = materials.ground(colors[variation(seed, r, 19) % colors.length], turf);
+      const color = colors[variation(seed, r, 19) % colors.length];
+      // Phones get flat grass and asphalt: the noise textures made each new tile slow.
+      g.fillStyle = lite ? color : materials.ground(color, turf);
     } else {
       g.fillStyle = kind === 'train' ? '#8b8571' : '#d6b355';
     }
@@ -109,21 +113,10 @@ export function wildTree(x, row, hash) {
     !(row >= -1 && Math.abs(x - RR.START_COL) < 1.6);
 }
 
-function paintLight(g, w, h) {
-  const sun = g.createLinearGradient(0, 0, w, h * .54);
-  sun.addColorStop(0, 'rgba(255,218,149,.25)');
-  sun.addColorStop(.28, 'rgba(251,210,136,.065)');
-  sun.addColorStop(.45, 'rgba(255,235,177,.14)');
-  sun.addColorStop(.66, 'rgba(253,222,161,.018)');
-  sun.addColorStop(1, 'rgba(35,66,99,.10)');
-  g.fillStyle = sun;
-  g.fillRect(0, 0, w, h);
-}
-
-export function rasterLayers(ctx) {
+export function rasterLayers(ctx, { lite = false } = {}) {
   const tiles = new Map();
   const recycled = [];
-  let terrainSeed, terrainMode, light;
+  let terrainSeed, terrainMode;
   let frame = 0, unit = 0, width = 0, height = 0;
   const shadows = new Map();
   let pixels = 0, additions = 0;
@@ -161,7 +154,7 @@ export function rasterLayers(ctx) {
     }
     function addTile(x, y, key) {
       const image = recycled.pop() ?? surface(TILE, TILE);
-      paintTile(image, x, y, unit, lane, seed, materials);
+      paintTile(image, x, y, unit, lane, seed, materials, lite);
       const tile = { x, y, image };
       tiles.set(key, tile);
       return tile;
@@ -227,26 +220,15 @@ export function rasterLayers(ctx) {
     ctx.drawImage(entry.image, Math.round(x) + entry.left, Math.round(y) + entry.top);
   }
 
-  function sunlight() {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (frame < 3) {
-      paintLight(ctx, width, height);
-      return;
-    }
-    if (!light || light.width !== width || light.height !== height) {
-      light = surface(width, height);
-      paintLight(light.getContext('2d'), width, height);
-    }
-    ctx.drawImage(light, 0, 0);
-    // Traffic lengths vary by lane. Discard stamps that went out of view.
-    if (frame % 30 === 0) {
-      for (const [key, entry] of shadows) {
-        if (frame - entry.used < 30) continue;
-        pixels -= entry.image.width * entry.image.height;
-        entry.image.width = 0;
-        shadows.delete(key);
-      }
+  // Traffic lengths vary by lane. Discard shadow stamps that went out of view.
+  function tidy() {
+    if (frame % 30 !== 0) return;
+    for (const [key, entry] of shadows) {
+      if (frame - entry.used < 30) continue;
+      pixels -= entry.image.width * entry.image.height;
+      entry.image.width = 0;
+      shadows.delete(key);
     }
   }
-  return { ground, shadow, sunlight, reset };
+  return { ground, shadow, tidy, reset };
 }

@@ -71,8 +71,6 @@ function bakeMaterials() {
 
 export function courseMaterials(ctx) {
   tiles ??= bakeMaterials();
-  const water = ctx.createPattern(tiles.water, 'repeat');
-  const drift = new DOMMatrix().scaleSelf(4.2 / size);
   const surfaces = new Map();
   return {
     ground(color, turf) {
@@ -87,11 +85,12 @@ export function courseMaterials(ctx) {
       surfaces.set(color, pattern);
       return pattern;
     },
-    water,
-    update(t) {
-      drift.e = (t * .1) % 4.2;
-      drift.f = (t * .032) % 4.2;
-      water.setTransform(drift);
+    // The ripple texture is painted once into the ground tiles. Redrawing it over
+    // every river each frame, through the tilted camera, cost a quarter of a frame.
+    water(g) {
+      const pattern = g.createPattern(tiles.water, 'repeat');
+      pattern.setTransform(new DOMMatrix().scaleSelf(4.2 / size));
+      return pattern;
     },
   };
 }

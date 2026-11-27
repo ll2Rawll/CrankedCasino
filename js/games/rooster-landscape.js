@@ -1,13 +1,14 @@
 import { RR, rrFront } from '../math.js';
 import { courseMaterials } from './rooster-materials.js';
 import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=95c341414c5b';
-import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=3e9d4885a9a8';
+import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=8580f318ece8';
 
-export function landscape(ctx) {
+// lite: phones. Skip the river reflections and paint flat ground (see rasterLayers).
+export function landscape(ctx, { lite = false } = {}) {
   prepareSprites();
   let materials;
   let warmedHop = false;
-  const layers = rasterLayers(ctx);
+  const layers = rasterLayers(ctx, { lite });
   let cameraRow = 0,
     cameraCol = RR.START_COL,
     scale = 1,
@@ -54,7 +55,6 @@ export function landscape(ctx) {
     scale = Math.min(W / 7.25, H / 8.8);
     if (!scale) return;
     materials ??= courseMaterials(ctx);
-    materials.update(t);
     const follow = 1 - Math.exp(-11 * dt);
     cameraRow += (vr - cameraRow) * follow;
     cameraCol += (vc - cameraCol) * follow;
@@ -136,7 +136,6 @@ export function landscape(ctx) {
       } else if (water) {
         waterRows.add(r);
         riverMask.rect(minX,r-.5,span,1);
-        strip(minX,r-.5,span,1,materials.water);
         if (impact && touchdown.row === r) {
           ctx.save();
           ctx.lineWidth = .028 * (1 - age) + .009;
@@ -254,7 +253,7 @@ export function landscape(ctx) {
     actors.sort((a, b) => a.depth - b.depth);
     // Mirror near-bank scenery into the water. Clip before switching to screen
     // coordinates so the reflection can never spill onto a road or a platform.
-    if (waterRows.size) {
+    if (waterRows.size && !lite) {
       ctx.save();
       ctx.clip(riverMask);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -333,7 +332,7 @@ export function landscape(ctx) {
       ctx.drawImage(s.image, s.left * u, s.top * u, s.width * u, s.height * u);
       ctx.restore();
     }
-    layers.sunlight();
+    layers.tidy();
     if (phase === 'countdown' && !warmedHop) {
       stamp('hen', 2, 1);
       warmedHop = true;

@@ -340,7 +340,7 @@ const routes = {
   plinko: () => import('./games/plinko.js'),
   slots: () => import('./games/slots.js'),
   crash: () => import('./games/crash.js'),
-  rooster: () => import('./games/rooster.js?v=9c4701aaf24a'),
+  rooster: () => import('./games/rooster.js?v=b62ea989383a'),
   flight: () => import('./games/flight.js?v=976bcb08d90f'),
   leaderboard: () => import('./pages/leaderboard.js'),
   profile: () => import('./pages/profile.js'),
