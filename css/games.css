@@ -372,7 +372,7 @@ html.rr-playing, html.rr-playing body { overflow: hidden; overscroll-behavior: n
 .rr-score-mode .rr-score b { color: white; font: 800 clamp(28px, 8vmin, 52px)/1 var(--font-display); text-shadow: 0 2px #132932; }
 .rr-score-mode .rr-score span, .rr-score-mode .rr-mult { display: none; }
 .rr-score-mode .rr-fab.is-cash {
-  min-width: 86px; min-height: 72px; height: auto; max-width: 110px; padding: 10px 7px;
+  width: 104px; min-height: 72px; height: auto; white-space: normal; text-align: center; line-height: 1.1; padding: 8px;
   flex-direction: column; gap: 2px; font-size: 14px; color: white; background: #253d49; border: 2px solid #f5e7ce; border-radius: 18px;
 }
 .rr-score-mode .rr-fab.is-cash::before { content: ''; width: 17px; height: 22px; border-radius: 52% 52% 45% 45% / 66% 66% 36% 36%; background: #fff5d7; }

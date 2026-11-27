@@ -184,7 +184,7 @@ export default {
       viewEl.classList.toggle('rr-score-mode', scoreMode);
       modePicker.disabled = phase !== 'idle' && phase !== 'over';
       for (const field of [bet.el, ladder, readout]) field.hidden = scoreMode;
-      const bankValue = scoreMode ? `${best} pts` : fmt(round2((ticket?.amount || 0) * rrMult(best)));
+      const bankValue = scoreMode ? `${best} ${best === 1 ? 'pt' : 'pts'}` : fmt(round2((ticket?.amount || 0) * rrMult(best)));
       viewEl.classList.toggle('rr-result', phase === 'over');
       if (phase !== 'run') stopHold();
       const live = phase === 'run' || phase === 'countdown';
