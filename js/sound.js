@@ -1,6 +1,6 @@
 // Tiny Web Audio synth. Every sound is generated on the fly, so there are no audio files.
 
-import { storage } from './util.js?v=5f2ed3b0f3fc';
+import { storage } from './util.js?v=80f0d00a4d8e';
 
 let ctx = null;
 let master = null;
@@ -29,6 +29,7 @@ function ac() {
 export function unlockAudio() {
   gestured = true;
   if (enabled) ac();
+  if (musicMood && musicWanted && !musicTimer) startLoop();
 }
 export const soundOn = () => enabled;
 export function setSound(on) {
@@ -228,6 +229,30 @@ export const sfx = {
     tone({ freq: 880, type: 'triangle', dur: 0.05, gain: 0.05 });
     tone({ freq: 660, type: 'triangle', dur: 0.08, gain: 0.05, delay: 0.06 });
   },
+  // ---- Road Rooster
+  logLand() {
+    // a hollow knock on wood
+    noise({ dur: 0.07, gain: 0.09, freq: 520, type: 'bandpass', q: 2.5 });
+    tone({ freq: 170, slideTo: 110, type: 'triangle', dur: 0.09, gain: 0.08 });
+  },
+  padLand() {
+    // a little plip on the water
+    tone({ freq: 700, slideTo: 1250, type: 'sine', dur: 0.09, gain: 0.06 });
+    noise({ dur: 0.05, gain: 0.03, freq: 2600, type: 'bandpass', q: 3 });
+  },
+  rumble() {
+    // a train thundering past
+    noise({ dur: 1.1, gain: 0.16, freq: 260, to: 90, type: 'lowpass', attack: 0.15 });
+    tone({ freq: 58, slideTo: 46, type: 'sine', dur: 1.0, gain: 0.12, attack: 0.12 });
+  },
+  warn() {
+    // a heartbeat as the red line closes in
+    tone({ freq: 140, type: 'sine', dur: 0.09, gain: 0.12 });
+    tone({ freq: 125, type: 'sine', dur: 0.12, gain: 0.1, delay: 0.16 });
+  },
+  chime() {
+    [0, 4, 7].forEach((s, i) => tone({ freq: note(1046.5, s), type: 'triangle', dur: 0.22, gain: 0.045, delay: i * 0.07 }));
+  },
   splash() {
     // a body hitting water: a bright spray, a hollow bloop as it goes under, a bubble
     noise({ dur: 0.34, gain: 0.3, freq: 3400, to: 480, type: 'bandpass', q: 0.7, attack: 0.003 });
@@ -349,3 +374,107 @@ export function haptic(pattern = 12) {
     /* ignore */
   }
 }
+
+// ---------------------------------------------------------------- music
+// A quiet generative loop for the games: soft pad chords, a round bass and a sparse plucked
+// arpeggio through a low-pass filter and a short echo. Each game picks a mood. It has its
+// own switch (Music), separate from the sound effects.
+let musicWanted = storage.get('cc:music', true);
+let musicMood = null;
+let musicBus = null;
+let musicTimer = 0;
+let musicNext = 0;
+let musicStep = 0;
+const MOODS = {
+  // Dm7 G7 Cmaj7 Am7, an after-hours lounge
+  lounge: { bpm: 70, wave: 'triangle', chords: [[50, 53, 57, 60], [43, 53, 55, 59], [48, 52, 55, 59], [45, 52, 55, 60]] },
+  // C F Am G, bright and bouncy for the road
+  rooster: { bpm: 96, wave: 'triangle', chords: [[48, 52, 55, 60], [41, 53, 57, 60], [45, 52, 57, 60], [43, 50, 55, 59]] },
+  // Am F C G, dreamy over the harbor
+  night: { bpm: 74, wave: 'sine', chords: [[45, 52, 57, 60], [41, 48, 53, 57], [48, 55, 60, 64], [43, 50, 55, 59]] },
+};
+const midi = (n) => 440 * 2 ** ((n - 69) / 12);
+export const musicOn = () => musicWanted;
+export function setMusic(on) {
+  musicWanted = !!on;
+  storage.set('cc:music', musicWanted);
+  if (musicWanted) music.resume();
+  else stopLoop();
+}
+function voice(c, out, freq, t, dur, gain, type, attack) {
+  const o = c.createOscillator();
+  o.type = type;
+  o.frequency.value = freq;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(gain, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(out);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+const ARP = [0, -1, 1, 2, -1, 3, 1, -1]; // chord tone per eighth note, -1 a rest
+function schedule() {
+  const c = ctx;
+  if (!c || !musicBus || !musicMood) return;
+  const m = MOODS[musicMood];
+  const beat = 60 / m.bpm;
+  while (musicNext < c.currentTime + 0.8) {
+    const chord = m.chords[Math.floor(musicStep / 8) % m.chords.length];
+    const s = musicStep % 8;
+    if (s === 0) for (const n of chord.slice(1)) voice(c, musicBus.pad, midi(n), musicNext, beat * 4.2, 0.05, m.wave, beat * 0.9);
+    if (s === 0 || s === 4) voice(c, musicBus.pad, midi(chord[0] - 12), musicNext, beat * 1.9, 0.1, 'sine', 0.02);
+    if (ARP[s] >= 0) voice(c, musicBus.echo, midi(chord[ARP[s]] + 12), musicNext, 0.7, 0.032, 'triangle', 0.006);
+    musicNext += beat / 2;
+    musicStep++;
+  }
+}
+function startLoop() {
+  const c = ac();
+  if (!c || !musicMood || !musicWanted) return;
+  if (!musicBus) {
+    const out = c.createGain();
+    out.gain.value = 0;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1700;
+    const pad = c.createGain();
+    const echo = c.createGain();
+    const delay = c.createDelay(1);
+    delay.delayTime.value = 0.36;
+    const feedback = c.createGain();
+    feedback.gain.value = 0.28;
+    pad.connect(lp);
+    echo.connect(lp);
+    echo.connect(delay);
+    delay.connect(feedback).connect(delay);
+    delay.connect(lp);
+    lp.connect(out).connect(master);
+    musicBus = { out, pad, echo };
+  }
+  musicBus.out.gain.cancelScheduledValues(c.currentTime);
+  musicBus.out.gain.setTargetAtTime(0.12, c.currentTime, 0.9); // fade in, quietly
+  musicNext = c.currentTime + 0.1;
+  clearInterval(musicTimer);
+  musicTimer = setInterval(schedule, 120);
+  schedule();
+}
+function stopLoop() {
+  clearInterval(musicTimer);
+  musicTimer = 0;
+  if (ctx && musicBus) musicBus.out.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
+}
+export const music = {
+  /** Play a mood ('lounge', 'rooster' or 'night'), or nothing for null. */
+  play(mood) {
+    if (mood === musicMood && musicTimer) return;
+    musicMood = mood || null;
+    musicStep = 0;
+    if (!musicMood || !musicWanted || document.hidden) return stopLoop();
+    if (gestured) startLoop(); // otherwise the first tap starts it (unlockAudio)
+  },
+  pause: () => stopLoop(),
+  resume() {
+    if (musicMood && musicWanted && !document.hidden) startLoop();
+  },
+};

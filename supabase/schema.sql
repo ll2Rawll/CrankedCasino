@@ -1129,7 +1129,7 @@ $$;
 
 -- Bet targets (js/math.js RR_TARGETS and NF_TARGETS): goal → multiplier, 0 for anything else.
 create or replace function cc.rr_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
-  select (case goal when 25 then 1.3 when 50 then 1.8 when 100 then 4 when 200 then 20 else 0 end)::numeric
+  select (case goal when 25 then 1.3 when 50 then 1.6 when 100 then 3 when 200 then 12 else 0 end)::numeric
 $$;
 create or replace function cc.nf_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
   select (case goal when 5 then 1.5 when 10 then 2.5 when 25 then 8 when 50 then 30 else 0 end)::numeric
@@ -1216,7 +1216,7 @@ begin
   L.kind := case when lvl <= 2 then 'road' when q < 0.35::float8 then 'safe' when lvl >= 6 and q < 0.43::float8 then 'train' when q < 0.58::float8 then 'bus' else 'road' end;
   L.dir := case when cc.hash01(seed, r, 1) < 0.5::float8 then 1 else -1 end;
   if L.kind = 'safe' then
-    for c in 0..6 loop
+    for c in 0..8 loop
       if coalesce(array_length(b, 1), 0) < 3 and cc.hash01(seed, r, 10 + c) < 0.22::float8 then b := b || c; end if;
     end loop;
     L.blocked := b;
@@ -1245,7 +1245,7 @@ end $$;
 create or replace function cc.rs_replay(seed bigint, moves jsonb, end_ms bigint, goal integer, hb float8, line float8, edge float8) returns jsonb
 language plpgsql immutable set search_path = '' as $$
 declare
-  cur integer := 0; col integer := 3; landed float8 := 0; best integer := 0; tprev float8 := 0; t float8; m integer;
+  cur integer := 0; col integer := 4; landed float8 := 0; best integer := 0; tprev float8 := 0; t float8; m integer;
   L cc.rs_lane; nl cc.rs_lane; at float8; why text; w float8; nr integer; nc integer; f float8;
   n integer := coalesce(jsonb_array_length(moves), 0);
 begin
@@ -1259,7 +1259,7 @@ begin
     if L.kind = 'river' then
       -- a log carries her; she drowns if it takes her past the edge of the course
       if L.speed <> 0 then
-        w := greatest(tprev, landed + ((case when L.speed > 0 then 6.5::float8 + edge else -0.5::float8 - edge end) - col::float8) / L.speed);
+        w := greatest(tprev, landed + ((case when L.speed > 0 then 8.5::float8 + edge else -0.5::float8 - edge end) - col::float8) / L.speed);
         if w >= 0 and w <= t and (at < 0 or w < at) then at := w; why := 'river'; end if;
       end if;
     else
@@ -1274,7 +1274,7 @@ begin
     nr := cur;
     nc := floor(col::float8 + coalesce(L.speed, 0::float8) * (t - landed) + 0.5::float8)::integer;
     if m = 0 then nr := nr + 1; elsif m = 1 then nr := nr - 1; elsif m = 2 then nc := nc - 1; else nc := nc + 1; end if;
-    if nr >= 0 and nc >= 0 and nc < 7 then
+    if nr >= 0 and nc >= 0 and nc < 9 then
       nl := cc.rs_lane(seed, nr);
       if not (nc = any (nl.blocked)) then
         cur := nr; col := nc; landed := t;

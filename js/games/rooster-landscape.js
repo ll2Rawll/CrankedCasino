@@ -1,7 +1,7 @@
-import { RR, rrFront } from '../math.js?v=5f2ed3b0f3fc';
-import { courseMaterials } from './rooster-materials.js?v=5f2ed3b0f3fc';
-import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=5f2ed3b0f3fc';
-import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=5f2ed3b0f3fc';
+import { RR, rrFront } from '../math.js?v=80f0d00a4d8e';
+import { courseMaterials } from './rooster-materials.js?v=80f0d00a4d8e';
+import { plane, stamp, prepareSprites, logTop, padTop } from './rooster-models.js?v=80f0d00a4d8e';
+import { meadow, variation, wildTree, rasterLayers } from './rooster-layers.js?v=80f0d00a4d8e';
 
 // lite: phones. Skip the river reflections and paint flat ground (see rasterLayers).
 export function landscape(ctx, { lite = false } = {}) {
@@ -53,7 +53,7 @@ export function landscape(ctx, { lite = false } = {}) {
   }) {
     width = W;
     height = H;
-    scale = Math.min(W / 7.25, H / 8.8);
+    scale = Math.min(W / 8, H / 9.6);
     if (!scale) return;
     materials ??= courseMaterials(ctx);
     const follow = 1 - Math.exp(-11 * dt);

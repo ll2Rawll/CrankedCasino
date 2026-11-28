@@ -3,14 +3,14 @@
 // The server decides every bounce; the ball waits at the top until its path arrives.
 // Multiplier tables live in ../math.js (≈99% return on every setting).
 
-import { h, fmt, fmtMult, round2, signed, storage, clamp, cssVar } from '../util.js?v=5f2ed3b0f3fc';
-import { icon } from '../icons.js?v=5f2ed3b0f3fc';
-import { store } from '../store.js?v=5f2ed3b0f3fc';
-import { engine } from '../engine.js?v=5f2ed3b0f3fc';
-import { PLINKO } from '../math.js?v=5f2ed3b0f3fc';
-import { sfx, haptic } from '../sound.js?v=5f2ed3b0f3fc';
-import { burst, PALETTES, coinRain } from '../fx.js?v=5f2ed3b0f3fc';
-import { gameFrame, betInput, tryBet, segmented, toast, serverRefused } from '../ui.js?v=5f2ed3b0f3fc';
+import { h, fmt, fmtMult, round2, signed, storage, clamp, cssVar } from '../util.js?v=80f0d00a4d8e';
+import { icon } from '../icons.js?v=80f0d00a4d8e';
+import { store } from '../store.js?v=80f0d00a4d8e';
+import { engine } from '../engine.js?v=80f0d00a4d8e';
+import { PLINKO } from '../math.js?v=80f0d00a4d8e';
+import { sfx, haptic } from '../sound.js?v=80f0d00a4d8e';
+import { burst, PALETTES, coinRain } from '../fx.js?v=80f0d00a4d8e';
+import { gameFrame, betInput, tryBet, segmented, toast, serverRefused } from '../ui.js?v=80f0d00a4d8e';
 
 export const TABLES = PLINKO;
 

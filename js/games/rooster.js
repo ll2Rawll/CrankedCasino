@@ -5,17 +5,17 @@
 // the server hands out the seed that lays out the course, replays the moves, and pays
 // bet × that target's multiplier if the rooster reached it.
 
-import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=5f2ed3b0f3fc';
-import { icon } from '../icons.js?v=5f2ed3b0f3fc';
-import { store } from '../store.js?v=5f2ed3b0f3fc';
-import { engine, errorText } from '../engine.js?v=5f2ed3b0f3fc';
-import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=5f2ed3b0f3fc';
-import { sfx, haptic } from '../sound.js?v=5f2ed3b0f3fc';
-import { burst, PALETTES, coinRain } from '../fx.js?v=5f2ed3b0f3fc';
-import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=5f2ed3b0f3fc';
-import { scoreLane, onPlatform, chaseLine, LINE_GRACE } from './rooster-course.js?v=5f2ed3b0f3fc';
-import { landscape } from './rooster-landscape.js?v=5f2ed3b0f3fc';
-import { loadArt } from './rooster-art.js?v=5f2ed3b0f3fc';
+import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=80f0d00a4d8e';
+import { icon } from '../icons.js?v=80f0d00a4d8e';
+import { store } from '../store.js?v=80f0d00a4d8e';
+import { engine, errorText } from '../engine.js?v=80f0d00a4d8e';
+import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=80f0d00a4d8e';
+import { sfx, haptic } from '../sound.js?v=80f0d00a4d8e';
+import { burst, PALETTES, coinRain } from '../fx.js?v=80f0d00a4d8e';
+import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=80f0d00a4d8e';
+import { scoreLane, onPlatform, chaseLine, LINE_GRACE } from './rooster-course.js?v=80f0d00a4d8e';
+import { landscape } from './rooster-landscape.js?v=80f0d00a4d8e';
+import { loadArt } from './rooster-art.js?v=80f0d00a4d8e';
 
 const HOP_MS = 110;
 // Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.
@@ -207,7 +207,7 @@ export default {
       const width = Math.round(W * dpr), height = Math.round(H * dpr);
       if (canvas.width !== width) canvas.width = width;
       if (canvas.height !== height) canvas.height = height;
-      T = Math.min(W / 7.25, H / 8.8);
+      T = Math.min(W / 8, H / 9.6);
     }
     const ro = new ResizeObserver(() => resize());
     ro.observe(viewEl);
@@ -372,6 +372,11 @@ export default {
         return;
       }
       sfx.hop();
+      // Wood or water underfoot when the hop lands.
+      const ground = lane(row);
+      if (ground.kind === 'river') {
+        setTimeout(() => !destroyed && phase === 'run' && (ground.pads ? sfx.padLand?.() : sfx.logLand?.()), chick.duration);
+      }
       if (row > best) {
         best = row;
         if (best % 64 === 0) {
@@ -385,6 +390,7 @@ export default {
           playBtn.lastElementChild.textContent = label;
         }
         floats.push({ r: row, c: col, t0: now });
+        if (best % 25 === 0) sfx.chime?.();
         if (!free && best >= goalRow) win(t);
       }
     }
@@ -776,6 +782,26 @@ export default {
 
     let lastNow = performance.now();
     let dangerShown = '';
+    let lastWarn = 0;
+    // Traffic in the lanes beside the rooster: a whoosh as each car or bus reaches her
+    // column, a rumble for a train. Only the moment a vehicle arrives counts.
+    let soundT = null;
+    const passed = new Map();
+    function passBy(t, now) {
+      if (soundT != null && t > soundT) {
+        const c = Math.round(ridingCol(t));
+        for (const r of [row - 1, row + 1]) {
+          const L = lane(r);
+          if (!L.v || now - (passed.get(r) || 0) < 350) continue;
+          if (rrHit(L, c, soundT, soundT, 0.5) < 0 && rrHit(L, c, soundT, t, 0.5) >= 0) {
+            passed.set(r, now);
+            if (L.kind === 'train') sfx.rumble?.();
+            else sfx.pass?.(L.kind === 'bus' ? 1.4 : 1);
+          }
+        }
+      }
+      soundT = t;
+    }
     // If a phone still drops frames during play, step the resolution down (1.5 → 1.25 → 1).
     // Ignore a steady 30 fps cap (Low Power Mode): only act when frames that should
     // arrive every 16.7 ms keep slipping, or when they stall outright.
@@ -816,6 +842,13 @@ export default {
         dangerEl.classList.toggle('is-on', danger !== '0.00');
       }
       pace(now, dt);
+      if (phase === 'run') {
+        if (danger >= '0.50' && now - lastWarn > 650) {
+          lastWarn = now;
+          sfx.warn?.();
+        }
+        passBy(t, now);
+      }
       if (deathAt && !deathAt.struck && now >= deathAt.impactAt) {
         deathAt.struck = true;
         strike(deathAt.cause, now);

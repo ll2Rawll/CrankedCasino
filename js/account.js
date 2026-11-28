@@ -1,12 +1,12 @@
 // Accounts: pick a username + password once, then play from any browser.
 // The session is remembered on this device, so players only log in again on a new one.
 
-import { h, esc, fmt } from './util.js?v=5f2ed3b0f3fc';
-import { icon } from './icons.js?v=5f2ed3b0f3fc';
-import { engine, MODE } from './engine.js?v=5f2ed3b0f3fc';
-import { store } from './store.js?v=5f2ed3b0f3fc';
-import { sfx } from './sound.js?v=5f2ed3b0f3fc';
-import { toast } from './ui.js?v=5f2ed3b0f3fc';
+import { h, esc, fmt } from './util.js?v=80f0d00a4d8e';
+import { icon } from './icons.js?v=80f0d00a4d8e';
+import { engine, MODE } from './engine.js?v=80f0d00a4d8e';
+import { store } from './store.js?v=80f0d00a4d8e';
+import { sfx } from './sound.js?v=80f0d00a4d8e';
+import { toast } from './ui.js?v=80f0d00a4d8e';
 
 const USER_RE = /^[A-Za-z0-9_]{3,16}$/;
 
@@ -180,7 +180,7 @@ export function openAccount({ mode = 'signup', reason = '' } = {}) {
     store.load(r.me);
     sfx.jackpot();
     close(true);
-    import('./fx.js?v=5f2ed3b0f3fc').then(({ coinRain }) => coinRain(mode === 'signup' ? 110 : 40));
+    import('./fx.js?v=80f0d00a4d8e').then(({ coinRain }) => coinRain(mode === 'signup' ? 110 : 40));
     if (mode === 'signup') toast(`Welcome, ${r.me.username}! ${fmt(r.me.balance).replace(/\.00$/, '')} chips are on the house.`, { type: 'win', iconName: 'sparkle', timeout: 4600 });
     else toast(`Welcome back, ${r.me.username}. Your stack: ${fmt(r.me.balance)}.`, { type: 'win', iconName: 'coins', timeout: 4200 });
   });
