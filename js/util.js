@@ -26,6 +26,8 @@ export function fmt(n) {
   if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B';
   return nf2.format(n);
 }
+/** Money in full, never abbreviated: 12,345,678,901.23 (for showing a whole balance). */
+export const fmtFull = (n) => nf2.format(Number(n) || 0);
 export const fmtInt = (n) => nf0.format(Number(n) || 0);
 
 /** Multiplier: 1.23× / 1,000× */

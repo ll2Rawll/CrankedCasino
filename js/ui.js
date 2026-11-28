@@ -1,12 +1,12 @@
 // Shared UI: toasts, modals, bet input, segmented controls, game page frame.
 
-import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=9d49cab85bc5';
-import { icon } from './icons.js?v=9d49cab85bc5';
-import { store, on, BetError } from './store.js?v=9d49cab85bc5';
-import { sfx } from './sound.js?v=9d49cab85bc5';
-import { needAccount } from './account.js?v=9d49cab85bc5';
-import { banner } from './ads.js?v=9d49cab85bc5';
-import { errorText } from './engine.js?v=9d49cab85bc5';
+import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=0f27056399f9';
+import { icon } from './icons.js?v=0f27056399f9';
+import { store, on, BetError } from './store.js?v=0f27056399f9';
+import { sfx } from './sound.js?v=0f27056399f9';
+import { needAccount } from './account.js?v=0f27056399f9';
+import { banner } from './ads.js?v=0f27056399f9';
+import { errorText } from './engine.js?v=0f27056399f9';
 
 // ---------------------------------------------------------------- toasts
 const toastRoot = document.getElementById('toasts');
@@ -114,13 +114,29 @@ export function betInput(game, { label = 'Bet amount', min = 0.01, rack = true, 
     </div>`);
   const input = el.querySelector('input');
   const group = el.querySelector('.input-group');
+  // A long amount shrinks to fit the box instead of being cut off.
+  let measure;
+  const fit = () => {
+    input.style.fontSize = '';
+    if (!input.clientWidth) return;
+    const cs = getComputedStyle(input);
+    const room = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const size = parseFloat(cs.fontSize);
+    measure ||= document.createElement('canvas').getContext('2d');
+    measure.font = `${cs.fontWeight} ${size}px ${cs.fontFamily}`;
+    const text = measure.measureText(input.value).width * 1.06; // tabular digits run a touch wider
+    if (text > room) input.style.fontSize = `${Math.max(10, Math.floor((size * room * 10) / text) / 10)}px`;
+  };
   const set = (v, save = true) => {
     v = round2(Math.max(0, Number(v) || 0));
     value = v;
     input.value = v.toFixed(2);
     if (save) storage.set(key, v);
+    fit();
   };
   set(value, false);
+  new ResizeObserver(fit).observe(group);
+  input.addEventListener('input', fit);
   input.addEventListener('change', () => set(input.value));
   input.addEventListener('focus', () => input.select());
   el.addEventListener('click', (e) => {
@@ -339,7 +355,7 @@ export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it i
       el.insertAdjacentHTML('beforeend', '<span class="stamp">Redeemed</span>');
       input.value = '';
       sfx.jackpot();
-      import('./fx.js?v=9d49cab85bc5').then(({ coinRain, burstAt, PALETTES }) => {
+      import('./fx.js?v=0f27056399f9').then(({ coinRain, burstAt, PALETTES }) => {
         coinRain(120);
         burstAt(el, { count: 90, colors: PALETTES.gold, speed: [5, 15] });
       });

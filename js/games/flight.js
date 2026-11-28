@@ -11,15 +11,16 @@
 
 import {
   flightCourse, FPS, VIEW_W, VIEW_H, FLOOR, BIRD_X, BIRD_W, BIRD_H, GATE_W, GAP, medalFor,
-} from './flight-course.js?v=9d49cab85bc5';
-import { icon } from '../icons.js?v=9d49cab85bc5';
-import { engine, errorText } from '../engine.js?v=9d49cab85bc5';
-import { store } from '../store.js?v=9d49cab85bc5';
-import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=9d49cab85bc5';
-import { NF_TARGETS, targetMult } from '../math.js?v=9d49cab85bc5';
-import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=9d49cab85bc5';
-import { storage, reducedMotion, fmt, fmtMult, round2, esc } from '../util.js?v=9d49cab85bc5';
-import { duelPanel, duelOutcome } from './duels.js?v=9d49cab85bc5';
+} from './flight-course.js?v=0f27056399f9';
+import { icon } from '../icons.js?v=0f27056399f9';
+import { engine, errorText } from '../engine.js?v=0f27056399f9';
+import { store, on } from '../store.js?v=0f27056399f9';
+import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=0f27056399f9';
+import { NF_TARGETS, targetMult } from '../math.js?v=0f27056399f9';
+import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=0f27056399f9';
+import { storage, reducedMotion, fmt, fmtFull, fmtMult, round2, esc } from '../util.js?v=0f27056399f9';
+import { countTo } from '../fx.js?v=0f27056399f9';
+import { duelPanel, duelOutcome } from './duels.js?v=0f27056399f9';
 
 const BEST = 'cc:flight:best';
 const STEP = 1000 / FPS;
@@ -43,6 +44,7 @@ export default {
       <div class="nf-flash" aria-hidden="true"></div>
       <nav class="nf-nav" aria-label="Game controls">
         <a href="#/" class="nf-pill">${icon('cards')}<span>Lobby</span></a>
+        <div class="nf-balance" data-balance hidden><span class="chip-ico" aria-hidden="true"></span><b class="tnum"></b></div>
         <div class="nf-actions">
           <button type="button" class="nf-icon" data-sound></button>
           <button type="button" class="nf-icon" data-pause aria-label="Pause flight" hidden>${pauseIcon}</button>
@@ -132,6 +134,39 @@ export default {
     const listen = (target, name, handler, options = {}) => target.addEventListener(name, handler, { ...options, signal: events.signal });
 
     const sy = (y) => (y - worldTop) * scale;
+
+    // ---------------------------------------------------------- the player's balance
+    // The site header is hidden while the harbor is open, so the stack shows here, in full.
+    const balPill = $('[data-balance]');
+    const balNum = balPill.querySelector('b');
+    const nav = $('.nf-nav');
+    // Every digit stays: on a narrow screen the Lobby button drops its label instead.
+    function fitNav() {
+      nav.classList.remove('is-tight');
+      if (!balPill.hidden && nav.scrollWidth > nav.clientWidth + 1) nav.classList.add('is-tight');
+    }
+    let shownBal = store.balance;
+    let stopBal = () => {};
+    function renderBalance({ animate = false, delta = 0 } = {}) {
+      balPill.hidden = !store.signedIn;
+      if (!store.signedIn) return;
+      const to = store.balance;
+      stopBal();
+      // Size the bar for the final number, then count up to it.
+      balNum.textContent = fmtFull(to);
+      fitNav();
+      if (animate && !quiet) stopBal = countTo(balNum, shownBal, to, { duration: 600, format: fmtFull });
+      shownBal = to;
+      balPill.setAttribute('aria-label', `Balance ${fmtFull(to)} chips`);
+      if (delta && animate) {
+        balPill.classList.remove('is-up', 'is-down');
+        void balPill.offsetWidth;
+        balPill.classList.add(delta > 0 ? 'is-up' : 'is-down');
+      }
+    }
+    const offBalance = on('balance', ({ delta, silent }) => renderBalance({ animate: !silent, delta }));
+    const offAccount = on('account', () => renderBalance());
+    renderBalance();
 
     // ---------------------------------------------------------- the bet panel
     const betBox = $('.nf-bet');
@@ -591,7 +626,7 @@ export default {
     });
     listen(document, 'visibilitychange', () => document.hidden && hold());
     listen(window, 'blur', hold);
-    const observer = new ResizeObserver(resize);
+    const observer = new ResizeObserver(() => (resize(), fitNav()));
     observer.observe(field);
     updateSound();
     show('title');
@@ -619,6 +654,9 @@ export default {
         toast('You left the harbor, so that flight is over.', { iconName: 'info' });
       }
       duels.destroy();
+      offBalance();
+      offAccount();
+      stopBal();
       clearTimeout(winTimer);
       clearTimeout(boardTimer);
       clearInterval(countTimer);
