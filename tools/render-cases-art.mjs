@@ -11,19 +11,20 @@ try {
   await page.route('http://case-art.test/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/') return route.fulfill({ contentType: 'text/html', body: '<script type="module" src="/art.js"></script>' });
-    return route.fulfill({ contentType: 'text/javascript', body: await readFile(join(repo, path === '/three.js' ? 'vendor/three.module.min.js' : 'tools/cases-art-scene.js'), 'utf8') });
+    return route.fulfill({ contentType: 'text/javascript', body: await readFile(join(repo, path === '/three.js' ? 'vendor/three.module.min.js' : path === '/mythic.js' ? 'tools/cases-mythic-art.js' : 'tools/cases-art-scene.js'), 'utf8') });
   });
   await page.goto('http://case-art.test/');
   await page.waitForFunction(() => window.ready);
-  const items = ['blade', 'watch', 'headphones', 'diamond', 'chips', 'signet'];
+  const mythicItems = ['ember','astral','tide'].flatMap(theme=>Array.from({length:6},(_,i)=>`${theme}-${i}`));
+  const items = process.env.MYTHIC_ONLY ? mythicItems : ['blade','watch','headphones','diamond','chips','signet',...mythicItems];
   let bytes = 0;
-  for (const name of process.env.SHOWROOM_ONLY ? [] : [...items, 'case', 'open', ...Array.from({ length: 19 }, (_, i) => `caseFrame${i}`), ...items.map(name => `${name}-turn`), ...items.map(name => `${name}-inspect`)]) {
+  for (const name of process.env.SHOWROOM_ONLY ? [] : [...items, ...(process.env.MYTHIC_ONLY ? [] : ['case', 'open', ...Array.from({ length: 19 }, (_, i) => `caseFrame${i}`)]), ...items.map(name => `${name}-turn`), ...items.map(name => `${name}-inspect`)]) {
     const data = await page.evaluate(name => name.endsWith('-inspect') ? window.renderTurntable(name.slice(0, -8), true) : name.endsWith('-turn') ? window.renderTurntable(name.slice(0, -5)) : window.renderAsset(name), name);
     const buffer = Buffer.from(data.split(',')[1], 'base64');
     await writeFile(join(repo, 'assets/cases', `${name}.webp`), buffer);
     bytes += buffer.length;
   }
-  for (const theme of ['after-hours', 'neon-vault', 'high-roller']) {
+  for (const theme of process.env.MYTHIC_ONLY ? ['dragonheart','starfall','leviathan'] : ['after-hours','neon-vault','high-roller','dragonheart','starfall','leviathan']) {
     for (const kind of ['closed', 'opened', 'atlas']) {
       const data = await page.evaluate(([theme,kind]) => window.renderShowcase(theme,kind), [theme,kind]);
       const buffer = Buffer.from(data.split(',')[1], 'base64');

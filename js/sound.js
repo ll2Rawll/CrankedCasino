@@ -1,6 +1,6 @@
 // Tiny Web Audio synth. Every sound is generated on the fly, so there are no audio files.
 
-import { storage } from './util.js?v=cc44f0172e88';
+import { storage } from './util.js?v=7dd2455b7c8d';
 
 let ctx = null;
 let master = null;
@@ -35,13 +35,14 @@ export const soundOn = () => enabled;
 export function setSound(on) {
   enabled = !!on;
   storage.set('cc:sound', enabled);
+  if (master && ctx) master.gain.setTargetAtTime(enabled ? .55 : 0, ctx.currentTime, .01);
   if (!enabled) {
     engine.stop();
     roll.stop();
   } else ac();
 }
 
-function tone({ freq = 440, type = 'sine', dur = 0.15, gain = 0.2, attack = 0.004, slideTo, delay = 0, detune = 0 }) {
+export function tone({ freq = 440, type = 'sine', dur = 0.15, gain = 0.2, attack = 0.004, slideTo, delay = 0, detune = 0 }) {
   if (!enabled) return;
   const c = ac();
   if (!c) return;
@@ -58,9 +59,10 @@ function tone({ freq = 440, type = 'sine', dur = 0.15, gain = 0.2, attack = 0.00
   o.connect(g).connect(master);
   o.start(t0);
   o.stop(t0 + dur + 0.05);
+  o.onended = () => { o.disconnect(); g.disconnect(); };
 }
 
-function noise({ dur = 0.3, gain = 0.25, freq = 1500, to = 0, type = 'lowpass', q = 0.8, delay = 0, attack = 0.005 }) {
+export function noise({ dur = 0.3, gain = 0.25, freq = 1500, to = 0, type = 'lowpass', q = 0.8, delay = 0, attack = 0.005 }) {
   if (!enabled) return;
   const c = ac();
   if (!c) return;
@@ -84,6 +86,7 @@ function noise({ dur = 0.3, gain = 0.25, freq = 1500, to = 0, type = 'lowpass', 
   src.connect(f).connect(g).connect(master);
   src.start(t0);
   src.stop(t0 + dur + 0.05);
+  src.onended = () => { src.disconnect(); f.disconnect(); g.disconnect(); };
 }
 
 const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28];

@@ -224,3 +224,60 @@
 @media(max-width:760px) {
   .cs-preview-caption { left:auto; width:max-content; max-width:100%; font-size:10px; padding:3px 6px; background:#1b121fe8; border-radius:4px; bottom:-7px; }
 }
+/* Mythic collection: one-shot rituals, never an idle particle loop. */
+.cs-new-collection { display:flex; align-items:center; gap:9px; width:100%; margin:0 0 14px; padding:10px 12px; border:1px solid #86649c; border-radius:8px; background:linear-gradient(110deg,#432745,#261c3a); color:#edddff; font-size:12px; text-align:left; }
+.cs-new-collection>span { font-size:7px; letter-spacing:1px; color:#e7bdf8; }
+.cs-new-collection>b { margin-left:auto; color:#f2cf90; }
+.cs-audio-toggle { min-height:32px; padding:5px 8px; border:1px solid #765b7c; border-radius:6px; color:#d0bddd; background:#211728; font-size:10px; }
+.cs-treasures { pointer-events:none; }
+.cs-treasures button { position:absolute; left:-42px; top:-32px; width:85px; height:65px; border:0; padding:0; background:transparent; opacity:0; transform:translate(0,30px) scale(.3); pointer-events:none; }
+.cs-treasures button img { position:static; width:100%; height:100%; max-width:none; opacity:1; transform:none; animation:none!important; }
+.cs-is-open .cs-treasures button { pointer-events:auto; animation:cs-treasure .65s cubic-bezier(.17,.8,.25,1) calc(.18s + var(--i) * .045s) both; }
+.cs-treasures button:focus-visible { outline:2px solid #f4d2a4; outline-offset:0; border-radius:8px; }
+.cs-showroom[data-effect="ember"] { background:radial-gradient(ellipse at 65% 70%,#8c361740,transparent 68%),linear-gradient(145deg,#30191f,#160d16); }
+.cs-showroom[data-effect="astral"] { background:radial-gradient(ellipse at 65% 70%,#6438ac45,transparent 68%),linear-gradient(145deg,#22213e,#120d1d); }
+.cs-showroom[data-effect="tide"] { background:radial-gradient(ellipse at 65% 70%,#226c704a,transparent 68%),linear-gradient(145deg,#172d32,#10121f); }
+.case-ritual { position:absolute; width:240px; height:180px; left:50%; top:55%; transform:translate(-50%,-50%); pointer-events:none; z-index:1; }
+.case-ritual b { position:absolute; inset:20px 30px; border:1px solid var(--case-accent,#ba97de); border-radius:50%; opacity:0; }
+.case-ritual b:nth-child(2) { inset:5px 15px; border-style:dashed; }
+.case-ritual b:nth-child(3) { inset:35px 45px; }
+.case-ritual i { position:absolute; left:50%; top:50%; width:4px; height:9px; border-radius:50%; background:var(--case-accent,#ba97de); opacity:0; }
+[data-effect="classic"] .case-ritual { display:none; }
+.cs-is-open .case-ritual b,#case-openings.cb-opening .case-ritual b { animation:case-ritual-ring 1.2s ease-out both; }
+.cs-is-open .case-ritual i,#case-openings.cb-opening .case-ritual i { animation:case-ritual-spark 1.25s ease-out calc(var(--n) * .035s) both; }
+[data-effect="ember"] .case-ritual i { border-radius:0; clip-path:polygon(50% 0,100% 75%,35% 100%,0 55%); background:linear-gradient(#ffdf90,#ff673a); }
+[data-effect="astral"] .case-ritual i { width:8px; height:8px; clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%); }
+[data-effect="astral"] .case-ritual b { border-style:dashed; }
+[data-effect="tide"] .case-ritual i { width:8px; height:8px; border:1px solid #a2f4ed; background:#82d9f035; }
+[data-effect="tide"] .case-ritual b { border-color:#7dd7d2; }
+@keyframes case-ritual-ring { 0% { opacity:0; transform:scale(.3) rotate(-25deg); } 30% { opacity:.75; } 100% { opacity:0; transform:scale(1.5) rotate(50deg); } }
+@keyframes case-ritual-spark { 0% { opacity:0; transform:translate(0,25px) scale(.3); } 20% { opacity:1; } 100% { opacity:0; transform:translate(var(--dx),calc(var(--dy) - 45px)) scale(.7); } }
+.cs-showroom[data-effect]:not([data-effect="classic"]) .cs-case-model { width:375px; }
+#case-openings .cb-case-stage .case-ritual { width:190px; height:120px; top:50%; }
+#case-openings[data-effect]:not([data-effect="classic"]) .cb-rare .cb-particles i { background:var(--drop-color); }
+#case-openings .cb-item-sound { display:block; width:100%; min-height:44px; padding:10px; margin-top:18px; border:1px solid #806584; border-radius:8px; color:#e8d4ee; background:#38263d; cursor:pointer; }
+.case-odds-picker { display:grid; gap:8px; margin:16px 0; font-size:13px; color:var(--muted); }
+.case-odds-picker select { min-height:44px; width:100%; background:#25172d; border:1px solid #6b4b76; border-radius:8px; padding:8px 12px; color:#f0def8; font-size:16px; }
+.case-odds th img { float:left; width:48px; height:38px; object-fit:contain; margin-right:7px; }
+@media(max-width:760px) {
+  .cs-treasures button { width:58px; height:45px; left:-29px; top:-22px; }
+  .cs-showroom[data-effect]:not([data-effect="classic"]) .cs-case-model { width:255px; bottom:-10px; right:-4px; }
+  .cs-showroom[data-effect]:not([data-effect="classic"]) .cs-showroom-title h2 { font-size:25px; overflow-wrap:normal; }
+  .cs-showroom[data-effect]:not([data-effect="classic"]) .cs-showroom-title { max-width:110px; }
+  .cs-showroom[data-effect]:not([data-effect="classic"]).cs-is-open .cs-case-model { transform:translateY(12px) scale(.95); }
+  .cs-new-collection { margin-bottom:12px; }
+  .cs-showroom .case-ritual { left:60%; }
+}
+@container(max-width:550px) { #case-openings .cb-case-stage .case-ritual { left:72%; } }
+@media(prefers-reduced-motion:reduce) {
+  .case-ritual { display:none; }
+  .cs-is-open .cs-treasures button { opacity:1; transform:translate(var(--tx),var(--ty)) rotate(var(--tilt)); animation:none!important; }
+}
+[data-motion="reduced"] .case-ritual { display:none; }
+[data-motion="reduced"] .cs-is-open .cs-treasures button { opacity:1; transform:translate(var(--tx),var(--ty)) rotate(var(--tilt)); animation:none!important; }
+@media(max-width:760px) {
+  .cs-showroom[data-effect]:not([data-effect="classic"]) .cs-showroom-title { max-width:145px; }
+  .cs-showroom[data-effect]:not([data-effect="classic"]) .cs-showroom-title h2 { font-size:22px; letter-spacing:-.6px; }
+}
+@media(prefers-reduced-motion:reduce) { .cs-is-open .cs-treasures button img { transform:none!important; } }
+[data-motion="reduced"] .cs-is-open .cs-treasures button img { transform:none!important; }

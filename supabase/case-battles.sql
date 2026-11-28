@@ -25,7 +25,7 @@ alter table cc.case_battles enable row level security;
 create or replace function cc.case_valid(ids text[]) returns boolean
 language sql immutable set search_path = '' as $$
   select ids is not null and cardinality(ids) = 3 and array_position(ids, null) is null
-    and ids <@ array['after-hours','neon-vault','high-roller']::text[]
+    and ids <@ array['after-hours','neon-vault','high-roller','dragonheart','starfall','leviathan']::text[]
 $$;
 
 create or replace function cc.case_draw(case_id text) returns integer
@@ -33,7 +33,9 @@ language plpgsql volatile set search_path = '' as $$
 declare weights integer[]; roll double precision := cc.rand() * 100; i integer;
 begin
   weights := case case_id when 'after-hours' then array[50,25,12,8,4,1]
-    when 'neon-vault' then array[25,40,20,10,4,1] when 'high-roller' then array[75,5,5,5,7,3] end;
+    when 'neon-vault' then array[25,40,20,10,4,1] when 'high-roller' then array[75,5,5,5,7,3]
+    when 'dragonheart' then array[75,5,5,5,7,3] when 'starfall' then array[25,40,20,10,4,1]
+    when 'leviathan' then array[50,25,12,8,4,1] end;
   if weights is null then raise exception 'Unknown case'; end if;
   for i in 1..6 loop
     roll := roll - weights[i];

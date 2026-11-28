@@ -5,7 +5,7 @@ const memory = new Map();
 globalThis.localStorage = { getItem: (key) => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value), removeItem: (key) => memory.delete(key) };
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 const { call } = await import('../js/engine-local.js');
-const { CASES, CASE_ITEMS, drawCase, casePayout, caseTotals } = await import('../js/games/cases-data.js');
+const { CASES, CASE_ITEMS, drawCase, casePayout, caseTotals, itemsForCase, ALL_CASE_ITEMS } = await import('../js/games/cases-data.js');
 const signup = await call('cc_signup', { p_username: 'CaseTester', p_password: 'testing-cases-892' });
 assert.equal(signup.ok, true);
 const token = signup.token;
@@ -48,4 +48,19 @@ for (const type of CASES) {
   });
 }
 assert.equal(CASE_ITEMS.length,6);
+assert.equal(ALL_CASE_ITEMS.length,24);
+assert.equal(new Set(ALL_CASE_ITEMS.map(item=>item.id)).size,24);
+for(const type of CASES) assert.deepEqual(itemsForCase(type.id).map(item=>item.value),CASE_ITEMS.map(item=>item.value));
+const mythicId=crypto.randomUUID();
+const mythic=await rpc('cc_cases_create',{p_request_id:mythicId,p_cases:['dragonheart','starfall','leviathan'],p_visibility:'bot'});
+assert.equal(mythic.ok,true);
+assert.equal(mythic.balance,1000);
+const mythicDB=JSON.parse(localStorage.getItem('cc:device:db'));
+const mythicBattle=Object.values(mythicDB.players)[0].caseBattles.find(b=>b.id===mythicId);
+mythicBattle.started=Date.now()-20000;mythicBattle.pulls=[[5,0],[4,0],[3,0]];
+localStorage.setItem('cc:device:db',JSON.stringify(mythicDB));
+const mythicResult=await rpc('cc_cases_get',{p_id:mythicId});
+assert.deepEqual(mythicResult.battle.totals,[395,24]);
+assert.equal(mythicResult.battle.payout,100);
+assert.equal((await rpc('cc_cases_get',{p_id:mythicId})).balance,1100);
 console.log('Case battles passed odds boundaries, hidden future pulls, balance reservation, retry safety, settlement, history and tie payout checks.');

@@ -1,30 +1,28 @@
-import { CASE_ITEMS, CASE_ROUND_MS, caseById, drawCase } from './cases-data.js?v=cc44f0172e88';
-import { random } from '../rng.js?v=cc44f0172e88';
-import { esc, reducedMotion } from '../util.js?v=cc44f0172e88';
-import { sfx, soundOn, setSound, haptic } from '../sound.js?v=cc44f0172e88';
+import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem } from './cases-data.js?v=7dd2455b7c8d';
+import { random } from '../rng.js?v=7dd2455b7c8d';
+import { esc, reducedMotion } from '../util.js?v=7dd2455b7c8d';
+import { sfx, soundOn, setSound, haptic } from '../sound.js?v=7dd2455b7c8d';
 
-import { caseCover, warmCasePreview } from './cases-showcase.js?v=cc44f0172e88';
+import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=7dd2455b7c8d';
+
+import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=7dd2455b7c8d';
 
 const art = (name) => `assets/cases/${name}.webp?v=2`;
 const STOP = 25;
 const turntables = new Set();
 const turnFrame = (el, frame) => { el.style.backgroundPosition = `${frame % 6 * 20}% ${Math.floor(frame / 6) * 100 / 3}%`; };
-let warmup;
-export function warmCaseArt() {
-  warmup ||= (async () => {
-    await Promise.all(CASE_ITEMS.map((item) => item.id).map((name) => {
-      const image = new Image();
-      image.src = art(name);
-      return image.decode().catch(() => {});
-    }));
-    // Decode the small turntables after essential reel art. Mounting never awaits this.
-    await Promise.all(CASE_ITEMS.map(async ({ id }) => {
-      const image = new Image();
-      image.src = art(`${id}-turn`);
-      try { await image.decode(); turntables.add(id); } catch { /* Static art is the fallback. */ }
-    }));
-  })();
-  return warmup;
+const warmJobs = new Map();
+export function warmCaseArt(ids = ['after-hours']) {
+  const items = [...new Map(ids.flatMap(itemsForCase).map(item => [item.id, item])).values()];
+  return Promise.all(items.map(({id}) => {
+    if (!warmJobs.has(id)) warmJobs.set(id, (async () => {
+      const still = new Image(); still.src = art(id);
+      try { await still.decode(); } catch { return; }
+      const turn = new Image(); turn.src = art(`${id}-turn`);
+      try { await turn.decode(); turntables.add(id); } catch { /* Sharp still art remains usable. */ }
+    })());
+    return warmJobs.get(id);
+  }));
 }
 
 function playerMarkup(player, side, seat) {
@@ -43,7 +41,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   root.setAttribute('aria-label', 'Case battle');
   root.innerHTML = `<header class="cb-header"><div><div class="cb-brand">CRANKED CASINO</div><h2>Case battle</h2></div><span class="cb-mode">${initial.practice ? 'Practice' : '1 vs 1'}</span></header>
     <div class="cb-case-stage"><div class="cb-case-copy"><span class="cb-caption"></span><strong class="cb-round-label">Getting ready</strong><div class="cb-rounds" aria-label="Three cases"><span></span><span></span><span></span></div></div>
-    <div class="cb-case-rays" aria-hidden="true"></div><div class="cb-case-halo" aria-hidden="true"></div><div class="cb-case-sparks" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i style="--spark:${i}"></i>`).join('')}</div><img class="cb-case-art" src="${caseCover(initial.cases[0])}" alt="Cranked item case"><span class="cb-case-art cb-case-film" aria-hidden="true"></span><div class="cb-case-status"></div></div>
+    ${caseEffectMarkup()}<div class="cb-case-rays" aria-hidden="true"></div><div class="cb-case-halo" aria-hidden="true"></div><div class="cb-case-sparks" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i style="--spark:${i}"></i>`).join('')}</div><img class="cb-case-art" src="${caseCover(initial.cases[0])}" alt="Cranked item case"><span class="cb-case-art cb-case-film" aria-hidden="true"></span><div class="cb-case-status"></div></div>
     <div class="cb-duel"><div class="cb-duel-caption"><span class="cb-momentum" role="status">Three cases. One winner.</span><span class="cb-pot">${initial.practice ? 'FREE PRACTICE' : '100 CHIP POT'}</span></div><div class="cb-balance" aria-hidden="true"><i></i><b></b></div></div>
     <div class="cb-battle">${initial.players.map((player, i) => playerMarkup(player, i, initial.seat)).join('')}</div>
     <div class="cb-finale" hidden><span class="cb-finale-crown" aria-hidden="true">♛</span><div><span class="cb-finale-kicker"></span><strong></strong><p></p></div><div class="cb-confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--n:${i};--drift:${(i % 5 - 2) * 32}px"></i>`).join('')}</div></div>
@@ -84,7 +82,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   });
 
   function cardFor(index) {
-    const item = CASE_ITEMS[index];
+    const item = caseItem(battle.cases[round], index);
     const card = document.createElement('div');
     card.className = `cb-item${index === 5 ? ' cb-sealed' : ''}`;
     card.style.setProperty('--item-color', item.color);
@@ -115,6 +113,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     root.classList.remove('cb-opening', 'cb-unlocking');
     const type = caseById(battle.cases[index]);
     root.style.setProperty('--case-color', type.color);
+    root.style.setProperty('--case-accent', type.color);
+    root.dataset.effect = type.effect || 'classic';
     root.style.setProperty('--case-hue', `${type.hue}deg`);
     root.querySelector('.cb-caption').textContent = `${type.name.toUpperCase()} CASE`;
     root.querySelectorAll('.cb-rounds span').forEach((el, i) => { el.className = i < index ? 'cb-done' : i === index ? 'cb-current' : ''; });
@@ -158,7 +158,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     if (next === 'unlock') {
       root.classList.add('cb-unlocking');
       status.textContent = 'Unlocking case';
-      if (!quiet) sfx.caseUnlock();
+      if (!quiet) caseOpeningSound(battle.cases[round]);
     }
     if (next === 'spin') {
       root.classList.add('cb-opening');
@@ -175,7 +175,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
       root.classList.remove('cb-opening');
       status.textContent = 'Items revealed';
       players.forEach((player, side) => {
-        const item = CASE_ITEMS[battle.pulls[round][side]];
+        const item = caseItem(battle.cases[round], battle.pulls[round][side]);
         player.style.setProperty('--drop-color', item.color);
         player.classList.add('cb-show');
         if (item.value >= 48) player.classList.add('cb-premium');
@@ -183,7 +183,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
         player.querySelector('.cb-score-flight').textContent = `+${item.value}`;
         cards[side].classList.add('cb-landed', 'cb-revealed');
         cards[side].classList.remove('cb-sealed');
-        if (item.id === 'blade') player.classList.add('cb-rare');
+        if (item.tier === 'Special') player.classList.add('cb-rare');
         player.querySelector('.cb-result-tier').textContent = item.tier.toUpperCase();
         player.querySelector('.cb-result-tier').style.color = item.color;
         player.querySelector('.cb-result-name').textContent = item.name;
@@ -198,8 +198,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
         }
       });
       if (!quiet) {
-        if (battle.pulls[round].includes(5)) { sfx.caseRare(); haptic([15, 30, 25]); }
-        else sfx.gem(round);
+        battle.pulls[round].forEach((index, side) => itemRevealSound(caseItem(battle.cases[round], index).id, side * .16));
+        if (battle.pulls[round].includes(5)) haptic([15, 30, 25]);
       }
     }
   }
@@ -211,11 +211,12 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     players.forEach((player, side) => {
       [...player.querySelector('.cb-history').children].forEach((slot, i) => {
         if (i > visible || !battle.pulls[i]) return;
-        const item = CASE_ITEMS[battle.pulls[i][side]];
+        const item = caseItem(battle.cases[i], battle.pulls[i][side]);
         next[side] += item.value;
         if (slot.dataset.item === item.id) return;
         slot.dataset.item = item.id;
         slot.dataset.round = i;
+        slot.dataset.index = battle.pulls[i][side];
         slot.disabled = false;
         slot.style.setProperty('--item-color', item.color);
         slot.setAttribute('aria-label', `Inspect ${item.name}, ${item.value} points, round ${i + 1}`);
@@ -334,14 +335,14 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   root.addEventListener('click', (event) => {
     const slot = event.target.closest('.cb-past[data-item]');
     if (!slot || inspector) return;
-    const item = CASE_ITEMS.find(item => item.id === slot.dataset.item);
+    const item = caseItem(battle.cases[Number(slot.dataset.round)], Number(slot.dataset.index));
     const type = caseById(battle.cases[Number(slot.dataset.round)]);
-    const odds = type.weights[CASE_ITEMS.indexOf(item)];
+    const odds = type.weights[Number(slot.dataset.index)];
     inspector = document.createElement('dialog');
     inspector.className = 'cb-inspect';
     inspector.setAttribute('aria-label', item.name);
     inspector.style.setProperty('--item-color', item.color);
-    inspector.innerHTML = `<button class="cb-inspect-close" type="button" aria-label="Close item" autofocus>×</button><span class="cb-inspect-tier">${item.tier}</span><h3>${item.name}</h3><div class="cb-inspect-art"><img src="${art(item.id)}" alt="${item.name}">${turntables.has(item.id) ? `<span class="cb-inspect-turn" style="background-image:url('${art(`${item.id}-turn`)}')"></span>` : ''}</div>${turntables.has(item.id) ? '<label class="cb-rotate-label">Rotate item<input type="range" min="0" max="23" value="23" aria-label="Rotate item"></label>' : ''}<div class="cb-inspect-stats"><strong>${item.value}<small>POINTS</small></strong><span>${type.name}<small>${odds}% drop chance · round ${Number(slot.dataset.round) + 1}</small></span></div><p>Item value adds to your battle score.</p>`;
+    inspector.innerHTML = `<button class="cb-inspect-close" type="button" aria-label="Close item" autofocus>×</button><span class="cb-inspect-tier">${item.tier}</span><h3>${item.name}</h3><div class="cb-inspect-art"><img src="${art(item.id)}" alt="${item.name}">${turntables.has(item.id) ? `<span class="cb-inspect-turn" style="background-image:url('${art(`${item.id}-turn`)}')"></span>` : ''}</div>${turntables.has(item.id) ? '<label class="cb-rotate-label">Rotate item<input type="range" min="0" max="23" value="23" aria-label="Rotate item"></label>' : ''}<div class="cb-inspect-stats"><strong>${item.value}<small>POINTS</small></strong><span>${type.name}<small>${odds}% drop chance · round ${Number(slot.dataset.round) + 1}</small></span></div><button class="cb-item-sound" type="button">Play item sound</button><p>Item value adds to your battle score.</p>`;
     root.append(inspector);
     inspectorSource = slot;
     const dialog = inspector;
@@ -359,6 +360,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
       dialog.classList.add('cb-inspect-rotating');
       turnFrame(sprite, Number(event.target.value));
     });
+    dialog.querySelector('.cb-item-sound').addEventListener('click', () => { setSound(true); root.querySelector('.cb-sound').textContent = 'Sound on'; root.querySelector('.cb-sound').setAttribute('aria-pressed','true'); previewItemSound(item.id); });
     dialog.querySelector('.cb-inspect-close').addEventListener('click', () => dialog.close());
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
     dialog.addEventListener('close', () => { dialog.remove(); inspector = null; if (!destroyed) inspectorSource?.focus(); });
@@ -370,6 +372,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     event.currentTarget.textContent = `Sound ${soundOn() ? 'on' : 'off'}`;
     event.currentTarget.setAttribute('aria-pressed', String(soundOn()));
   });
+  warmCaseArt(initial.cases);
   prepare(0);
   return {
     update(next, clock) {

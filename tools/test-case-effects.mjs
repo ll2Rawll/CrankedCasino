@@ -6,6 +6,7 @@ import { resolve, join } from 'node:path';
 const { chromium, webkit } = createRequire(import.meta.url)('playwright-core');
 const engine = process.env.BROWSER === 'webkit' ? webkit : chromium;
 const perf = process.env.PERF === '1';
+const mythic = process.env.MYTHIC === '1';
 const repo = resolve(new URL('..', import.meta.url).pathname);
 const browser = await engine.launch({ executablePath: engine === chromium ? '/usr/bin/chromium' : webkit.executablePath() });
 try {
@@ -14,26 +15,26 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('https://effects.test/**', route => {
     const pathname = new URL(route.request().url()).pathname;
-    if (pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/cases.css"><style>body{margin:12px;background:#0d090f}#app{max-width:960px;margin:auto}</style><main id="app"></main>' });
+    if (pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/cases.css"><link rel="stylesheet" href="/css/cases-lobby.css"><style>body{margin:12px;background:#0d090f}#app{max-width:960px;margin:auto}</style><main id="app"></main>' });
     return route.fulfill({ path: join(repo, pathname) });
   });
   if (!perf) await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
   await page.goto('https://effects.test/');
   if (!perf) await page.clock.pauseAt(new Date('2026-01-01T00:01:00Z'));
-  await page.evaluate(async () => {
+  await page.evaluate(async mythic => {
     window.art = await import('/js/games/cases-scene.js');
-    await art.warmCaseArt();
+    await art.warmCaseArt(mythic ? ['dragonheart','starfall','leviathan'] : ['after-hours']);
     // Observe only work after assets have been decoded.
     window.longTasks = [];
     if (PerformanceObserver.supportedEntryTypes.includes('longtask')) {
       new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => entry.duration))).observe({ type: 'longtask' });
     }
-  });
+  }, mythic);
   if (perf && engine === chromium) {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   }
-  await page.evaluate(perf => {
+  await page.evaluate(({perf,mythic}) => {
     window.frameTimes = [];
     window.runAt = performance.now();
     let previous = runAt;
@@ -43,10 +44,10 @@ try {
       if (now - runAt < 19000) requestAnimationFrame(sample);
     }
     if (perf) requestAnimationFrame(sample);
-    window.battle = { practice: true, state: 'complete', started: Date.now(), seat: 0, players: [{ name: 'You' }, { name: 'Rook', bot: true }], cases: ['after-hours','neon-vault','high-roller'], pulls: [[1,2],[0,4],[5,3]], totals: [252,223] };
+    window.battle = { practice: true, state: 'complete', started: Date.now(), seat: 0, players: [{ name: 'You' }, { name: 'Rook', bot: true }], cases: mythic ? ['dragonheart','starfall','leviathan'] : ['after-hours','neon-vault','high-roller'], pulls: [[1,2],[0,4],[5,3]], totals: [252,223] };
     window.scene = art.caseScene(document.querySelector('#app'), battle, {});
     scene.update(battle, battle.started);
-  }, perf);
+  }, {perf,mythic});
   if (perf) {
     await page.getByRole('button', { name: 'Battle again', exact: true }).waitFor({ timeout: 25000 });
     const stats = await page.evaluate(() => {
@@ -73,7 +74,7 @@ try {
     await page.clock.runFor(2400);
     assert.equal(await page.locator('.cb-turntable').count(), 0);
     assert.equal(await page.locator('.cb-track').first().evaluate(el => getComputedStyle(el).willChange), 'auto');
-    await page.getByRole('button', { name: 'Inspect Prism Edge, 220 points, round 3' }).click({ force: true });
+    await page.getByRole('button', { name: mythic ? 'Inspect Leviathan Trident, 220 points, round 3' : 'Inspect Prism Edge, 220 points, round 3' }).click({ force: true });
     await page.getByRole('slider', { name: 'Rotate item' }).fill('9');
     await page.locator('.cb-inspect-turn[data-detail="ready"]').waitFor();
     await page.screenshot({ path: `/workspace/scratch/rooster-tests/cases-inspect-${engine.name()}.png` });

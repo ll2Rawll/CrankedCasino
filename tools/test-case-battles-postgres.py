@@ -29,7 +29,8 @@ accounts = [rpc('cc_signup', name + suffix, 'qa-case-battles-123') for name in [
 assert all(account['ok'] for account in accounts), accounts
 tokens = [account['token'] for account in accounts]
 host, guest, third = tokens
-cases = '{after-hours,neon-vault,high-roller}'
+cases = '{dragonheart,starfall,leviathan}'
+assert sql("select cc.case_valid('{after-hours,neon-vault,high-roller}');") == 't'
 assert rpc('cc_cases_list', 'invalid')['error'] == 'auth'
 cancel_id = str(uuid.uuid4())
 assert rpc('cc_cases_create', host, cancel_id, cases, 'private')['balance'] == 950

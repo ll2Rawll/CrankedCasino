@@ -1,17 +1,17 @@
-import { engine, errorText } from '../engine.js?v=cc44f0172e88';
-import { store, on } from '../store.js?v=cc44f0172e88';
-import { esc, storage } from '../util.js?v=cc44f0172e88';
-import { openAccount } from '../account.js?v=cc44f0172e88';
-import { modal, toast } from '../ui.js?v=cc44f0172e88';
-import { sfx } from '../sound.js?v=cc44f0172e88';
-import { random } from '../rng.js?v=cc44f0172e88';
-import { CASES, CASE_ITEMS, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals, validCases, caseById } from './cases-data.js?v=cc44f0172e88';
-import { caseScene, warmCaseArt } from './cases-scene.js?v=cc44f0172e88';
+import { engine, errorText } from '../engine.js?v=7dd2455b7c8d';
+import { store, on } from '../store.js?v=7dd2455b7c8d';
+import { esc, storage } from '../util.js?v=7dd2455b7c8d';
+import { openAccount } from '../account.js?v=7dd2455b7c8d';
+import { modal, toast } from '../ui.js?v=7dd2455b7c8d';
+import { sfx } from '../sound.js?v=7dd2455b7c8d';
+import { random } from '../rng.js?v=7dd2455b7c8d';
+import { CASES, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals, validCases, caseById, itemsForCase } from './cases-data.js?v=7dd2455b7c8d';
+import { caseScene, warmCaseArt } from './cases-scene.js?v=7dd2455b7c8d';
 
-import { caseCover, caseShowcase } from './cases-showcase.js?v=cc44f0172e88';
+import { caseCover, caseShowcase } from './cases-showcase.js?v=7dd2455b7c8d';
 
 const validId = (id) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id || '');
-const caseTags = ['Violet mix', 'Rare focused', 'High variance'];
+const caseTags = {'after-hours':'Violet mix','neon-vault':'Rare focused','high-roller':'High variance'};
 const modeName = (mode) => ({ public: 'Public room', private: 'Invite only', bot: 'Bot battle' })[mode];
 
 export default {
@@ -29,7 +29,7 @@ export default {
     let roomId = new URLSearchParams(location.hash.split('?')[1] || '').get('battle');
     if (!validId(roomId)) roomId = null;
     const pendingKey = () => `cc:cases:pending:${store.username}`;
-    warmCaseArt();
+    warmCaseArt(selected);
 
     function setUrl(id) {
       roomId = id;
@@ -99,6 +99,7 @@ export default {
         button.setAttribute('aria-label', `Use ${caseById(button.dataset.caseChoice).name} for round ${activeRound + 1}`);
       });
       showcase?.set(caseById(selected[activeRound]), activeRound, animate);
+      warmCaseArt([selected[activeRound]]);
     }
     function renderLobby() {
       showcase?.destroy();
@@ -110,10 +111,10 @@ export default {
       content.innerHTML = `<div class="cases-create cs-builder">
         <div class="cs-showroom"></div>
         <div class="cs-controls">
-          <div class="cs-lineup-heading"><div><span class="cs-eyebrow">YOUR LINEUP</span><h2>Build your battle</h2></div><button data-shuffle type="button" aria-label="Shuffle case lineup"><span aria-hidden="true">⤨</span> Shuffle</button></div>
+          <button class="cs-new-collection" data-new-collection type="button"><span>NEW COLLECTION</span> Mythic cases <b aria-hidden="true">✦</b></button><div class="cs-lineup-heading"><div><span class="cs-eyebrow">YOUR LINEUP</span><h2>Build your battle</h2></div><button data-shuffle type="button" aria-label="Shuffle case lineup"><span aria-hidden="true">⤨</span> Shuffle</button></div>
           <div class="cs-rounds" role="group" aria-label="Your three rounds">${selected.map((id, i) => `<button class="cs-round" data-edit-round="${i}" type="button"><span class="cs-round-number">0${i + 1}</span><img src="${caseCover(id)}" alt=""><strong></strong><span class="cs-round-edit">${i === 0 ? 'EDITING' : 'TAP TO EDIT'}</span></button>`).join('')}</div>
           <dialog class="cs-picker-dialog" aria-label="Choose your case"><div class="cs-picker-heading"><div><span class="cs-eyebrow">THE COLLECTION</span><h3 class="cs-choose-label"></h3></div><button type="button" data-close-picker aria-label="Close case picker">×</button></div>
-          <div class="cs-case-picker" role="group" aria-label="Available cases">${CASES.map((type, i) => `<button data-case-choice="${type.id}" style="--choice-color:${type.color}" type="button"><img src="${caseCover(type.id)}" alt=""><span class="cs-case-option-copy"><strong>${type.name}</strong><small>${caseTags[i]}</small><span>${type.weights[5]}% Special · ${type.weights[0]}% Common</span></span><span class="cs-choice-check" aria-hidden="true">✓</span></button>`).join('')}</div><p class="cs-picker-note">Same entry price. Each case has its own item odds.</p></dialog>
+          <div class="cs-case-picker" role="group" aria-label="Available cases">${[...CASES].sort((a,b)=>Number(!!b.effect)-Number(!!a.effect)).map((type) => `<button data-case-choice="${type.id}" style="--choice-color:${type.color}" type="button"><img src="${caseCover(type.id)}" alt=""><span class="cs-case-option-copy"><strong>${type.name}</strong><small>${type.tag || caseTags[type.id]}</small><span>${type.weights[5]}% Special · ${type.weights[0]}% Common</span></span><span class="cs-choice-check" aria-hidden="true">✓</span></button>`).join('')}</div><p class="cs-picker-note">Same entry price. Each case has its own item odds.</p></dialog>
           <div class="cs-battle-mode">${online ? `<span class="cs-eyebrow">OPPONENT</span><div class="cs-mode-picker" role="group" aria-label="Battle type">${['public','private','bot'].map(mode => `<button type="button" data-battle-mode="${mode}" aria-pressed="${visibility === mode}">${modeName(mode)}</button>`).join('')}</div>` : '<span class="cs-bot-avatar" aria-hidden="true"><i></i><i></i></span><div><strong>You vs Rook</strong><span>Bot opponent · this device</span></div><span class="cs-mode-badge">1 VS 1</span>'}</div>
           <div class="cs-stakes"><div><span>YOUR ENTRY</span><strong>50 <small>chips</small></strong></div><span class="cs-stakes-arrow" aria-hidden="true">→</span><div><span>WINNER’S POT</span><strong>100 <small>chips</small></strong></div><span class="cs-pot-stack" aria-hidden="true"><i></i><i></i><i></i></span></div>
           <button class="cs-battle-start" data-create type="button"></button>
@@ -137,7 +138,7 @@ export default {
         const create = content.querySelector('[data-create]');
         if (create) { create.textContent = 'Retry pending battle'; create.setAttribute('aria-label', 'Retry pending battle'); }
       } else updateStart();
-      content.querySelectorAll('[data-edit-round],[data-case-choice],[data-shuffle],[data-battle-mode]').forEach(button => { button.disabled = locked; });
+      content.querySelectorAll('[data-edit-round],[data-case-choice],[data-shuffle],[data-battle-mode],[data-new-collection]').forEach(button => { button.disabled = locked; });
     }
 
     function renderWaiting() {
@@ -265,6 +266,7 @@ export default {
       const button = event.target.closest('button');
       if (!button || busy) return;
       if (button.disabled) return;
+      if (button.hasAttribute('data-new-collection')) { content.querySelector('.cs-picker-dialog').showModal(); return; }
       if (button.hasAttribute('data-peek')) { showcase?.peek(); return; }
       if (button.hasAttribute('data-close-picker')) { content.querySelector('.cs-picker-dialog').close(); return; }
       if (button.hasAttribute('data-edit-round')) {
@@ -313,7 +315,16 @@ export default {
       finally { busy = false; if (button.isConnected) button.disabled = false; schedule(0); }
     });
     view.querySelector('[data-rules]').addEventListener('click', () => {
-      modal({ title: 'Cases & odds', body: `<p>Both players open the same three selected cases. Each item adds its listed points. The higher total wins the 100-chip pot. A tie returns 50 chips to each player. Items are scores for this battle.</p><div class="case-odds-scroll"><table class="case-odds"><thead><tr><th>Item</th><th>Points</th>${CASES.map((type) => `<th>${type.name}</th>`).join('')}</tr></thead><tbody>${CASE_ITEMS.map((item, i) => `<tr><th>${item.name}<small>${item.tier}</small></th><td>${item.value}</td>${CASES.map((type) => `<td>${type.weights[i]}%</td>`).join('')}</tr>`).join('')}</tbody></table></div><p>Every pull is independent. Bot opponents use the same odds. Public rooms accept the next player. Invite-only rooms require the link. A waiting room can be cancelled for a full refund and expires after 10 minutes.</p>` });
+      const body = document.createElement('div');
+      body.innerHTML = `<p>Three cases. 50 chips per player. The higher item score wins the 100-chip pot; a tie returns both entries. Each pull is independent. Items add points to this battle.</p><label class="case-odds-picker">Explore a case<select aria-label="Case odds">${CASES.map(type=>`<option value="${type.id}">${type.name}</option>`).join('')}</select></label><div class="case-odds-scroll"><table class="case-odds"><thead><tr><th>Item</th><th>Points</th><th>Chance</th></tr></thead><tbody></tbody></table></div><p>Bot opponents use the same odds. Mythic cases use the same six score values and probability profiles as the original collection.</p>`;
+      const select = body.querySelector('select');
+      select.value = selected[activeRound];
+      function renderOdds() {
+        const type=caseById(select.value);
+        body.querySelector('tbody').innerHTML=itemsForCase(type.id).map((item,i)=>`<tr><th><img src="assets/cases/${item.id}.webp?v=2" alt="">${item.name}<small>${item.tier}</small></th><td>${item.value}</td><td>${type.weights[i]}%</td></tr>`).join('');
+      }
+      select.addEventListener('change',renderOdds);renderOdds();
+      modal({ title: 'Cases & odds', body });
     });
     const stopAccount = on('account', () => {
       generation++;

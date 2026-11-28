@@ -56,6 +56,10 @@ try {
   }
   const host = await client(1100);
   const guest = await client(390);
+  for(const [i,id] of ['dragonheart','starfall','leviathan'].entries()){
+    await host.locator(`[data-edit-round="${i}"]`).click();
+    await host.locator(`[data-case-choice="${id}"]`).click();
+  }
   await host.locator('[data-battle-mode="private"]').click();
   await host.locator('[data-create]').click();
   await host.locator('.cases-invite input').waitFor();

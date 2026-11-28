@@ -7,7 +7,7 @@
 //
 // Calls run one at a time, in order, so balance updates always arrive in sequence.
 
-import { CONFIG } from './config.js?v=cc44f0172e88';
+import { CONFIG } from './config.js?v=7dd2455b7c8d';
 
 const url = String(CONFIG.supabaseUrl || '').trim().replace(/\/+$/, '');
 const key = String(CONFIG.supabaseKey || '').trim();
@@ -37,7 +37,7 @@ const emit = (type, data) => listeners.forEach((fn) => fn(type, data));
 let localApi = null;
 async function rpc(fn, args) {
   if (MODE === 'device') {
-    localApi ||= await import('./engine-local.js?v=cc44f0172e88');
+    localApi ||= await import('./engine-local.js?v=7dd2455b7c8d');
     return localApi.call(fn, args);
   }
   const headers = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };

@@ -1,5 +1,6 @@
 // Build-time artwork only. Run tools/render-cases-art.mjs; no WebGL ships in the game.
 import * as THREE from '/three.js';
+import { mythicArt } from '/mythic.js';
 const renderer = new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});
 renderer.setSize(480,374); renderer.setPixelRatio(1);
 renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.35;
@@ -121,7 +122,9 @@ function caseModel(open=0,theme){const g=new THREE.Group();
  bevel(g,.98,.13,.15,edge,0,-.10,.93,.025);bevel(g,.68,.14,.16,black,0,-.11,.94,.025);
  g.rotation.set(.25,-.35,-.04);g.scale.setScalar(.98);return g;
 }
-const models={blade,watch,headphones,diamond,chips,signet,case:()=>caseModel(false),open:()=>caseModel(true)};
+const mythic=mythicArt(THREE,{mesh,box,bevel,cyl,ring,metal,matte,gold,silver,black});
+const caseVisual=(theme,p)=>mythic.cases[theme]?mythic.cases[theme](p):caseModel(p,theme);
+const models={...mythic.items,blade,watch,headphones,diamond,chips,signet,case:()=>caseModel(false),open:()=>caseModel(true)};
 function disposeObject(obj){obj.traverse(node=>{node.geometry?.dispose()});}
 window.renderAsset=(name)=>{
  renderer.setSize(480,374);
@@ -146,9 +149,9 @@ window.renderShowcase=(theme,kind)=>{
  if(kind==='atlas'){
   renderer.setSize(320,250);
   const c=document.createElement('canvas');c.width=1600;c.height=1000;const ctx=c.getContext('2d');
-  for(let i=0;i<20;i++){const obj=caseModel(i/19,theme);scene.add(obj);renderer.render(scene,camera);ctx.drawImage(renderer.domElement,(i%5)*320,Math.floor(i/5)*250);scene.remove(obj);disposeObject(obj)}
+  for(let i=0;i<20;i++){const obj=caseVisual(theme,i/19);scene.add(obj);renderer.render(scene,camera);ctx.drawImage(renderer.domElement,(i%5)*320,Math.floor(i/5)*250);scene.remove(obj);disposeObject(obj)}
   return c.toDataURL('image/webp',.90);
  }
- renderer.setSize(720,560);const obj=caseModel(kind==='opened'?1:0,theme);scene.add(obj);renderer.render(scene,camera);const out=renderer.domElement.toDataURL('image/webp',.94);scene.remove(obj);disposeObject(obj);return out;
+ renderer.setSize(720,560);const obj=caseVisual(theme,kind==='opened'?1:0);scene.add(obj);renderer.render(scene,camera);const out=renderer.domElement.toDataURL('image/webp',.94);scene.remove(obj);disposeObject(obj);return out;
 };
 window.ready=true;

@@ -35,7 +35,7 @@ try {
   await page.clock.runFor(900);
   assert.match(await page.locator('.cs-cover').getAttribute('src'), /case-high-roller-opened.webp/);
   assert.equal(await page.locator('.cs-treasures img').count(), 6);
-  assert.match(await page.locator('.cs-preview-caption').textContent(), /preview only/);
+  assert.match(await page.locator('.cs-preview-caption').textContent(), /preview only/i);
   assert.equal(await page.evaluate(() => localStorage.getItem('cc:device:db')), null);
   await page.screenshot({ path: `/workspace/scratch/rooster-tests/cases-peek-${engine.name()}.png`, animations: 'disabled' });
   await page.locator('[data-edit-round="0"]').click({ force: true });
@@ -55,13 +55,35 @@ try {
   await page.locator('[data-shuffle]').click({ force: true });
   const lineup = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:cases:lineup')));
   assert.equal(lineup.length, 3);
-  assert(lineup.every(id => ['after-hours','neon-vault','high-roller'].includes(id)));
+  assert(lineup.every(id => ['after-hours','neon-vault','high-roller','dragonheart','starfall','leviathan'].includes(id)));
   for (const width of [320,390,1280]) {
     await page.setViewportSize({ width, height: width === 320 ? 740 : 900 });
     await page.clock.runFor(100);
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px overflow`);
     await page.screenshot({ path: `/workspace/scratch/rooster-tests/cases-lobby-${width}-${engine.name()}.png`, fullPage: true, animations: 'disabled' });
   }
+  await page.setViewportSize({width:390,height:844});
+  for (const [i,id] of ['dragonheart','starfall','leviathan'].entries()) {
+    await page.locator(`[data-edit-round="${i}"]`).click({force:true});
+    await page.locator(`[data-case-choice="${id}"]`).click({force:true});
+    await page.locator('[data-peek]').click({force:true});
+    await page.locator('.cs-is-open').waitFor();
+    await page.clock.runFor(900);
+    assert.match(await page.locator('.cs-cover').getAttribute('src'),new RegExp(`case-${id}-opened`));
+    await page.screenshot({path:`/workspace/scratch/rooster-tests/showcase-${id}-${engine.name()}.png`,animations:'disabled'});
+    assert.equal(await page.locator('.cs-treasures button').count(),6);
+    await page.locator('.cs-treasures button').first().click({force:true});
+    assert.equal(await page.locator('.cs-audio-toggle').getAttribute('aria-pressed'),'true');
+    await page.locator('.cs-audio-toggle').click({force:true});
+    assert.equal(await page.locator('.cs-audio-toggle').getAttribute('aria-pressed'),'false');
+    await page.locator('[data-peek]').click({force:true});
+  }
+  await page.locator('[data-rules]').click({force:true});
+  await page.getByLabel('Case odds',{exact:true}).selectOption('dragonheart');
+  assert.match(await page.locator('.case-odds').textContent(),/Dragonheart Blade/);
+  assert.equal(await page.locator('.case-odds tbody tr').count(),6);
+  await page.locator('.modal-root .close-x').click({force:true});
+  await page.clock.runFor(400);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.locator('[data-peek]').click({ force: true });
   await page.locator('.cs-is-open').waitFor();
@@ -81,6 +103,7 @@ try {
   });
   await online.route('https://case-db.test/**', route => route.abort());
   await online.goto('https://casino.test/#/cases');
+  await online.locator('[data-battle-mode]').first().waitFor();
   assert.equal(await online.locator('[data-battle-mode]').count(), 3);
   await online.locator('[data-battle-mode="private"]').click();
   assert.equal(await online.locator('[data-battle-mode="private"]').getAttribute('aria-pressed'), 'true');

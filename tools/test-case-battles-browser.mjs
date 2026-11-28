@@ -6,6 +6,9 @@ import { readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 const { chromium, webkit } = createRequire(import.meta.url)('playwright-core');
 const engine = process.env.BROWSER === 'webkit' ? webkit : chromium;
+const mythic = process.env.MYTHIC === '1';
+const testCases = mythic ? ['dragonheart','starfall','leviathan'] : ['after-hours','neon-vault','high-roller'];
+const specialName = mythic ? 'Leviathan Trident' : 'Prism Edge';
 const repo = resolve(new URL('..', import.meta.url).pathname);
 const browser = await engine.launch({ executablePath: engine === chromium ? process.env.CHROMIUM || '/usr/bin/chromium' : webkit.executablePath() });
 let page;
@@ -40,15 +43,15 @@ try {
   await page.locator('[data-edit-round="2"]').click();
   await page.locator('[data-case-choice="high-roller"]').click();
   // A retry must show and lock its original lineup, even if saved preferences differ.
-  await page.evaluate(() => {
-    localStorage.setItem('cc:cases:pending:CaseBrowser', JSON.stringify({ id: crypto.randomUUID(), cases: ['after-hours','neon-vault','high-roller'], visibility: 'bot' }));
+  await page.evaluate(cases => {
+    localStorage.setItem('cc:cases:pending:CaseBrowser', JSON.stringify({ id: crypto.randomUUID(), cases, visibility: 'bot' }));
     localStorage.setItem('cc:cases:lineup', JSON.stringify(['high-roller','high-roller','high-roller']));
-  });
+  }, testCases);
   await page.reload();
   await page.locator('.cs-builder').waitFor();
   await page.clock.runFor(200);
   await page.getByRole('button', { name: 'Retry pending battle', exact: true }).waitFor();
-  assert.deepEqual(await page.locator('.cs-round strong').allTextContents(), ['After Hours','Neon Vault','High Roller']);
+  assert.deepEqual(await page.locator('.cs-round strong').allTextContents(), mythic ? ['Dragonheart','Starfall','Leviathan'] : ['After Hours','Neon Vault','High Roller']);
   assert.equal(await page.locator('[data-edit-round]:disabled').count(), 3);
   assert(await page.locator('[data-shuffle]').isDisabled());
   await page.locator('[data-create]').click({ force: true });
@@ -84,13 +87,13 @@ try {
   assert.equal(await page.locator('.cb-finale strong').textContent(), 'CaseBrowser');
   assert.equal(await page.locator('.cb-past:enabled').count(), 6);
   // The accelerated clock can finish three rounds before deferred image decoding.
-  await page.evaluate(async () => {
+  await page.evaluate(async cases => {
     const version = new URL(document.querySelector('script[type="module"]').src).search;
-    await (await import(`/js/games/cases-scene.js${version}`)).warmCaseArt();
-  });
-  await page.getByRole('button', { name: 'Inspect Prism Edge, 220 points, round 3' }).click({ force: true });
-  await page.getByRole('dialog', { name: 'Prism Edge' }).waitFor();
-  assert.match(await page.locator('.cb-inspect-stats').textContent(), /3% drop chance/);
+    await (await import(`/js/games/cases-scene.js${version}`)).warmCaseArt(cases);
+  }, testCases);
+  await page.getByRole('button', { name: `Inspect ${specialName}, 220 points, round 3` }).click({ force: true });
+  await page.getByRole('dialog', { name: specialName }).waitFor();
+  assert.match(await page.locator('.cb-inspect-stats').textContent(), mythic ? /1% drop chance/ : /3% drop chance/);
   const rotation = page.getByRole('slider', { name: 'Rotate item' });
   await rotation.fill('6');
   const rotationPosition = await page.locator('.cb-inspect-turn').evaluate(el => el.style.backgroundPosition.split(' ').map(parseFloat));
@@ -98,10 +101,10 @@ try {
   assert(Math.abs(rotationPosition[1] - 100 / 3) < .001);
   await page.keyboard.press('Escape');
   await page.locator('.cb-inspect').waitFor({ state: 'detached' });
-  assert.match(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), /Inspect Prism Edge/);
+  assert.match(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), /Inspect (Prism Edge|Leviathan Trident)/);
   assert.equal(state.history.filter((row) => row.g === 'cases').length, 1);
-  assert.deepEqual(await page.locator('.cb-result-name').allTextContents(), state.battles[0].pulls[2].map((index) => ['House Stack','Violet Audio','Emerald Signet','Ice Cut','Midnight Dial','Prism Edge'][index]));
-  await page.screenshot({ path: `/workspace/scratch/rooster-tests/cases-app-${engine.name()}.png`, fullPage: true });
+  assert.deepEqual(await page.locator('.cb-result-name').allTextContents(), state.battles[0].pulls[2].map((index) => (mythic ? ['Abyss Doubloon','Siren Conch','Coral Signet','Tidal Pearl','Sovereign Crest','Leviathan Trident'] : ['House Stack','Violet Audio','Emerald Signet','Ice Cut','Midnight Dial','Prism Edge'])[index]));
+  await page.screenshot({ path: `/workspace/scratch/rooster-tests/cases-app-${mythic ? 'mythic-' : ''}${engine.name()}.png`, fullPage: true });
   const alignment = await page.locator('.cb-landed').evaluateAll((cards) => cards.map((card) => {
     const box = card.getBoundingClientRect(), window = card.closest('.cb-window').getBoundingClientRect();
     const track = card.parentElement;
