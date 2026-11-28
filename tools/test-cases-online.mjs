@@ -42,8 +42,12 @@ try {
  // The actual public REST API must reject a fabricated player token.
  assert.equal((await rpc(guest,'cc_cases_list',{p_token:'invalid-qa-token'})).error,'auth');
  const before=[(await rpc(host,'cc_me')).balance,(await rpc(guest,'cc_me')).balance];
+ await host.locator('[data-battle-mode="public"]').click();
  await host.getByRole('spinbutton',{name:'Your bet',exact:true}).fill('25.50');
- await host.locator('[data-battle-mode="public"]').click();await host.locator('[data-create]').click();
+ await Promise.all([
+   host.waitForResponse(r=>r.url().endsWith('/rpc/cc_cases_create')&&r.status()===200,{timeout:15000}),
+   host.locator('[data-create]').click(),
+ ]);
  await host.locator('[data-cancel]').waitFor();
  const publicId=new URL(host.url()).hash.split('battle=')[1];
  await guest.locator(`[data-room="${publicId}"]`).waitFor({timeout:15000});
@@ -57,8 +61,14 @@ try {
  const battleId=new URL(invite).hash.split('battle=')[1];
  assert(!(await rpc(guest,'cc_cases_list')).rooms.some(room=>room.id===battleId));
  await guest.goto(invite);
+ await guest.locator('[data-join]').waitFor();
  await guest.getByRole('spinbutton',{name:'Your bet',exact:true}).fill('20.25');
- await guest.locator('[data-join]').click();
+ assert.equal(await guest.locator('[data-join]').textContent(),'Join battle · 20.25 chips');
+ // One click directly from the focused wager must submit, including Safari's blur/change path.
+ await Promise.all([
+   guest.waitForResponse(r=>r.url().endsWith('/rpc/cc_cases_join')&&r.status()===200,{timeout:15000}),
+   guest.locator('[data-join]').click(),
+ ]);
  await Promise.all([host.locator('#case-openings').waitFor(),guest.locator('#case-openings').waitFor()]);
  assert.equal(await guest.locator('.cb-pot').textContent(),'146.00 CHIP POT');
  await guest.reload();await guest.locator('#case-openings').waitFor();

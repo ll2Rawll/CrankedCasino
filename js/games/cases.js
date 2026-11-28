@@ -1,14 +1,14 @@
-import { engine, errorText } from '../engine.js?v=fb1bf3011ac1';
-import { store, on } from '../store.js?v=fb1bf3011ac1';
-import { esc, storage, fmt, round2 } from '../util.js?v=fb1bf3011ac1';
-import { openAccount } from '../account.js?v=fb1bf3011ac1';
-import { modal, toast, betInput } from '../ui.js?v=fb1bf3011ac1';
-import { sfx } from '../sound.js?v=fb1bf3011ac1';
-import { random } from '../rng.js?v=fb1bf3011ac1';
-import { CASES, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals, validCases, caseById, itemsForCase, caseEntries } from './cases-data.js?v=fb1bf3011ac1';
-import { caseScene, warmCaseArt } from './cases-scene.js?v=fb1bf3011ac1';
+import { engine, errorText } from '../engine.js?v=8bbe697797bd';
+import { store, on } from '../store.js?v=8bbe697797bd';
+import { esc, storage, fmt, round2 } from '../util.js?v=8bbe697797bd';
+import { openAccount } from '../account.js?v=8bbe697797bd';
+import { modal, toast, betInput } from '../ui.js?v=8bbe697797bd';
+import { sfx } from '../sound.js?v=8bbe697797bd';
+import { random } from '../rng.js?v=8bbe697797bd';
+import { CASES, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals, validCases, caseById, itemsForCase, caseEntries } from './cases-data.js?v=8bbe697797bd';
+import { caseScene, warmCaseArt } from './cases-scene.js?v=8bbe697797bd';
 
-import { caseCover, caseShowcase } from './cases-showcase.js?v=fb1bf3011ac1';
+import { caseCover, caseShowcase } from './cases-showcase.js?v=8bbe697797bd';
 
 const validId = (id) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id || '');
 const caseTags = {'after-hours':'Violet mix','neon-vault':'Rare focused','high-roller':'High variance'};
@@ -95,7 +95,17 @@ export default {
       bet = betInput('cases', { label: 'Your bet', defaultValue: CASE_ENTRY });
       if (amount !== undefined) bet.value = amount;
       content.querySelector(selector).append(bet.el);
-      const edited = () => { error.textContent = ''; update(); };
+      const input = bet.el.querySelector('input');
+      let previewAmount = Number(input.value);
+      const edited = () => {
+        const amount = Number(input.value);
+        // Safari can cancel a tap when the input's blur/change redraws its target.
+        // Input already updated the preview; formatting the same amount needs no DOM work.
+        if (Object.is(amount, previewAmount)) return;
+        previewAmount = amount;
+        error.textContent = '';
+        update();
+      };
       bet.el.addEventListener('input', edited);
       bet.el.addEventListener('change', edited);
     }

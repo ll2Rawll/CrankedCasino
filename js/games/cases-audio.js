@@ -1,5 +1,5 @@
 // Short, original sound identities. Shared master volume, gesture unlock and mute.
-import { tone, noise } from '../sound.js?v=fb1bf3011ac1';
+import { tone, noise } from '../sound.js?v=8bbe697797bd';
 const bell = (freq, delay=0, gain=.07, dur=.55) => {
   tone({freq,delay,gain,dur,type:'sine',attack:.003});
   tone({freq:freq*2.76,delay,gain:gain*.18,dur:dur*.45,type:'sine'});
