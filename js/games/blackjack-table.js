@@ -4,15 +4,15 @@
 // (sooner once every seat is in), players act in seat order with 20 s per decision, then the
 // dealer plays and every hand settles with the solo game's rules and payouts. This module polls
 // the table about once a second, deals the new cards it sees, and sends your bet and moves.
-import { h, fmt, esc, reducedMotion } from '../util.js?v=0f27056399f9';
-import { engine, errorText, MODE } from '../engine.js?v=0f27056399f9';
-import { store, BetError } from '../store.js?v=0f27056399f9';
-import { needAccount } from '../account.js?v=0f27056399f9';
-import { parseCard } from '../math.js?v=0f27056399f9';
-import { sfx, haptic } from '../sound.js?v=0f27056399f9';
-import { burstAt, PALETTES } from '../fx.js?v=0f27056399f9';
-import { tryBet, serverRefused, toast, betError, chipClass } from '../ui.js?v=0f27056399f9';
-import { cardEl, reveal, setFace } from './cards.js?v=0f27056399f9';
+import { h, fmt, esc, reducedMotion } from '../util.js?v=cab8bd999107';
+import { engine, errorText, MODE } from '../engine.js?v=cab8bd999107';
+import { store, BetError } from '../store.js?v=cab8bd999107';
+import { needAccount } from '../account.js?v=cab8bd999107';
+import { parseCard } from '../math.js?v=cab8bd999107';
+import { sfx, haptic } from '../sound.js?v=cab8bd999107';
+import { burstAt, PALETTES } from '../fx.js?v=cab8bd999107';
+import { tryBet, serverRefused, toast, betError, chipClass } from '../ui.js?v=cab8bd999107';
+import { cardEl, reveal, setFace } from './cards.js?v=cab8bd999107';
 
 const POLL_MS = 900;
 const LOBBY_MS = 4000;

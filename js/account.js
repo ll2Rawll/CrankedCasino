@@ -1,12 +1,12 @@
 // Accounts: pick a username + password once, then play from any browser.
 // The session is remembered on this device, so players only log in again on a new one.
 
-import { h, esc, fmt, storage } from './util.js?v=0f27056399f9';
-import { icon } from './icons.js?v=0f27056399f9';
-import { engine, MODE } from './engine.js?v=0f27056399f9';
-import { store } from './store.js?v=0f27056399f9';
-import { sfx } from './sound.js?v=0f27056399f9';
-import { toast } from './ui.js?v=0f27056399f9';
+import { h, esc, fmt, storage } from './util.js?v=cab8bd999107';
+import { icon } from './icons.js?v=cab8bd999107';
+import { engine, MODE } from './engine.js?v=cab8bd999107';
+import { store } from './store.js?v=cab8bd999107';
+import { sfx } from './sound.js?v=cab8bd999107';
+import { toast } from './ui.js?v=cab8bd999107';
 
 const USER_RE = /^[A-Za-z0-9_]{3,16}$/;
 
@@ -27,7 +27,7 @@ function message(r) {
     case 'network':
       return 'Can’t reach the casino. Check your connection and try again.';
     case 'not_installed':
-      return 'The casino server isn’t set up yet. (Owner: run supabase/schema.sql.)';
+      return 'Account services are currently unavailable. Please try again later.';
     default:
       return 'Something went wrong. Try again in a moment.';
   }
@@ -180,7 +180,7 @@ export function openAccount({ mode = 'signup', reason = '' } = {}) {
     store.load(r.me);
     sfx.jackpot();
     close(true);
-    import('./fx.js?v=0f27056399f9').then(({ coinRain }) => coinRain(mode === 'signup' ? 110 : 40));
+    import('./fx.js?v=cab8bd999107').then(({ coinRain }) => coinRain(mode === 'signup' ? 110 : 40));
     if (mode === 'signup') toast(`Welcome, ${r.me.username}! ${fmt(r.me.balance).replace(/\.00$/, '')} chips are on the house.`, { type: 'win', iconName: 'sparkle', timeout: 4600 });
     else toast(`Welcome back, ${r.me.username}. Your stack: ${fmt(r.me.balance)}.`, { type: 'win', iconName: 'coins', timeout: 4200 });
   });

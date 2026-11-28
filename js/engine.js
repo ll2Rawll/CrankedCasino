@@ -7,7 +7,7 @@
 //
 // Calls run one at a time, in order, so balance updates always arrive in sequence.
 
-import { CONFIG } from './config.js?v=0f27056399f9';
+import { CONFIG } from './config.js?v=cab8bd999107';
 
 const url = String(CONFIG.supabaseUrl || '').trim().replace(/\/+$/, '');
 const key = String(CONFIG.supabaseKey || '').trim();
@@ -37,7 +37,7 @@ const emit = (type, data) => listeners.forEach((fn) => fn(type, data));
 let localApi = null;
 async function rpc(fn, args) {
   if (MODE === 'device') {
-    localApi ||= await import('./engine-local.js?v=0f27056399f9');
+    localApi ||= await import('./engine-local.js?v=cab8bd999107');
     return localApi.call(fn, args);
   }
   const headers = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };
@@ -56,7 +56,8 @@ async function rpc(fn, args) {
     }
     if (!res.ok) {
       console.warn(`[casino] ${fn} → HTTP ${res.status}`, body || text);
-      // 404 = the SQL hasn't been run on this project yet.
+      // A missing RPC can be one unapplied feature upgrade, even when the rest
+      // of the casino is healthy. It does not imply the whole server is absent.
       return { ok: false, error: res.status === 404 ? 'not_installed' : 'server', status: res.status, message: body?.message || text };
     }
     return body;
@@ -197,7 +198,7 @@ export function errorText(r, fallback = 'Something went wrong. Try again.') {
     case 'server':
       return 'The casino server hiccuped. Try again in a moment.';
     case 'not_installed':
-      return 'The casino server isn’t set up yet (run supabase/schema.sql).';
+      return 'This online feature is currently unavailable. Please try again later.';
     case 'auth':
       return 'Your session ended. Log in again.';
     case 'round_active':

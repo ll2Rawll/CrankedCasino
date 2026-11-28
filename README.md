@@ -70,6 +70,10 @@ With Supabase connected, public rooms appear in the lobby and private rooms are 
 
 Both need the casino server: run the updated `supabase/schema.sql`, or `supabase/multiplayer.sql` on a casino that already has the current schema. Device mode shows a note instead.
 
+GitHub Pages deploys the website only; it does **not** run Supabase SQL. For an existing casino, apply `supabase/multiplayer.sql` to the project configured in `js/config.js` before publishing the multiplayer screens. This additive upgrade preserves players and balances and installs the five `cc_duel_*` and six `cc_bjm_*` RPCs. A missing-RPC / `PGRST202` response means that feature's database upgrade is missing, not that the casino itself is offline. The script reloads PostgREST's schema cache after installation.
+
+Validate the full schema and a second application of the multiplayer upgrade in a disposable PostgreSQL database, then run `python3 tools/test-multiplayer-postgres.py CONTAINER_NAME`. It covers both challenge games, concurrent acceptance, hidden scores, custom stakes, refunds, payout retries, authentication and shared Blackjack. Never run this fixture-generating test against the production database.
+
 The full `supabase/schema.sql` includes the battle upgrade. Run the updated schema when connecting or updating the casino. `supabase/case-battles.sql` contains the standalone battle tables and RPC functions for deployments that already have the current account functions.
 
 In device mode, paid bot battles use the existing browser account and balance. Free practice needs no account and never changes chips or stats. Bots are labeled and draw from the same item probabilities.
