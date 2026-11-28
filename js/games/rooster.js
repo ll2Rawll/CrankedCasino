@@ -5,18 +5,18 @@
 // the server hands out the seed that lays out the course, replays the moves, and pays
 // bet × that target's multiplier if the rooster reached it.
 
-import { h, esc, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=cab8bd999107';
-import { icon } from '../icons.js?v=cab8bd999107';
-import { store } from '../store.js?v=cab8bd999107';
-import { engine, errorText } from '../engine.js?v=cab8bd999107';
-import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=cab8bd999107';
-import { sfx, haptic } from '../sound.js?v=cab8bd999107';
-import { burst, PALETTES, coinRain } from '../fx.js?v=cab8bd999107';
-import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=cab8bd999107';
-import { duelPanel, duelOutcome } from './duels.js?v=cab8bd999107';
-import { scoreLane, onPlatform, chaseLine, LINE_GRACE, HOP_AIR } from './rooster-course.js?v=cab8bd999107';
-import { landscape } from './rooster-landscape.js?v=cab8bd999107';
-import { loadArt } from './rooster-art.js?v=cab8bd999107';
+import { h, esc, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=c5acb968c265';
+import { icon } from '../icons.js?v=c5acb968c265';
+import { store } from '../store.js?v=c5acb968c265';
+import { engine, errorText } from '../engine.js?v=c5acb968c265';
+import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=c5acb968c265';
+import { sfx, haptic } from '../sound.js?v=c5acb968c265';
+import { burst, PALETTES, coinRain } from '../fx.js?v=c5acb968c265';
+import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=c5acb968c265';
+import { duelPanel, duelOutcome } from './duels.js?v=c5acb968c265';
+import { scoreLane, onPlatform, chaseLine, LINE_GRACE, HOP_AIR } from './rooster-course.js?v=c5acb968c265';
+import { landscape } from './rooster-landscape.js?v=c5acb968c265';
+import { loadArt } from './rooster-art.js?v=c5acb968c265';
 
 const HOP_MS = 110;
 // Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.

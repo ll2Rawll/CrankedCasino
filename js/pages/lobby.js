@@ -1,14 +1,14 @@
 // Lobby: neon marquee sign, searchlights, a hand of holographic game cards,
 // the cashier (stack, ad rewards, promo ticket), recent action, accounts, FAQ.
 
-import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=cab8bd999107';
-import { icon } from '../icons.js?v=cab8bd999107';
-import { store, on } from '../store.js?v=cab8bd999107';
-import { engine, MODE } from '../engine.js?v=cab8bd999107';
-import { sfx } from '../sound.js?v=cab8bd999107';
-import { promoTicket } from '../ui.js?v=cab8bd999107';
-import { openAccount } from '../account.js?v=cab8bd999107';
-import { adButton, banner } from '../ads.js?v=cab8bd999107';
+import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=c5acb968c265';
+import { icon } from '../icons.js?v=c5acb968c265';
+import { store, on } from '../store.js?v=c5acb968c265';
+import { engine, MODE } from '../engine.js?v=c5acb968c265';
+import { sfx } from '../sound.js?v=c5acb968c265';
+import { promoTicket } from '../ui.js?v=c5acb968c265';
+import { openAccount } from '../account.js?v=c5acb968c265';
+import { adButton, banner } from '../ads.js?v=c5acb968c265';
 
 const GAMES = [
   { id: 'cases', name: 'Case Battles', rank: 'A', suit: '♦', red: true, line: 'Open cases. Pull rare items. Take the pot.', tags: ['3 rounds', 'Custom bets'] },

@@ -4,15 +4,15 @@
 // (sooner once every seat is in), players act in seat order with 20 s per decision, then the
 // dealer plays and every hand settles with the solo game's rules and payouts. This module polls
 // the table about once a second, deals the new cards it sees, and sends your bet and moves.
-import { h, fmt, esc, reducedMotion } from '../util.js?v=cab8bd999107';
-import { engine, errorText, MODE } from '../engine.js?v=cab8bd999107';
-import { store, BetError } from '../store.js?v=cab8bd999107';
-import { needAccount } from '../account.js?v=cab8bd999107';
-import { parseCard } from '../math.js?v=cab8bd999107';
-import { sfx, haptic } from '../sound.js?v=cab8bd999107';
-import { burstAt, PALETTES } from '../fx.js?v=cab8bd999107';
-import { tryBet, serverRefused, toast, betError, chipClass } from '../ui.js?v=cab8bd999107';
-import { cardEl, reveal, setFace } from './cards.js?v=cab8bd999107';
+import { h, fmt, esc, reducedMotion } from '../util.js?v=c5acb968c265';
+import { engine, errorText, MODE } from '../engine.js?v=c5acb968c265';
+import { store, BetError } from '../store.js?v=c5acb968c265';
+import { needAccount } from '../account.js?v=c5acb968c265';
+import { parseCard } from '../math.js?v=c5acb968c265';
+import { sfx, haptic } from '../sound.js?v=c5acb968c265';
+import { burstAt, PALETTES } from '../fx.js?v=c5acb968c265';
+import { tryBet, serverRefused, toast, betError, chipClass } from '../ui.js?v=c5acb968c265';
+import { cardEl, reveal, setFace } from './cards.js?v=c5acb968c265';
 
 const POLL_MS = 900;
 const LOBBY_MS = 4000;
@@ -71,6 +71,7 @@ export function blackjackTable({ stage, controls, bet }) {
   });
 
   let tableId = null, table = null, serverNow = Date.now(), at = performance.now();
+  let viewEpoch = 0, latestReply = -Infinity;
   let pollTimer = 0, lobbyTimer = 0, clockTimer = 0, visible = false, destroyed = false, sending = false;
   let ticket = null; // { t, round } for the bet riding on this round
   let rendered = Array(5).fill(null); // per seat: { key, hands: [[card codes]] , els: [[card els]] }
@@ -329,6 +330,13 @@ export function blackjackTable({ stage, controls, bet }) {
   // ---------------------------------------------------------- server replies
   function apply(r) {
     if (!r?.ok || !r.table) return;
+    // Polls and actions can arrive out of order on a mobile connection.
+    if (r.table.id === tableId && r.server_now < latestReply) return;
+    latestReply = r.server_now;
+    if (r.table.me == null) {
+      store.sync(r);
+      return leftTable('Your seat closed while you were away. You can join again.');
+    }
     serverNow = r.server_now;
     at = performance.now();
     const t = r.table;
@@ -376,8 +384,9 @@ export function blackjackTable({ stage, controls, bet }) {
   async function poll() {
     clearTimeout(pollTimer);
     if (!tableId || destroyed || !visible) return;
-    const r = await engine.bjmState(tableId);
-    if (destroyed || !visible) return;
+    const id = tableId, epoch = viewEpoch;
+    const r = await engine.bjmState(id);
+    if (destroyed || !visible || epoch !== viewEpoch || id !== tableId) return;
     if (r?.ok) apply(r);
     else if (r?.error === 'table_missing') return leftTable('That table closed.');
     pollTimer = setTimeout(poll, document.hidden ? 4000 : POLL_MS);
@@ -403,6 +412,7 @@ export function blackjackTable({ stage, controls, bet }) {
     }
     const r = await engine.bjmLobby();
     if (destroyed || tableId || !visible) return;
+    if (r?.ok) store.sync(r); // a hand left in play may have paid out since leaving
     if (r?.ok && r.mine) return join(r.mine);
     const tables = r?.ok ? r.tables : [];
     lobbyEl.innerHTML = `<div class="bjt-lobby-head"><b>Shared tables</b><p>Up to five players, one dealer. Everyone plays their own hand.</p>
@@ -418,10 +428,14 @@ export function blackjackTable({ stage, controls, bet }) {
 
   async function join(id) {
     if (!needAccount() || sending) return;
+    const epoch = ++viewEpoch;
     sending = true;
     const r = await engine.bjmJoin(id || null);
     sending = false;
-    if (destroyed) return;
+    if (destroyed || !visible || epoch !== viewEpoch) {
+      if (r?.ok && r.table) engine.bjmLeave(r.table.id).then((left) => store.sync(left));
+      return;
+    }
     if (!r?.ok) {
       toast(errorText(r), { type: 'loss' });
       return lobby();
@@ -433,8 +447,12 @@ export function blackjackTable({ stage, controls, bet }) {
   }
 
   function leftTable(message) {
+    ++viewEpoch;
+    clearTimeout(pollTimer);
     tableId = null;
     table = null;
+    latestReply = -Infinity;
+    if (ticket) store.cancel(ticket.t);
     ticket = null;
     clearCards();
     dealerKey = '';
@@ -445,9 +463,19 @@ export function blackjackTable({ stage, controls, bet }) {
   async function leave() {
     if (!tableId || sending) return;
     const id = tableId;
+    const epoch = ++viewEpoch;
+    clearTimeout(pollTimer);
     sending = true;
+    if (visible) renderControls(table);
     const r = await engine.bjmLeave(id);
     sending = false;
+    if (destroyed || epoch !== viewEpoch) return;
+    if (!r?.ok) {
+      toast(errorText(r), { type: 'loss' });
+      if (visible) renderControls(table);
+      if (visible) poll();
+      return;
+    }
     store.sync(r);
     if (ticket && table?.phase === 'betting') {
       store.cancel(ticket.t);
@@ -499,7 +527,6 @@ export function blackjackTable({ stage, controls, bet }) {
       if (extra && ticket) ticket.t.amount -= extra;
       store.sync(r);
       if (r?.error !== 'auth' && r?.error !== 'not_your_turn') toast(errorText(r), { type: 'loss' });
-      if (r?.table) apply({ ...r, ok: true });
       return poll();
     }
     if (ticket) store.confirm(ticket.t, r, { debited: Number(r.table.seats[r.table.me]?.wagered) || ticket.t.amount });

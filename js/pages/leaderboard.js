@@ -1,11 +1,11 @@
 // Leaderboard: the biggest stacks on the casino, refreshed live.
 
-import { esc, fmt } from '../util.js?v=cab8bd999107';
-import { icon } from '../icons.js?v=cab8bd999107';
-import { store, on } from '../store.js?v=cab8bd999107';
-import { engine, MODE } from '../engine.js?v=cab8bd999107';
-import { openAccount } from '../account.js?v=cab8bd999107';
-import { banner } from '../ads.js?v=cab8bd999107';
+import { esc, fmt } from '../util.js?v=c5acb968c265';
+import { icon } from '../icons.js?v=c5acb968c265';
+import { store, on } from '../store.js?v=c5acb968c265';
+import { engine, MODE } from '../engine.js?v=c5acb968c265';
+import { openAccount } from '../account.js?v=c5acb968c265';
+import { banner } from '../ads.js?v=c5acb968c265';
 
 const POLL_MS = 10000;
 const initial = (name, cls = '') => `<span class="ph initial-ph ${cls}">${esc((name || '?').slice(0, 1).toUpperCase())}</span>`;

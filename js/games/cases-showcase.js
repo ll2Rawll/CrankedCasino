@@ -1,8 +1,8 @@
-import { itemsForCase } from './cases-data.js?v=cab8bd999107';
-import { reducedMotion } from '../util.js?v=cab8bd999107';
-import { soundOn, setSound } from '../sound.js?v=cab8bd999107';
+import { itemsForCase } from './cases-data.js?v=c5acb968c265';
+import { reducedMotion } from '../util.js?v=c5acb968c265';
+import { soundOn, setSound } from '../sound.js?v=c5acb968c265';
 
-import { caseOpeningSound, previewItemSound } from './cases-audio.js?v=cab8bd999107';
+import { caseOpeningSound, previewItemSound } from './cases-audio.js?v=c5acb968c265';
 
 export const caseEffectMarkup = () => `<div class="case-ritual" aria-hidden="true"><b></b><b></b><b></b>${Array.from({length:12},(_,i)=>`<i style="--n:${i};--dx:${Math.cos(i*Math.PI/6)*90}px;--dy:${Math.sin(i*Math.PI/6)*65}px"></i>`).join('')}</div>`;
 

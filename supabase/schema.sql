@@ -2345,7 +2345,8 @@ language plpgsql volatile security definer set search_path = '' as $$
 declare v_pid uuid := cc.auth(p_token); v_list jsonb; v_mine uuid; v_id uuid; v_p cc.players;
 begin
   if v_pid is null then return cc.err('auth'); end if;
-  for v_id in select id from cc.bjm_tables order by created_at limit 30 loop
+  -- All table locks use the same order as a player switching tables.
+  for v_id in select id from cc.bjm_tables order by id loop
     perform cc.bjm_tick(v_id);
   end loop;
   delete from cc.bjm_tables t where not exists (select 1 from cc.bjm_seats where table_id = t.id) and t.created_at < clock_timestamp() - interval '1 minute';
@@ -2353,7 +2354,8 @@ begin
     'players', (select count(*) from cc.bjm_seats where table_id = t.id),
     'names', (select coalesce(jsonb_agg(p.username order by s.seat), '[]') from cc.bjm_seats s join cc.players p on p.id = s.player_id where s.table_id = t.id))
     order by t.created_at) into v_list from cc.bjm_tables t;
-  select table_id into v_mine from cc.bjm_seats where player_id = v_pid;
+  -- A departing hand still settles, but the lobby must not auto-rejoin it.
+  select table_id into v_mine from cc.bjm_seats where player_id = v_pid and not leaving;
   select * into v_p from cc.players where id = v_pid;
   return jsonb_build_object('ok', true, 'tables', coalesce(v_list, '[]'), 'mine', v_mine, 'balance', v_p.balance, 'seq', v_p.seq,
     'server_now', floor(extract(epoch from clock_timestamp()) * 1000));
@@ -2366,7 +2368,14 @@ declare v_pid uuid := cc.auth(p_token); s cc.bjm_seats; v_tid uuid; v_seat integ
   v_names text[] := array['Velvet', 'Midnight', 'Neon', 'Ace High', 'Gold Rush', 'Jade', 'Ruby', 'Lucky Seven'];
 begin
   if v_pid is null then return cc.err('auth'); end if;
+  -- Joining from two tabs must reserve one seat, not race the unique constraint.
+  perform pg_advisory_xact_lock(hashtextextended('cc:bjm-seat:' || v_pid::text, 0));
   select * into s from cc.bjm_seats where player_id = v_pid;
+  if found then
+    -- Always lock tables before seats; lock both in order when switching.
+    perform 1 from cc.bjm_tables where id = s.table_id or id = p_table order by id for update;
+    select * into s from cc.bjm_seats where player_id = v_pid;
+  end if;
   if found then
     if p_table is null or s.table_id = p_table then
       update cc.bjm_seats set seen_at = clock_timestamp(), leaving = false where player_id = v_pid;
@@ -2404,6 +2413,8 @@ language plpgsql volatile security definer set search_path = '' as $$
 declare v_pid uuid := cc.auth(p_token); t cc.bjm_tables;
 begin
   if v_pid is null then return cc.err('auth'); end if;
+  perform 1 from cc.bjm_tables where id = p_table for update;
+  if not found then return cc.err('table_missing'); end if;
   update cc.bjm_seats set seen_at = clock_timestamp() where player_id = v_pid and table_id = p_table;
   t := cc.bjm_tick(p_table);
   if t.id is null then return cc.err('table_missing'); end if;
@@ -2415,6 +2426,8 @@ language plpgsql volatile security definer set search_path = '' as $$
 declare v_pid uuid := cc.auth(p_token); t cc.bjm_tables; s cc.bjm_seats; v_bal numeric;
 begin
   if v_pid is null then return cc.err('auth'); end if;
+  perform 1 from cc.bjm_tables where id = p_table for update;
+  if not found then return cc.err('table_missing'); end if;
   update cc.bjm_seats set seen_at = clock_timestamp() where player_id = v_pid and table_id = p_table;
   t := cc.bjm_tick(p_table);
   if t.id is null then return cc.err('table_missing'); end if;
@@ -2444,6 +2457,8 @@ declare
   v_bal numeric; v_c text; v_c2 text; v_aces boolean; v_path text[];
 begin
   if v_pid is null then return cc.err('auth'); end if;
+  perform 1 from cc.bjm_tables where id = p_table for update;
+  if not found then return cc.err('table_missing'); end if;
   update cc.bjm_seats set seen_at = clock_timestamp() where player_id = v_pid and table_id = p_table;
   t := cc.bjm_tick(p_table);
   if t.id is null then return cc.err('table_missing'); end if;
@@ -2498,6 +2513,7 @@ language plpgsql volatile security definer set search_path = '' as $$
 declare v_pid uuid := cc.auth(p_token); t cc.bjm_tables; s cc.bjm_seats; v_p cc.players;
 begin
   if v_pid is null then return cc.err('auth'); end if;
+  perform pg_advisory_xact_lock(hashtextextended('cc:bjm-seat:' || v_pid::text, 0));
   t := cc.bjm_tick(p_table);
   select * into s from cc.bjm_seats where table_id = p_table and player_id = v_pid;
   if found then

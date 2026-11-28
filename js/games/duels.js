@@ -7,12 +7,12 @@
 //
 // duelPanel() is the list beside the game; the game asks it to start (post/accept) and hands it
 // the finished run. It never touches the game's canvas.
-import { engine, errorText, MODE } from '../engine.js?v=cab8bd999107';
-import { store } from '../store.js?v=cab8bd999107';
-import { tryBet, serverRefused, toast } from '../ui.js?v=cab8bd999107';
-import { needAccount } from '../account.js?v=cab8bd999107';
-import { esc, fmt } from '../util.js?v=cab8bd999107';
-import { sfx } from '../sound.js?v=cab8bd999107';
+import { engine, errorText, MODE } from '../engine.js?v=c5acb968c265';
+import { store } from '../store.js?v=c5acb968c265';
+import { tryBet, serverRefused, toast } from '../ui.js?v=c5acb968c265';
+import { needAccount } from '../account.js?v=c5acb968c265';
+import { esc, fmt } from '../util.js?v=c5acb968c265';
+import { sfx } from '../sound.js?v=c5acb968c265';
 
 const POLL_MS = 9000;
 const ago = (ms) => {
