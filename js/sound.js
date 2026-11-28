@@ -1,6 +1,6 @@
 // Tiny Web Audio synth. Every sound is generated on the fly, so there are no audio files.
 
-import { storage } from './util.js?v=e109ecc3244d';
+import { storage } from './util.js?v=2ed58281572d';
 
 let ctx = null;
 let master = null;

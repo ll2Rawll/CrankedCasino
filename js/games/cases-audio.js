@@ -1,5 +1,5 @@
 // Short, original sound identities. Shared master volume, gesture unlock and mute.
-import { tone, noise } from '../sound.js?v=e109ecc3244d';
+import { tone, noise } from '../sound.js?v=2ed58281572d';
 const bell = (freq, delay=0, gain=.07, dur=.55) => {
   tone({freq,delay,gain,dur,type:'sine',attack:.003});
   tone({freq:freq*2.76,delay,gain:gain*.18,dur:dur*.45,type:'sine'});
@@ -57,3 +57,79 @@ export function caseVictorySound() {
   notes(261.63,[0,7,12,16,19],.18,'triangle',.11,.055);
   [523.25,659.25,783.99].forEach((freq,i)=>bell(freq,.83+i*.055,.05,.95));
 }
+
+// Arena cues: the battle's announcer, tension and payoff layers. Original synth sketches
+// built from the shared tone/noise voices, so they follow the master volume and mute.
+const semi = (base, steps) => base * 2 ** (steps / 12);
+const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+export const caseCue = {
+  count(n) {
+    const freq = n <= 1 ? 880 : n === 2 ? 740 : 660;
+    tone({freq,dur:.16,gain:.07,type:'triangle'});
+    tone({freq:freq*2,dur:.09,gain:.022,delay:.012});
+    tone({freq:120,slideTo:62,dur:.2,gain:.11});
+  },
+  round(final) {
+    sweep(280,3600,.48,0,.06);
+    tone({freq:final?73.42:98,slideTo:final?36.7:49,dur:.75,gain:.17});
+    [0,7,12,final?15:16].forEach((step,i)=>tone({freq:semi(final?220:261.63,step),dur:.5,gain:.042,type:'triangle',delay:.04+i*.014}));
+    if (final) { bell(880,.1,.045,1.1); bell(1318.5,.22,.03,.9); }
+  },
+  // Three rising swells across the spin, the last one braking into the stop.
+  riser() {
+    [[0,1.1,240,620,.018],[1.1,1.1,520,1300,.026],[2.2,1.25,1100,3600,.04]].forEach(([delay,dur,freq,to,gain])=>noise({freq,to,dur,gain,delay,type:'bandpass',q:1.8,attack:dur*.9}));
+    tone({freq:110,slideTo:233,dur:3.4,gain:.022,type:'triangle',attack:3.1});
+  },
+  heartbeat(delay=0) {
+    tone({freq:72,slideTo:42,dur:.17,gain:.22,delay});
+    tone({freq:66,slideTo:40,dur:.22,gain:.16,delay:delay+.19});
+  },
+  stinger(tier, delay=0) {
+    if (tier === 0) { tone({freq:660,dur:.12,gain:.03,type:'triangle',delay}); return; }
+    if (tier === 1) {
+      [0,4,7,12].forEach((step,i)=>tone({freq:semi(784,step),dur:.24,gain:.03,delay:delay+i*.04}));
+      noise({freq:6000,dur:.35,gain:.022,type:'highpass',delay});
+      return;
+    }
+    if (tier <= 3) {
+      tone({freq:82,slideTo:41,dur:.45,gain:.17,delay});
+      [0,4,7,11,14].forEach((step,i)=>tone({freq:semi(523.25,step),dur:.42,gain:.034,type:'triangle',delay:delay+.03+i*.045}));
+      noise({freq:5000,to:9000,dur:.5,gain:.03,type:'highpass',delay:delay+.05});
+      return;
+    }
+    if (tier === 4) {
+      tone({freq:65.4,slideTo:32.7,dur:.95,gain:.22,delay});
+      [0,4,7,12].forEach(step=>{ tone({freq:semi(261.63,step),dur:1.15,gain:.02,type:'sawtooth',attack:.02,delay:delay+.02}); tone({freq:semi(261.63,step),dur:1.25,gain:.04,type:'triangle',delay:delay+.02}); });
+      noise({freq:7000,dur:1.2,gain:.05,type:'highpass',delay});
+      [0,7,12,16,19,24].forEach((step,i)=>bell(semi(1046.5,step),delay+.25+i*.06,.024,.5));
+      return;
+    }
+    tone({freq:110,slideTo:27.5,dur:1.4,gain:.24,delay});
+    sweep(5200,300,.9,delay,.06);
+    [0,7,12,16,19].forEach(step=>tone({freq:semi(196,step),dur:1.8,gain:.03,attack:.12,delay:delay+.05}));
+    [0,4,7,12,16,19,24,28].forEach((step,i)=>bell(semi(1318.5,step),delay+.2+i*.05,.02,.45));
+  },
+  orb(i) { tone({freq:semi(1046.5,PENTA[i%PENTA.length]),dur:.07,gain:.022}); },
+  steal() {
+    sweep(3200,380,.42,0,.07);
+    tone({freq:1500,slideTo:190,dur:.3,gain:.026,type:'square'});
+    [0,5,10].forEach((step,i)=>tone({freq:semi(587.33,step),dur:.2,gain:.04,type:'triangle',delay:.18+i*.06}));
+  },
+  burst() {
+    noise({freq:2400,to:300,dur:.3,gain:.07});
+    tone({freq:160,slideTo:60,dur:.3,gain:.14});
+    bell(1174.66,.05,.03,.6);
+  },
+  victory() {
+    tone({freq:98,slideTo:49,dur:.8,gain:.18});
+    [0,4,7,12].forEach((step,i)=>{ tone({freq:semi(392,step),dur:.3,gain:.05,type:'triangle',delay:i*.12}); tone({freq:semi(392,step),dur:.24,gain:.016,type:'sawtooth',delay:i*.12}); });
+    [0,4,7,12].forEach(step=>tone({freq:semi(523.25,step),dur:1.4,gain:.034,type:'triangle',delay:.5}));
+    noise({freq:8000,dur:1.2,gain:.04,type:'highpass',delay:.5});
+    [0,7,12].forEach((step,i)=>bell(semi(1567.98,step),.62+i*.08,.025,.7));
+  },
+  defeat() {
+    [0,-3,-7,-12].forEach((step,i)=>tone({freq:semi(392,step),dur:.42,gain:.05,type:'triangle',delay:i*.17}));
+    tone({freq:98,slideTo:46,dur:.9,gain:.12,delay:.55});
+  },
+  draw() { bell(659.25,0,.05,.7); bell(659.25,.22,.04,.8); tone({freq:329.63,dur:.9,gain:.04,type:'triangle',delay:.1}); },
+};

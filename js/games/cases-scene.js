@@ -1,15 +1,18 @@
-import { caseVictory } from './cases-victory.js?v=e109ecc3244d';
-import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem, caseEntries } from './cases-data.js?v=e109ecc3244d';
-import { random } from '../rng.js?v=e109ecc3244d';
-import { esc, reducedMotion, fmt } from '../util.js?v=e109ecc3244d';
-import { sfx, soundOn, setSound, haptic } from '../sound.js?v=e109ecc3244d';
+import { caseVictory } from './cases-victory.js?v=2ed58281572d';
+import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem, caseEntries } from './cases-data.js?v=2ed58281572d';
+import { random } from '../rng.js?v=2ed58281572d';
+import { esc, reducedMotion, fmt } from '../util.js?v=2ed58281572d';
+import { sfx, soundOn, setSound, haptic } from '../sound.js?v=2ed58281572d';
 
-import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=e109ecc3244d';
+import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=2ed58281572d';
 
-import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=e109ecc3244d';
+import { caseOpeningSound, itemRevealSound, previewItemSound, caseCue } from './cases-audio.js?v=2ed58281572d';
+import { arenaFx, GOLD } from './cases-fx.js?v=2ed58281572d';
 
 const art = (name) => `assets/cases/${name}.webp?v=2`;
 const STOP = 25;
+const COUNT_MS = 820;
+const TIER_LABEL = { Special: '✦ SPECIAL DROP', Legendary: '✦ LEGENDARY', Epic: '✦ EPIC' };
 const turntables = new Set();
 const turnFrame = (el, frame) => { el.style.backgroundPosition = `${frame % 6 * 20}% ${Math.floor(frame / 6) * 100 / 3}%`; };
 const warmJobs = new Map();
@@ -50,7 +53,10 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     <div class="cb-finale" hidden><span class="cb-finale-crown" aria-hidden="true">♛</span><div><span class="cb-finale-kicker"></span><strong></strong><p></p></div><div class="cb-confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--n:${i};--drift:${(i % 5 - 2) * 32}px"></i>`).join('')}</div></div>
     <div class="cb-footer"><div class="cb-verdict" role="status">${initial.practice ? 'Practice · no chips wagered' : `${fmt(initial.pot ?? 100)} chip pot · highest score wins`}</div><div class="cb-actions"><button class="cb-sound" type="button" aria-pressed="${soundOn()}">Sound ${soundOn() ? 'on' : 'off'}</button><button class="cb-start" type="button">Back to battles</button></div></div>`;
   container.replaceChildren(root);
+  const fx = arenaFx(root);
+  const battleEl = root.querySelector('.cb-battle');
   const players = [...root.querySelectorAll('.cb-player')];
+  const windows = players.map((player) => player.querySelector('.cb-window'));
   const tracks = players.map((player) => player.querySelector('.cb-track'));
   const totals = players.map((player) => player.querySelector('.cb-total'));
   const verdict = root.querySelector('.cb-verdict');
@@ -62,7 +68,9 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   const momentum = root.querySelector('.cb-momentum');
   const balance = root.querySelector('.cb-balance');
   const finale = root.querySelector('.cb-finale');
-  let closeVictory = null;
+  battleEl.append(finale);
+  let closeVictory = null, tensionAt = -1, geo = null;
+  const leaders = [];
   let battle = initial, serverTime = Date.now(), receivedAt = performance.now(), hasClock = false;
   let round = -1, phaseName = '', cards = [], orbitRadii = [];
   const trackPositions = [];
@@ -103,6 +111,9 @@ export function caseScene(container, initial, { onBack, onFinish }) {
       orbitRadii[side] = Math.ceil(track.parentElement.clientWidth / (2 * (width + 6))) + 1;
     });
     orbitDirty = true;
+    const box = fx.at(battleEl, 0, 0);
+    geo = { box, slam: { x: box.x + box.w / 2, y: box.y + box.h * .3 }, caseArt: fx.at(caseArt, .5, .55),
+      windows: windows.map((win) => fx.at(win, .5, .47)), totals: totals.map((total) => fx.at(total, .75, .4)), bar: fx.at(balance, 0, .5) };
     positionTracks(currentTravel, reducedMotion());
   }
 
@@ -154,6 +165,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     currentTravel = 0;
     cards = [];
     root.classList.remove('cb-opening', 'cb-unlocking');
+    fx.tension(false);
+    tensionAt = -1;
     const type = caseById(battle.cases[index]);
     root.style.setProperty('--case-color', type.color);
     root.style.setProperty('--case-accent', type.color);
@@ -164,7 +177,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     caseArt.src = caseCover(type.id);
     root.classList.remove('cb-filming');
     players.forEach((player, side) => {
-      player.classList.remove('cb-rare', 'cb-hit', 'cb-winner', 'cb-show', 'cb-premium');
+      player.classList.remove('cb-rare', 'cb-hit', 'cb-winner', 'cb-show', 'cb-premium', 'cb-tell');
       player.querySelector('.cb-drop-badge').textContent = '';
       player.querySelector('.cb-score-flight').textContent = '';
       const track = tracks[side];
@@ -207,28 +220,39 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     if (next === 'unlock') {
       root.classList.add('cb-unlocking');
       status.textContent = 'Unlocking case';
-      if (!quiet) caseOpeningSound(battle.cases[round]);
+      if (!quiet) {
+        caseOpeningSound(battle.cases[round]);
+        caseCue.round(round === 2);
+        fx.slam(geo.slam.x, geo.slam.y, round === 2 ? 'FINAL ROUND' : `ROUND ${round + 1}`, { kind: 'round', color: caseById(battle.cases[round]).color, life: 900 });
+        openCaseFx();
+      }
     }
     if (next === 'spin') {
       root.classList.add('cb-opening');
       status.textContent = 'In orbit';
+      if (!quiet) caseCue.riser();
       players.forEach((player) => { player.querySelector('.cb-result-name').textContent = 'Opening…'; });
     }
     if (next === 'land') {
       status.textContent = 'Pull locked';
       cards.forEach((card) => card.classList.add('cb-landed'));
       players.forEach((player) => player.classList.add('cb-hit'));
-      if (!quiet) { sfx.reelStop(); haptic(14); }
+      if (!quiet) {
+        sfx.reelStop();
+        haptic(14);
+        geo.windows.forEach((p) => fx.ring(p.x, p.y, { color: '#fff3dc', size: 120, life: 420 }));
+      }
     }
     if (next === 'reveal') {
       root.classList.remove('cb-opening');
+      fx.tension(false);
       status.textContent = 'Items revealed';
       players.forEach((player, side) => {
         const item = caseItem(battle.cases[round], battle.pulls[round][side]);
         player.style.setProperty('--drop-color', item.color);
         player.classList.add('cb-show');
         if (item.value >= 48) player.classList.add('cb-premium');
-        player.querySelector('.cb-drop-badge').textContent = item.tier === 'Special' ? '✦ SPECIAL DROP' : item.tier === 'Legendary' ? '✦ LEGENDARY' : '';
+        player.querySelector('.cb-drop-badge').textContent = TIER_LABEL[item.tier] || '';
         player.querySelector('.cb-score-flight').textContent = `+${item.value}`;
         cards[side].classList.add('cb-landed', 'cb-revealed');
         cards[side].classList.remove('cb-sealed');
@@ -247,13 +271,60 @@ export function caseScene(container, initial, { onBack, onFinish }) {
         }
       });
       if (!quiet) {
-        battle.pulls[round].forEach((index, side) => itemRevealSound(caseItem(battle.cases[round], index).id, side * .16));
+        battle.pulls[round].forEach((index, side) => { itemRevealSound(caseItem(battle.cases[round], index).id, side * .16); caseCue.stinger(index, side * .16); });
         if (battle.pulls[round].includes(5)) haptic([15, 30, 25]);
+        revealFx();
       }
     }
   }
 
-  function history(visible) {
+  // The case rattles, gathers light and bursts open as its lid lifts.
+  function openCaseFx() {
+    const type = caseById(battle.cases[round]);
+    const p = geo.caseArt;
+    [caseArt, caseFilm].forEach((el) => fx.shake(el, 3.5, 420));
+    fx.later(0, () => fx.implode(p.x, p.y, { color: type.color, count: 16, radius: 140 }));
+    fx.later(430, () => {
+      caseCue.burst();
+      fx.flare(p.x, p.y, { color: type.color, size: 300, peak: .9 });
+      fx.ring(p.x, p.y, { color: type.color, size: 260, thick: true });
+      fx.burst(p.x, p.y, { colors: [type.color, '#ffffff', GOLD], count: 26, speed: 260, kinds: ['spark', 'ember', 'shard'], life: 900 });
+    });
+  }
+  // Rare pulls tip their hand a moment before the stop: the chamber glows the drop's colour,
+  // the arena dims and a heartbeat thumps.
+  function tensionFx(time) {
+    const pulls = battle.pulls[round];
+    if (!pulls || tensionAt === round) return;
+    const top = Math.max(...pulls);
+    if (top < 2 || time < (top >= 4 ? 3250 : 3700)) return;
+    tensionAt = round;
+    players.forEach((player, side) => {
+      if (pulls[side] < 2) return;
+      player.style.setProperty('--tell', caseItem(battle.cases[round], pulls[side]).color);
+      player.classList.add('cb-tell');
+    });
+    if (top >= 4) { fx.tension(true); caseCue.heartbeat(); caseCue.heartbeat(.5); haptic(10); }
+  }
+  // The drop explodes from its chamber, then its points fly into the score as orbs. Each
+  // player's burst lands with their reveal sound (160 ms apart) in its own task, so the
+  // reveal frame itself only carries the DOM changes.
+  function revealFx() {
+    const id = battle.cases[round];
+    battle.pulls[round].forEach((index, side) => fx.later(side * 160, () => {
+      const item = caseItem(id, index), p = geo.windows[side], power = [0, 0, 3, 4, 7, 11][index];
+      fx.reveal(p, index, item.color);
+      if (power) fx.shake(battleEl, power, 460);
+      if (index === 5) fx.flash(item.color, { strength: .45 });
+      const n = Math.max(3, Math.min(14, Math.round(item.value / 14)));
+      fx.later(300, () => fx.orbs(p, geo.totals[side], { color: item.color, count: n, delay: 40, onEach: (i) => {
+        fx.pulse(totals[side]);
+        if (i % 2 === side) caseCue.orb(i);
+      } }));
+    }));
+  }
+
+  function history(visible, quiet) {
     if (visible === lastVisible) return;
     lastVisible = visible;
     const next = [0, 0];
@@ -274,13 +345,22 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     });
     countFrom = [...shownTotals];
     countTo = next;
-    countAt = performance.now();
+    countAt = performance.now() + (quiet ? 0 : 340);
     const nextLeader = next[0] === next[1] ? -1 : next[0] > next[1] ? 0 : 1;
     const changed = leader !== -1 && nextLeader !== -1 && leader !== nextLeader;
     if (visible >= 0) {
       momentum.textContent = nextLeader === -1 ? 'All square · tied battle' : `${changed ? 'Lead stolen! ' : ''}${battle.players[nextLeader].name} +${Math.abs(next[0] - next[1])} pts`;
       momentum.classList.toggle('cb-comeback', changed);
-      if (changed && !reducedMotion()) sfx.caseLead();
+      leaders[visible] = nextLeader;
+      // The final round's swing is announced by the result plaque instead.
+      if (changed && !quiet && visible < 2) fx.later(1150, () => {
+        caseCue.steal();
+        const color = getComputedStyle(players[nextLeader]).getPropertyValue('--ca-player').trim() || GOLD;
+        const { bar, slam } = geo, from = nextLeader === 0 ? bar.x + bar.w : bar.x;
+        fx.streak(from, bar.y, nextLeader === 0 ? bar.x : bar.x + bar.w, bar.y, { color });
+        fx.slam(slam.x, slam.y, 'LEAD STOLEN', { kind: 'steal', color, life: 1000 });
+        fx.shake(players[nextLeader].querySelector('.cb-total'), 4, 380);
+      });
     }
     leader = nextLeader;
     const ratio = next[0] + next[1] ? next[0] / (next[0] + next[1]) : .5;
@@ -313,10 +393,34 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     root.querySelector('.cb-start').textContent = 'Battle again';
     if (!battle.practice && (tied || winner === battle.seat)) sfx.cashout();
     inspector?.close();
-    closeVictory = caseVictory(battle, { clock: serverTime + performance.now() - receivedAt, onClose: () => {
+    const clock = serverTime + performance.now() - receivedAt;
+    closeVictory = caseVictory(battle, { clock, onClose: () => {
       root.querySelector('.cb-sound').textContent = `Sound ${soundOn() ? 'on' : 'off'}`;
       root.querySelector('.cb-sound').setAttribute('aria-pressed', String(soundOn()));
     } });
+    const won = !tied && winner === battle.seat, lost = !tied && battle.seat >= 0 && winner !== battle.seat;
+    const comeback = !tied && leaders[1] != null && leaders[1] !== winner;
+    finale.querySelector('.cb-finale-kicker').textContent = tied ? 'HONORS EVEN' : won ? (comeback ? 'COMEBACK VICTORY' : 'VICTORY') : lost ? 'DEFEAT' : comeback ? 'COMEBACK WIN' : 'BATTLE WINNER';
+    finale.querySelector('.cb-finale-crown').textContent = tied ? '✦' : '♛';
+    finale.classList.toggle('cb-finale-lost', lost);
+    if (!tied) players[1 - winner].classList.add('cb-defeated');
+    const fresh = clock - battle.started < CASE_ROUND_MS * 3 + 8000;
+    root.classList.toggle('cb-finale-live', fresh && !reducedMotion());
+    finale.style.top = `${(geo.windows[0].y - geo.box.y).toFixed(0)}px`;
+    if (fresh && !reducedMotion()) {
+      const color = tied ? '#d9d3e6' : getComputedStyle(players[winner]).getPropertyValue('--ca-player').trim() || GOLD;
+      finale.style.setProperty('--win-color', color);
+      if (!closeVictory) (tied ? caseCue.draw : lost ? caseCue.defeat : caseCue.victory)();
+      fx.later(420, () => {
+        const center = fx.at(finale);
+        fx.flare(center.x, center.y, { color, size: 460, peak: .7, life: 900 });
+        fx.ring(center.x, center.y, { color, size: 420, thick: true, life: 800 });
+        if (lost || tied) return;
+        const w = geo.windows[winner], { box } = geo;
+        fx.twinkle(w.x, w.y, { colors: [GOLD, color, '#ffffff'], count: 12, radius: 140, life: 1400 });
+        fx.cannons({ x: box.x + box.w * .03, y: box.y + box.h * .95 }, { x: box.x + box.w * .97, y: box.y + box.h * .95 }, [GOLD, color, '#ffffff', ...(battle.players[winner].bot ? [] : ['#ff8fc0', '#8ff0c8'])]);
+      });
+    } else finale.style.removeProperty('--win-color');
     onFinish?.();
   }
 
@@ -333,7 +437,13 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     if (elapsed < 0) {
       const countdown = Math.ceil(-elapsed / 1000);
       if (countdown !== lastCountdown) roundLabel.textContent = `Opening in ${countdown}`;
-      if (countdown !== lastCountdown) { lastCountdown = countdown; if (!reduce) sfx.click(); }
+      if (countdown !== lastCountdown) {
+        lastCountdown = countdown;
+        if (!reduce && countdown <= 3) {
+          caseCue.count(countdown);
+          fx.slam(geo.slam.x, geo.slam.y, String(countdown), { kind: 'count', color: caseById(battle.cases[0]).color, life: 900 });
+        }
+      }
       status.textContent = 'Ready to open';
     } else {
       const label = `Round ${index + 1} of 3`;
@@ -344,6 +454,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
       else setPhase('reveal', quiet);
     }
     if (!hadPull && time >= 4300) status.textContent = 'Waiting for connection';
+    if (!quiet && hadPull && phaseName === 'spin') tensionFx(time);
     const progress = Math.max(0, Math.min(1, (time - 160) / 540));
     const frame = reduce ? (progress === 1 ? 19 : 0) : Math.round(19 * progress * progress * (3 - 2 * progress));
     const atlas = openingArt.get(battle.cases[index]);
@@ -368,8 +479,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     positionTracks(travel, reduce);
     const tickIndex = Math.floor(travel * (STOP - 2));
     if (tickIndex !== lastTick && spin > 0 && spin < 1) { lastTick = tickIndex; if (!quiet) sfx.tick(tickIndex); }
-    history(hadPull && time >= 4750 ? index : index - 1);
-    const countProgress = reduce ? 1 : Math.min(1, (performance.now() - countAt) / 380);
+    history(hadPull && time >= 4750 ? index : index - 1, quiet);
+    const countProgress = reduce ? 1 : Math.max(0, Math.min(1, (performance.now() - countAt) / COUNT_MS));
     shownTotals = countTo.map((value, side) => Math.round(countFrom[side] + (value - countFrom[side]) * (1 - (1 - countProgress) ** 3)));
     totals.forEach((el, side) => { if (el.dataset.value !== String(shownTotals[side])) { el.dataset.value = shownTotals[side]; el.innerHTML = `${shownTotals[side]}<span> points</span>`; } });
     if (elapsed >= CASE_ROUND_MS * 3) {
@@ -425,6 +536,11 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   });
   warmCaseArt(initial.cases);
   prepare(0);
+  requestAnimationFrame(() => {
+    if (destroyed || !root.isConnected) return;
+    const top = root.getBoundingClientRect().top, margin = parseFloat(getComputedStyle(root).scrollMarginTop) || 0;
+    if (top < margin - 2 || top > innerHeight * .3) root.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  });
   return {
     update(next, clock) {
       if (JSON.stringify(next.pulls) !== JSON.stringify(battle.pulls)) lastVisible = -1;
@@ -436,6 +552,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     },
     destroy() {
       destroyed = true;
+      fx.destroy();
       closeVictory?.();
       inspector?.close();
       inspector?.remove();

@@ -5,16 +5,16 @@
 // The server holds the shoe and the dealer's hole card and plays the dealer's hand;
 // this page deals out the events it sends back, card by card.
 
-import { h, fmt, round2, sleep, reducedMotion, esc } from '../util.js?v=e109ecc3244d';
-import { icon } from '../icons.js?v=e109ecc3244d';
-import { store, BetError } from '../store.js?v=e109ecc3244d';
-import { engine, errorText } from '../engine.js?v=e109ecc3244d';
-import { needAccount } from '../account.js?v=e109ecc3244d';
-import { parseCard } from '../math.js?v=e109ecc3244d';
-import { sfx, haptic } from '../sound.js?v=e109ecc3244d';
-import { burstAt, coinRain, PALETTES, shake } from '../fx.js?v=e109ecc3244d';
-import { gameFrame, betInput, toast, betError, serverRefused, chipClass, chipLabel } from '../ui.js?v=e109ecc3244d';
-import { cardEl, reveal, setFace, handValue, isBlackjack } from './cards.js?v=e109ecc3244d';
+import { h, fmt, round2, sleep, reducedMotion, esc } from '../util.js?v=2ed58281572d';
+import { icon } from '../icons.js?v=2ed58281572d';
+import { store, BetError } from '../store.js?v=2ed58281572d';
+import { engine, errorText } from '../engine.js?v=2ed58281572d';
+import { needAccount } from '../account.js?v=2ed58281572d';
+import { parseCard } from '../math.js?v=2ed58281572d';
+import { sfx, haptic } from '../sound.js?v=2ed58281572d';
+import { burstAt, coinRain, PALETTES, shake } from '../fx.js?v=2ed58281572d';
+import { gameFrame, betInput, toast, betError, serverRefused, chipClass, chipLabel } from '../ui.js?v=2ed58281572d';
+import { cardEl, reveal, setFace, handValue, isBlackjack } from './cards.js?v=2ed58281572d';
 
 const HIDDEN = { r: 'A', s: 'spade' }; // placeholder face for the dealer's hole card (never shown)
 

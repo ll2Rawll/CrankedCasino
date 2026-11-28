@@ -1,12 +1,12 @@
 // Profile: account, lifetime stats, per-game breakdown, history, ad rewards, promo codes.
 
-import { esc, fmt, fmtMult, signed, timeAgo } from '../util.js?v=e109ecc3244d';
-import { icon } from '../icons.js?v=e109ecc3244d';
-import { store, on, GAMES } from '../store.js?v=e109ecc3244d';
-import { MODE } from '../engine.js?v=e109ecc3244d';
-import { confirmDialog, promoTicket } from '../ui.js?v=e109ecc3244d';
-import { openAccount, signOut } from '../account.js?v=e109ecc3244d';
-import { adButton } from '../ads.js?v=e109ecc3244d';
+import { esc, fmt, fmtMult, signed, timeAgo } from '../util.js?v=2ed58281572d';
+import { icon } from '../icons.js?v=2ed58281572d';
+import { store, on, GAMES } from '../store.js?v=2ed58281572d';
+import { MODE } from '../engine.js?v=2ed58281572d';
+import { confirmDialog, promoTicket } from '../ui.js?v=2ed58281572d';
+import { openAccount, signOut } from '../account.js?v=2ed58281572d';
+import { adButton } from '../ads.js?v=2ed58281572d';
 
 const TITLES = { blackjack: 'Blackjack', roulette: 'Roulette', mines: 'Mines', plinko: 'Plinko', slots: 'Slots', crash: 'Crash', rooster: 'Road Rooster', flight: 'Night Flight', cases: 'Case Battles' };
 const since = (t) => (t ? new Date(t).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '');

@@ -1,7 +1,7 @@
-import { esc, fmt, reducedMotion } from '../util.js?v=e109ecc3244d';
-import { soundOn, setSound, haptic } from '../sound.js?v=e109ecc3244d';
-import { caseItem, CASE_ROUND_MS } from './cases-data.js?v=e109ecc3244d';
-import { caseVictorySound } from './cases-audio.js?v=e109ecc3244d';
+import { esc, fmt, reducedMotion } from '../util.js?v=2ed58281572d';
+import { soundOn, setSound, haptic } from '../sound.js?v=2ed58281572d';
+import { caseItem, CASE_ROUND_MS } from './cases-data.js?v=2ed58281572d';
+import { caseVictorySound } from './cases-audio.js?v=2ed58281572d';
 
 // A decisive score victory, independent of wager size or which player is watching.
 export function dominantWin(scores) {

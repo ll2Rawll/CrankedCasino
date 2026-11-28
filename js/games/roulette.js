@@ -3,15 +3,15 @@
 // The server draws the winning pocket; the ball's flight is then solved so it
 // rolls, drops, rattles and comes to rest in exactly that pocket.
 
-import { h, fmt, round2, storage, reducedMotion, sleep, clamp, esc } from '../util.js?v=e109ecc3244d';
-import { icon } from '../icons.js?v=e109ecc3244d';
-import { store, BetError } from '../store.js?v=e109ecc3244d';
-import { engine } from '../engine.js?v=e109ecc3244d';
-import { needAccount } from '../account.js?v=e109ecc3244d';
-import { randInt } from '../rng.js?v=e109ecc3244d';
-import { sfx, roll, haptic } from '../sound.js?v=e109ecc3244d';
-import { burstAt, coinRain, floatFrom, PALETTES } from '../fx.js?v=e109ecc3244d';
-import { gameFrame, toast, betError, serverRefused, CHIP_VALUES, chipClass, chipLabel } from '../ui.js?v=e109ecc3244d';
+import { h, fmt, round2, storage, reducedMotion, sleep, clamp, esc } from '../util.js?v=2ed58281572d';
+import { icon } from '../icons.js?v=2ed58281572d';
+import { store, BetError } from '../store.js?v=2ed58281572d';
+import { engine } from '../engine.js?v=2ed58281572d';
+import { needAccount } from '../account.js?v=2ed58281572d';
+import { randInt } from '../rng.js?v=2ed58281572d';
+import { sfx, roll, haptic } from '../sound.js?v=2ed58281572d';
+import { burstAt, coinRain, floatFrom, PALETTES } from '../fx.js?v=2ed58281572d';
+import { gameFrame, toast, betError, serverRefused, CHIP_VALUES, chipClass, chipLabel } from '../ui.js?v=2ed58281572d';
 
 export const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
