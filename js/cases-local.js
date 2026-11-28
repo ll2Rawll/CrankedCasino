@@ -1,5 +1,5 @@
-import { CASE_ENTRY, CASE_ROUND_MS, CASE_COUNTDOWN_MS, validCases, drawCase, caseTotals, casePayout, caseEntries } from './games/cases-data.js?v=c5acb968c265';
-import { random } from './rng.js?v=c5acb968c265';
+import { CASE_ENTRY, CASE_ROUND_MS, CASE_COUNTDOWN_MS, validCases, drawCase, caseTotals, casePayout, caseEntries } from './games/cases-data.js?v=d846a0b4c715';
+import { random } from './rng.js?v=d846a0b4c715';
 
 // Uses the casino's existing transaction, balance, and history functions.
 export function caseApi({ move, record, money, err, validBet }) {

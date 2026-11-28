@@ -1,4 +1,4 @@
-import { caseApi } from './cases-local.js?v=c5acb968c265';
+import { caseApi } from './cases-local.js?v=d846a0b4c715';
 // On-device casino server.
 //
 // Used only when js/config.js has no Supabase project. It answers the same calls as
@@ -6,16 +6,16 @@ import { caseApi } from './cases-local.js?v=c5acb968c265';
 // accounts live in this browser's localStorage. Connect Supabase for accounts that
 // follow players to any browser and can't be reset by clearing site data.
 
-import { random, randInt, sample, weightedPick } from './rng.js?v=c5acb968c265';
-import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=c5acb968c265';
-import { scoreReplay } from './games/rooster-course.js?v=c5acb968c265';
-import { flightReplay, FPS } from './games/flight-course.js?v=c5acb968c265';
+import { random, randInt, sample, weightedPick } from './rng.js?v=d846a0b4c715';
+import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=d846a0b4c715';
+import { scoreReplay } from './games/rooster-course.js?v=d846a0b4c715';
+import { flightReplay, FPS } from './games/flight-course.js?v=d846a0b4c715';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const err = (error, extra = {}) => ({ ok: false, error, ...extra });
 const validBet = (b) => typeof b === 'number' && Number.isFinite(b) && b >= 0.01 && b <= 1e12 && Math.abs(r2(b) - b) < 1e-9;
 
-const SETTINGS = { start_balance: 1000, ad_reward: 250, ad_cooldown_seconds: 120, ad_daily_cap: 20, login_attempts: 8, lockout_minutes: 10 };
+const SETTINGS = { start_balance: 1000, ad_reward: 1000, ad_cooldown_seconds: 120, ad_daily_cap: 20, login_attempts: 8, lockout_minutes: 10 };
 const PROMOS = { MAXWIN: 1000 };
 
 // ------------------------------------------------------------------ storage

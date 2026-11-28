@@ -12,8 +12,8 @@
 //
 // Shown balance = server balance − chips the server hasn't taken yet − wins not yet revealed.
 
-import { round2 } from './util.js?v=c5acb968c265';
-import { engine } from './engine.js?v=c5acb968c265';
+import { round2 } from './util.js?v=d846a0b4c715';
+import { engine } from './engine.js?v=d846a0b4c715';
 
 export const GAMES = ['blackjack', 'roulette', 'slots', 'crash', 'plinko', 'mines', 'rooster', 'flight', 'cases'];
 const HISTORY_MAX = 40;
@@ -274,7 +274,7 @@ export const store = {
   /** Seconds until the next rewarded ad, and how many are left today. */
   adStatus() {
     const a = state.ads;
-    if (!a) return { reward: 250, left: 1, wait: 0 };
+    if (!a) return { reward: 1000, left: 1, wait: 0 };
     const wait = Math.max(0, Math.ceil(a.wait - (Date.now() - (a.at || 0)) / 1000));
     return { reward: a.reward, left: a.left, wait, cooldown: a.cooldown };
   },

@@ -1,14 +1,14 @@
 // Lobby: neon marquee sign, searchlights, a hand of holographic game cards,
 // the cashier (stack, ad rewards, promo ticket), recent action, accounts, FAQ.
 
-import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=c5acb968c265';
-import { icon } from '../icons.js?v=c5acb968c265';
-import { store, on } from '../store.js?v=c5acb968c265';
-import { engine, MODE } from '../engine.js?v=c5acb968c265';
-import { sfx } from '../sound.js?v=c5acb968c265';
-import { promoTicket } from '../ui.js?v=c5acb968c265';
-import { openAccount } from '../account.js?v=c5acb968c265';
-import { adButton, banner } from '../ads.js?v=c5acb968c265';
+import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=d846a0b4c715';
+import { icon } from '../icons.js?v=d846a0b4c715';
+import { store, on } from '../store.js?v=d846a0b4c715';
+import { engine, MODE } from '../engine.js?v=d846a0b4c715';
+import { sfx } from '../sound.js?v=d846a0b4c715';
+import { promoTicket } from '../ui.js?v=d846a0b4c715';
+import { openAccount } from '../account.js?v=d846a0b4c715';
+import { adButton, banner } from '../ads.js?v=d846a0b4c715';
 
 const GAMES = [
   { id: 'cases', name: 'Case Battles', rank: 'A', suit: '♦', red: true, line: 'Open cases. Pull rare items. Take the pot.', tags: ['3 rounds', 'Custom bets'] },
@@ -22,11 +22,11 @@ const GAMES = [
   { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Bet on the row you reach.', tags: ['Free score run', 'Bet runs up to 9×'] },
 ];
 
-const TICKER = ['Case Battles: choose your bet, win the combined pot', 'New: Night Flight, tap to fly through the harbor', 'Road Rooster, reach row 200 for 9×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
+const TICKER = ['Case Battles: choose your bet, win the combined pot', 'New: Night Flight, tap to fly through the harbor', 'Road Rooster, reach row 200 for 9×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +1,000 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
 
 const FAQ = [
   ['Is this real money?', 'No. Chips are pretend and have no cash value. You can’t buy them, win anything real, or withdraw. New players start with 1,000 chips.'],
-  ['How do I get more chips?', 'Win them, or tap your stack and watch a short ad for +250 chips (a few minutes apart, with a daily limit). There’s also a one-time promo code bonus. There are no daily handouts or refills.'],
+  ['How do I get more chips?', 'Win them, or tap your stack and watch a short ad for +1,000 chips (a few minutes apart, with a daily limit). There’s also a one-time promo code bonus. There are no daily handouts or refills.'],
   ['Why do I need a username?', 'Your username and password are your account. Your stack, stats and history are saved to it, so you can log in on any phone or computer and pick up where you left off. Clearing your browser history only logs you out; it can’t reset or refill your chips.'],
   ['How do promo codes work?', 'Tap the ticket at the top of the page (or open the cashier) and type the code. Each code works once per account, ever, and the chips land in your stack instantly.'],
   ['How are results decided?', 'The casino server decides every card, spin, bounce and crash with a cryptographic random number generator, then your screen animates the result. Blackjack uses a real six-deck shoe, Roulette is a single-zero European wheel, and every game’s house edge is listed on its table.'],

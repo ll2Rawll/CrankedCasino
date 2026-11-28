@@ -23,7 +23,7 @@ The server decides every card, spin, bounce and crash with a cryptographic rando
 **Also included**
 
 - **Accounts:** a username and password. They are remembered on each device, so players only log in again on a new browser.
-- **Cashier:** watch an ad for +250 chips (two minutes apart, 20 a day), and **promo codes** that work once per account. There's no daily bonus or refill, and new players start with 1,000 chips.
+- **Cashier:** watch an ad for +1,000 chips (two minutes apart, 20 a day), and **promo codes** that work once per account. There's no daily bonus or refill, and new players start with 1,000 chips.
 - **Live leaderboard** and a profile with per-game stats.
 - **Look and feel:** synthesized sound effects (no audio files), a daylight theme and reduced-motion support. It also installs to your phone's home screen.
 
@@ -108,7 +108,7 @@ Change these in **Table Editor** → schema **cc** → **settings** (no redeploy
 | key | default | meaning |
 | --- | --- | --- |
 | `start_balance` | 1000 | chips for a new player |
-| `ad_reward` | 250 | chips per rewarded ad |
+| `ad_reward` | 1000 | chips per rewarded ad |
 | `ad_cooldown_seconds` | 120 | wait between ads |
 | `ad_daily_cap` | 20 | ads per player per day |
 | `signups_per_ip_per_day` | 4 | new accounts per network per day |
@@ -121,7 +121,7 @@ Change these in **Table Editor** → schema **cc** → **settings** (no redeploy
 The site has two kinds of ad placement:
 
 - **Banners** in the lobby, under every game and on the leaderboard.
-- **Rewarded ad breaks:** the "Watch an ad · +250 chips" button in the cashier, the drawer and the profile.
+- **Rewarded ad breaks:** the "Watch an ad · +1,000 chips" button in the cashier, the drawer and the profile.
 
 Until you add an ad account, those spots show **house ads** for the casino's own games, and the rewarded break is a 15-second house spot, so everything already works.
 

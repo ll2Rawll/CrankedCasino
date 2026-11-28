@@ -11,16 +11,16 @@
 
 import {
   flightCourse, FPS, VIEW_W, VIEW_H, FLOOR, BIRD_X, BIRD_W, BIRD_H, GATE_W, GAP, medalFor,
-} from './flight-course.js?v=c5acb968c265';
-import { icon } from '../icons.js?v=c5acb968c265';
-import { engine, errorText } from '../engine.js?v=c5acb968c265';
-import { store, on } from '../store.js?v=c5acb968c265';
-import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=c5acb968c265';
-import { NF_TARGETS, targetMult } from '../math.js?v=c5acb968c265';
-import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=c5acb968c265';
-import { storage, reducedMotion, fmt, fmtFull, fmtMult, round2, esc } from '../util.js?v=c5acb968c265';
-import { countTo } from '../fx.js?v=c5acb968c265';
-import { duelPanel, duelOutcome } from './duels.js?v=c5acb968c265';
+} from './flight-course.js?v=d846a0b4c715';
+import { icon } from '../icons.js?v=d846a0b4c715';
+import { engine, errorText } from '../engine.js?v=d846a0b4c715';
+import { store, on } from '../store.js?v=d846a0b4c715';
+import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=d846a0b4c715';
+import { NF_TARGETS, targetMult } from '../math.js?v=d846a0b4c715';
+import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=d846a0b4c715';
+import { storage, reducedMotion, fmt, fmtFull, fmtMult, round2, esc } from '../util.js?v=d846a0b4c715';
+import { countTo } from '../fx.js?v=d846a0b4c715';
+import { duelPanel, duelOutcome } from './duels.js?v=d846a0b4c715';
 
 const BEST = 'cc:flight:best';
 const STEP = 1000 / FPS;

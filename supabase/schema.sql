@@ -21,7 +21,7 @@ revoke all on schema cc from public;
 create table if not exists cc.settings (key text primary key, value numeric not null, note text);
 insert into cc.settings (key, value, note) values
   ('start_balance', 1000, 'Chips every new player starts with'),
-  ('ad_reward', 250, 'Chips for watching one rewarded ad'),
+  ('ad_reward', 1000, 'Chips for watching one rewarded ad'),
   ('ad_cooldown_seconds', 120, 'Wait between rewarded ads'),
   ('ad_daily_cap', 20, 'Rewarded ads per player per day (UTC)'),
   ('signups_per_ip_per_day', 4, 'New accounts allowed per network per day'),
