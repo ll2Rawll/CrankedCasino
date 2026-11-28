@@ -12,6 +12,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('https://casino.test/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/js/config.js') return route.fulfill({contentType:'text/javascript',body:"export const CONFIG={supabaseUrl:'',supabaseKey:'',repoUrl:'',ads:{}};"});
     return route.fulfill({ path: join(repo, path === '/' ? 'index.html' : path) });
   });
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });

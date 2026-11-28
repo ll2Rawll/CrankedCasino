@@ -31,7 +31,9 @@ The server decides every card, spin, bounce and crash with a cryptographic rando
 
 ## Connect the server (Supabase)
 
-Until you do this, the site runs in **offline mode**: everything works, but accounts are stored only in the visitor's browser. To make accounts work across browsers, and to make cheating impossible, connect a Supabase project. It's free and takes about five minutes:
+The live casino is connected to the **CrankedCasinov2** Supabase project. Public rooms, private invites, accounts and balances are shared across browsers. Only the publishable client key is in `js/config.js`; privileged keys are never shipped. Previous device-only accounts remain in browser storage and are separate from online accounts.
+
+For another deployment, configure a Supabase project as follows. Leaving the URL/key empty enables device-only accounts and bot battles:
 
 1. **Create a project** at [supabase.com/dashboard](https://supabase.com/dashboard). Any name and region; note the database password somewhere safe.
 2. **Install the casino.** Open **SQL Editor** → **New query**, paste all of [`supabase/schema.sql`](supabase/schema.sql), and press **Run**. It's safe to run again later, for example after an update; it never deletes players.
@@ -66,9 +68,15 @@ In device mode, paid bot battles use the existing browser account and balance. F
 
 Validation covers custom decimal stakes, unequal multiplayer bets, both winners, ties, invalid amounts, exact refunds and immutable retry amounts. Validation uses `node tools/test-case-battles.mjs`, `node tools/test-case-battles-browser.mjs` with Playwright Core, and `python3 tools/test-case-battles-postgres.py CONTAINER_NAME` against a disposable PostgreSQL container loaded with the schema. `BROWSER=webkit` runs the browser suite with Safari’s engine; `MYTHIC=1` selects the new collection in the paid-battle browser and effects suites. `CASES_DB=CONTAINER_NAME node tools/test-case-battles-multiplayer.mjs` exercises two browser players through the real PostgreSQL RPCs with a mythic lineup.
 
+Decisive wins (at least a 150-point lead and 1.75× the other score) trigger a full-screen winner takeover after settlement is confirmed. Both players see the same winner name, crown, score margin, strongest collected item and actual pot. The sequence lasts 7.2 seconds, can be skipped immediately, respects reduced motion, and does not replay when the result is reopened. `node tools/test-case-victory.mjs` checks these rules and cleanup in Chromium or WebKit; `node tools/test-case-victory-perf.mjs` measures it under 4× CPU throttling.
+
 Openings include animated case latches, rotating item reveals, rarity bursts, a score meter, lead changes, and a winner celebration. Collected item buttons open an inspection dialog with rotation, points, and the selected case's actual drop chance. Effects respect reduced motion and stop when the scene is destroyed.
 
 Artwork is original, generated offline by `node tools/render-cases-art.mjs` using the bundled Three.js and Playwright Core. The game uses WebP images and short 24-frame atlases, with no runtime WebGL. Essential artwork loads first; larger inspection atlases load only for the item being inspected. `node tools/test-case-effects.mjs` checks reveal transitions and cleanup. `PERF=1` measures a real-time battle under 4× CPU throttling in Chromium. These runs require Playwright Core on Node's module path and an installed browser. Cloud WebKit coverage does not replace testing on a physical iPhone.
+
+`node tools/test-cases-online.mjs` exercises the actual configured Supabase project using isolated QA accounts, public room cancellation, private invites, unequal wagers, reloads and conserved payouts. Set `BASE_URL` to test the deployed site and `BROWSER=webkit` for the Safari engine. This is an explicit live integration test, not a routine offline test.
+
+The backend uses the casino's own opaque session tokens. Its private `cc` schema denies direct client access; exposed RPCs validate the token before reading accounts or moving chips. The Supabase Advisor's [SECURITY DEFINER warning](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) applies to these intentional API entry points; changing them to invoker mode would remove their access to the private tables. [RLS without policies](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) is intentional deny-all protection here. Authentication failures, private-room visibility and exact payouts are covered by integration tests. Health checks are clear; unused-index notices are expected on a fresh database.
 
 ### How it stops cheating
 

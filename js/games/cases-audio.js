@@ -1,5 +1,5 @@
 // Short, original sound identities. Shared master volume, gesture unlock and mute.
-import { tone, noise } from '../sound.js?v=7ea755b2a1a3';
+import { tone, noise } from '../sound.js?v=fb1bf3011ac1';
 const bell = (freq, delay=0, gain=.07, dur=.55) => {
   tone({freq,delay,gain,dur,type:'sine',attack:.003});
   tone({freq:freq*2.76,delay,gain:gain*.18,dur:dur*.45,type:'sine'});
@@ -49,4 +49,11 @@ export function previewItemSound(id) {
   if (now - lastPreview < 220) return;
   lastPreview = now;
   itemRevealSound(id);
+}
+
+export function caseVictorySound() {
+  tone({freq:110,slideTo:45,dur:.7,gain:.14});
+  sweep(500,4200,.55,.05,.045);
+  notes(261.63,[0,7,12,16,19],.18,'triangle',.11,.055);
+  [523.25,659.25,783.99].forEach((freq,i)=>bell(freq,.83+i*.055,.05,.95));
 }

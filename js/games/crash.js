@@ -9,16 +9,16 @@
 // The engine lives outside the page so a live bet still resolves (and auto cash-out
 // still fires) if you wander off to another game mid-flight.
 
-import { h, fmt, fmtMult, round2, signed, storage, clamp, reducedMotion } from '../util.js?v=7ea755b2a1a3';
-import { icon } from '../icons.js?v=7ea755b2a1a3';
-import { store, BetError } from '../store.js?v=7ea755b2a1a3';
-import { engine, errorText } from '../engine.js?v=7ea755b2a1a3';
-import { needAccount } from '../account.js?v=7ea755b2a1a3';
-import { random } from '../rng.js?v=7ea755b2a1a3';
-import { CRASH_K as K, crashAt as at, crashTimeFor as timeFor, crashPoint } from '../math.js?v=7ea755b2a1a3';
-import { sfx, engine as hum, haptic } from '../sound.js?v=7ea755b2a1a3';
-import { burstAt, celebrate, PALETTES, shake } from '../fx.js?v=7ea755b2a1a3';
-import { gameFrame, betInput, toast, betError, serverRefused } from '../ui.js?v=7ea755b2a1a3';
+import { h, fmt, fmtMult, round2, signed, storage, clamp, reducedMotion } from '../util.js?v=fb1bf3011ac1';
+import { icon } from '../icons.js?v=fb1bf3011ac1';
+import { store, BetError } from '../store.js?v=fb1bf3011ac1';
+import { engine, errorText } from '../engine.js?v=fb1bf3011ac1';
+import { needAccount } from '../account.js?v=fb1bf3011ac1';
+import { random } from '../rng.js?v=fb1bf3011ac1';
+import { CRASH_K as K, crashAt as at, crashTimeFor as timeFor, crashPoint } from '../math.js?v=fb1bf3011ac1';
+import { sfx, engine as hum, haptic } from '../sound.js?v=fb1bf3011ac1';
+import { burstAt, celebrate, PALETTES, shake } from '../fx.js?v=fb1bf3011ac1';
+import { gameFrame, betInput, toast, betError, serverRefused } from '../ui.js?v=fb1bf3011ac1';
 
 const BETTING_MS = 5000;
 const CRASHED_MS = 3200;

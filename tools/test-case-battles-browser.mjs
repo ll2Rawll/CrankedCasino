@@ -18,6 +18,7 @@ try {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('https://casino.test/**', (route) => {
     const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
+    if (pathname === '/js/config.js') return route.fulfill({contentType:'text/javascript',body:"export const CONFIG={supabaseUrl:'',supabaseKey:'',repoUrl:'',ads:{}};"});
     return route.fulfill({ path: join(repo, pathname === '/' ? 'index.html' : pathname) });
   });
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
@@ -29,6 +30,7 @@ try {
   assert.match(await page.locator('.cb-verdict').textContent(), /practice complete/);
   assert.equal(await page.locator('.cb-history img').count(), 6);
   assert.equal(await page.evaluate(() => localStorage.getItem('cc:device:db')), null);
+  if (await page.locator('.cv-continue').count()) await page.locator('.cv-continue').click({force:true});
   await page.locator('.cb-start').click({ force: true });
   await page.locator('[data-create]').click({ force: true });
   await page.locator('input[name=username]').fill('CaseBrowser');

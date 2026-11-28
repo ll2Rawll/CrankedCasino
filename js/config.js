@@ -15,8 +15,8 @@
 export const CONFIG = {
   repoUrl: 'https://github.com/ll2Rawll/CrankedCasino',
 
-  supabaseUrl: '', // e.g. 'https://abcdefghijklmnop.supabase.co'
-  supabaseKey: '', // the "anon" or "publishable" key from Project Settings → API
+  supabaseUrl: 'https://rxqmfyhzhkfgxsoqcgwy.supabase.co',
+  supabaseKey: 'sb_publishable_VYAE1kdKwENMBmYvrC_UsA_zyEgtnJn', // Public client key; account authorization stays on the server.
 
   ads: {
     adsenseClient: '', // e.g. 'ca-pub-1234567890123456'

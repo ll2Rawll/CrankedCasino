@@ -1,12 +1,12 @@
 // Shared UI: toasts, modals, bet input, segmented controls, game page frame.
 
-import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=7ea755b2a1a3';
-import { icon } from './icons.js?v=7ea755b2a1a3';
-import { store, on, BetError } from './store.js?v=7ea755b2a1a3';
-import { sfx } from './sound.js?v=7ea755b2a1a3';
-import { needAccount } from './account.js?v=7ea755b2a1a3';
-import { banner } from './ads.js?v=7ea755b2a1a3';
-import { errorText } from './engine.js?v=7ea755b2a1a3';
+import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=fb1bf3011ac1';
+import { icon } from './icons.js?v=fb1bf3011ac1';
+import { store, on, BetError } from './store.js?v=fb1bf3011ac1';
+import { sfx } from './sound.js?v=fb1bf3011ac1';
+import { needAccount } from './account.js?v=fb1bf3011ac1';
+import { banner } from './ads.js?v=fb1bf3011ac1';
+import { errorText } from './engine.js?v=fb1bf3011ac1';
 
 // ---------------------------------------------------------------- toasts
 const toastRoot = document.getElementById('toasts');
@@ -339,7 +339,7 @@ export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it i
       el.insertAdjacentHTML('beforeend', '<span class="stamp">Redeemed</span>');
       input.value = '';
       sfx.jackpot();
-      import('./fx.js?v=7ea755b2a1a3').then(({ coinRain, burstAt, PALETTES }) => {
+      import('./fx.js?v=fb1bf3011ac1').then(({ coinRain, burstAt, PALETTES }) => {
         coinRain(120);
         burstAt(el, { count: 90, colors: PALETTES.gold, speed: [5, 15] });
       });

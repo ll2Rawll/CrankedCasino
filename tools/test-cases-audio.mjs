@@ -16,7 +16,7 @@ try {
     return path==='/'?route.fulfill({contentType:'text/html',body:'Audio test'}):route.fulfill({path:join(repo,path)});
   });
   const results=[];
-  for(const cue of [...ALL_CASE_ITEMS.map(item=>({id:item.id,kind:'item'})),...CASES.map(type=>({id:type.id,kind:'case'})),{id:'ember-5',kind:'mute'}]){
+  for(const cue of [...ALL_CASE_ITEMS.map(item=>({id:item.id,kind:'item'})),...CASES.map(type=>({id:type.id,kind:'case'})),{id:'victory',kind:'victory'},{id:'ember-5',kind:'mute'}]){
     await page.goto('https://audio.test/');
     const result=await page.evaluate(async ({cue,version})=>{
       window.AudioContext=class { constructor(){window.offline=new OfflineAudioContext(1,96000,48000);return offline;} };
@@ -24,10 +24,10 @@ try {
       const cues=await import('/js/games/cases-audio.js');
       sound.setSound(true);sound.unlockAudio();
       if(cue.kind==='mute') sound.setSound(false);
-      if(cue.kind==='case') cues.caseOpeningSound(cue.id); else cues.itemRevealSound(cue.id);
+      if(cue.kind==='case') cues.caseOpeningSound(cue.id); else if(cue.kind==='victory') cues.caseVictorySound(); else cues.itemRevealSound(cue.id);
       const buffer=await offline.startRendering();const samples=buffer.getChannelData(0);
       let peak=0,energy=0,tail=0,hash=0;
-      samples.forEach((x,i)=>{peak=Math.max(peak,Math.abs(x));energy+=x*x;if(i>84000)tail=Math.max(tail,Math.abs(x));hash=(hash*31+Math.round(x*100000))|0;});
+      samples.forEach((x,i)=>{peak=Math.max(peak,Math.abs(x));energy+=x*x;if(i>94000)tail=Math.max(tail,Math.abs(x));hash=(hash*31+Math.round(x*100000))|0;});
       return {...cue,peak,rms:Math.sqrt(energy/samples.length),tail,hash};
     },{cue,version});
     if(cue.kind==='mute') assert.equal(result.peak,0);
@@ -35,5 +35,5 @@ try {
     results.push(result);
   }
   assert.equal(new Set(results.filter(r=>r.kind==='item').map(r=>r.hash)).size,24);
-  console.log(`Audio passed 24 item signatures, six case openings, bounded tails and mute. Highest rendered peak: ${Math.max(...results.map(r=>r.peak)).toFixed(3)}.`);
+  console.log(`Audio passed 24 item signatures, six case openings, victory fanfare, bounded tails and mute. Highest rendered peak: ${Math.max(...results.map(r=>r.peak)).toFixed(3)}.`);
 } finally { await browser.close(); }

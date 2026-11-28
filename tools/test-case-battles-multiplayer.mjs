@@ -85,6 +85,18 @@ try {
   assert(await guestWager.isDisabled());
   await guest.locator('[data-join]').click();
   await Promise.all([host.locator('#case-openings').waitFor(),guest.locator('#case-openings').waitFor()]);
+  if (process.env.VICTORY === '1') {
+    const battleId = new URL(invite).hash.split('battle=')[1];
+    assert(/^[a-f0-9-]{36}$/.test(battleId));
+    await sql(`with updated as (update cc.case_battles set pulls='[[5,0],[4,0],[3,0]]'::jsonb where id=${literal(battleId)} returning id) select to_json(count(*)) from updated;`);
+    await Promise.all([host.locator('.cv-takeover').waitFor({timeout:35000}),guest.locator('.cv-takeover').waitFor({timeout:35000})]);
+    assert.equal(await host.locator('.cv-name').textContent(),await guest.locator('.cv-name').textContent());
+    assert.deepEqual(await guest.locator('.cv-score span').allTextContents(),['395','24']);
+    assert.equal(await guest.locator('.cv-margin').textContent(),'+371 POINT VICTORY');
+    await guest.screenshot({path:'/workspace/scratch/rooster-tests/cases-multiplayer-victory.png',animations:'disabled'});
+    await Promise.all([host.getByRole('button',{name:'View results'}).click(),guest.getByRole('button',{name:'View results'}).click()]);
+    console.log('Both multiplayer clients displayed the same confirmed winner, score, margin and fullscreen celebration.');
+  }
   await Promise.all([host.getByRole('button',{name:'Battle again',exact:true}).waitFor({timeout:35000}),guest.getByRole('button',{name:'Battle again',exact:true}).waitFor({timeout:35000})]);
   assert.equal(await guest.locator('.cb-pot').textContent(),'146.00 CHIP POT');
   assert.deepEqual(await guest.locator('.cb-player-wager strong').allTextContents(),['125.75','20.25']);

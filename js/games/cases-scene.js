@@ -1,11 +1,12 @@
-import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem, caseEntries } from './cases-data.js?v=7ea755b2a1a3';
-import { random } from '../rng.js?v=7ea755b2a1a3';
-import { esc, reducedMotion, fmt } from '../util.js?v=7ea755b2a1a3';
-import { sfx, soundOn, setSound, haptic } from '../sound.js?v=7ea755b2a1a3';
+import { caseVictory } from './cases-victory.js?v=fb1bf3011ac1';
+import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem, caseEntries } from './cases-data.js?v=fb1bf3011ac1';
+import { random } from '../rng.js?v=fb1bf3011ac1';
+import { esc, reducedMotion, fmt } from '../util.js?v=fb1bf3011ac1';
+import { sfx, soundOn, setSound, haptic } from '../sound.js?v=fb1bf3011ac1';
 
-import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=7ea755b2a1a3';
+import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=fb1bf3011ac1';
 
-import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=7ea755b2a1a3';
+import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=fb1bf3011ac1';
 
 const art = (name) => `assets/cases/${name}.webp?v=2`;
 const STOP = 25;
@@ -59,6 +60,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   const momentum = root.querySelector('.cb-momentum');
   const balance = root.querySelector('.cb-balance');
   const finale = root.querySelector('.cb-finale');
+  let closeVictory = null;
   let battle = initial, serverTime = Date.now(), receivedAt = performance.now(), hasClock = false;
   let round = -1, phaseName = '', cards = [], starts = [], ends = [], widths = [];
   const trackPositions = [];
@@ -263,6 +265,11 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     status.textContent = 'Battle complete';
     root.querySelector('.cb-start').textContent = 'Battle again';
     if (!battle.practice && (tied || winner === battle.seat)) sfx.cashout();
+    inspector?.close();
+    closeVictory = caseVictory(battle, { clock: serverTime + performance.now() - receivedAt, onClose: () => {
+      root.querySelector('.cb-sound').textContent = `Sound ${soundOn() ? 'on' : 'off'}`;
+      root.querySelector('.cb-sound').setAttribute('aria-pressed', String(soundOn()));
+    } });
     onFinish?.();
   }
 
@@ -385,6 +392,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     },
     destroy() {
       destroyed = true;
+      closeVictory?.();
       inspector?.close();
       inspector?.remove();
       cancelAnimationFrame(raf);

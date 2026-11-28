@@ -79,6 +79,7 @@ create table if not exists cc.promo_redemptions (
   created_at timestamptz not null default now(),
   primary key (player_id, code)
 );
+create index if not exists promo_redemptions_code_idx on cc.promo_redemptions(code);
 
 create table if not exists cc.mines_rounds (
   player_id uuid primary key references cc.players (id) on delete cascade,

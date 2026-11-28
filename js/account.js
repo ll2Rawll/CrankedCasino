@@ -1,12 +1,12 @@
 // Accounts: pick a username + password once, then play from any browser.
 // The session is remembered on this device, so players only log in again on a new one.
 
-import { h, esc, fmt } from './util.js?v=7ea755b2a1a3';
-import { icon } from './icons.js?v=7ea755b2a1a3';
-import { engine, MODE } from './engine.js?v=7ea755b2a1a3';
-import { store } from './store.js?v=7ea755b2a1a3';
-import { sfx } from './sound.js?v=7ea755b2a1a3';
-import { toast } from './ui.js?v=7ea755b2a1a3';
+import { h, esc, fmt, storage } from './util.js?v=fb1bf3011ac1';
+import { icon } from './icons.js?v=fb1bf3011ac1';
+import { engine, MODE } from './engine.js?v=fb1bf3011ac1';
+import { store } from './store.js?v=fb1bf3011ac1';
+import { sfx } from './sound.js?v=fb1bf3011ac1';
+import { toast } from './ui.js?v=fb1bf3011ac1';
 
 const USER_RE = /^[A-Za-z0-9_]{3,16}$/;
 
@@ -80,7 +80,7 @@ export function openAccount({ mode = 'signup', reason = '' } = {}) {
           <li>${icon('refresh')}<span><strong>No resets.</strong> Clearing your browser history can’t wipe or refill your stack.</span></li>
           <li>${icon('trophy')}<span><strong>On the board.</strong> Your username shows on the live leaderboard.</span></li>
         </ul>
-        ${MODE === 'device' ? `<p class="acct-note">${icon('device')}<span>Offline mode: the casino server isn’t connected yet, so this account is saved on this device only.</span></p>` : ''}
+        ${MODE === 'device' ? `<p class="acct-note">${icon('device')}<span>Offline mode: the casino server isn’t connected yet, so this account is saved on this device only.</span></p>` : storage.get('cc:session', null)?.mode === 'device' ? `<p class="acct-note">${icon('device')}<span>Online multiplayer is now live. Create an online account to play with friends. Your previous device-only account remains saved in this browser.</span></p>` : ''}
       </div>
     </div>`);
   const title = root.querySelector('[data-title]');
@@ -180,7 +180,7 @@ export function openAccount({ mode = 'signup', reason = '' } = {}) {
     store.load(r.me);
     sfx.jackpot();
     close(true);
-    import('./fx.js?v=7ea755b2a1a3').then(({ coinRain }) => coinRain(mode === 'signup' ? 110 : 40));
+    import('./fx.js?v=fb1bf3011ac1').then(({ coinRain }) => coinRain(mode === 'signup' ? 110 : 40));
     if (mode === 'signup') toast(`Welcome, ${r.me.username}! ${fmt(r.me.balance).replace(/\.00$/, '')} chips are on the house.`, { type: 'win', iconName: 'sparkle', timeout: 4600 });
     else toast(`Welcome back, ${r.me.username}. Your stack: ${fmt(r.me.balance)}.`, { type: 'win', iconName: 'coins', timeout: 4200 });
   });
