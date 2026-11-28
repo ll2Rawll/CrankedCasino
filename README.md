@@ -52,6 +52,8 @@ Free Supabase projects pause after a week without any visits. If that happens, o
 
 Open `#/cases` to choose three cases, inspect each item’s probability, and create a battle. After Hours, Neon Vault, and High Roller have different distributions. Item points determine the winner. The chip payout comes from the fixed 100-chip pot.
 
+The setup screen has a case showroom with distinct violet, mint, and gold finishes. Peek inside to see the possible items without entering a battle. Tap a round to open the visual case picker, or shuffle all three. The lineup is saved on this browser; an unresolved entry request keeps its original lineup locked until retry. The same case finishes appear during battles. `node tools/test-cases-lobby.mjs` checks the picker, saved settings, rapid preview cancellation, free previews, responsive layouts and practice. Use `BROWSER=webkit` for Safari-engine coverage. `SHOWROOM_ONLY=1 node tools/render-cases-art.mjs` rebuilds only the three case finishes and their opening atlases.
+
 With Supabase connected, public rooms appear in the lobby and private rooms are shared by invite link. The server reserves the entry, starts both players on one clock, hides future rounds, and records each payout once. A host can cancel an unjoined room for a refund. Waiting rooms expire after ten minutes, and their refunds are reconciled on the host’s next account or battle request. Started battles survive leaving the page and reloading.
 
 The full `supabase/schema.sql` includes the battle upgrade. Run the updated schema when connecting or updating the casino. `supabase/case-battles.sql` contains the standalone battle tables and RPC functions for deployments that already have the current account functions.

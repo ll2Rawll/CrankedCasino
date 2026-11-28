@@ -75,10 +75,12 @@ function signet(){const g=new THREE.Group();ring(g,.60,.17,gold);
  for(let i=0;i<9;i++){const a=i*Math.PI/8;mesh(g,new THREE.SphereGeometry(.033,8,6),silver,Math.cos(a)*.60,Math.sin(a)*.60,.17)}
  g.rotation.set(.28,.45,-.3);g.scale.setScalar(1.3);return g
 }
-function caseModel(open=0){const g=new THREE.Group();
- const shell=metal(0x292631,.38),edge=metal(0x70707f,.25),foam=matte(0x100c19);
+function caseModel(open=0,theme){const g=new THREE.Group();
+ const tint=theme==='neon-vault'?0x12baa0:theme==='high-roller'?0xd6a348:0x8c48d0;
+ const accent=theme?new THREE.MeshPhysicalMaterial({color:tint,metalness:.65,roughness:.22,clearcoat:1}):purple;
+ const shell=metal(theme==='after-hours'?0x30213d:0x292631,.38),edge=metal(theme==='high-roller'?0xd6a348:0x70707f,.25),foam=matte(0x100c19);
  bevel(g,2.9,.91,1.48,shell,0,-.12,0,.055);
- bevel(g,2.72,.055,1.32,purple,0,.35,0,.015);
+ bevel(g,2.72,.055,1.32,accent,0,.35,0,.015);
  box(g,2.56,.035,1.19,foam,0,.39,0);
  // Recessed foam and individually lit metal ribs give the open shell real depth.
  for(let i=-6;i<=6;i++)box(g,.075,.035,1.05,matte(0x2a1939),i*.18,.42,0);
@@ -94,7 +96,13 @@ function caseModel(open=0){const g=new THREE.Group();
  }
  const lid=new THREE.Group();lid.position.set(0,.36,-.72);g.add(lid);
  bevel(lid,2.9,.25,1.48,shell,0,.125,.72,.04);
- bevel(lid,2.7,.025,1.29,purple,0,.28,.72,.01);
+ bevel(lid,2.7,.025,1.29,accent,0,.28,.72,.01);
+ if(theme){
+  const led=new THREE.MeshStandardMaterial({color:tint,emissive:tint,emissiveIntensity:.8});
+  for(const x of [-1.14,1.14]){box(g,.035,.6,.02,led,x,-.10,.76);box(lid,.05,.01,1.12,led,x,.31,.72)}
+  for(let i=0;i<4;i++)box(g,.06,.024,.025,accent,-.1+i*.12,-.36,.76);
+  for(const x of [-.96,.96]){const stripe=box(lid,.17,.015,.75,theme==='high-roller'?gold:silver,x,.305,.72);stripe.rotation.y=theme==='neon-vault'?.3:-.3}
+ }
  // Brushed panel, corner fasteners, etched badge and two hinge barrels.
  for(const x of [-1.23,1.23])for(const z of [.18,1.24]){
   const bolt=cyl(lid,.038,.025,silver,x,.30,z);bolt.rotation.x=0;
@@ -105,7 +113,7 @@ function caseModel(open=0){const g=new THREE.Group();
  if(open){
   box(lid,2.58,.02,1.14,foam,0,-.016,.72);
   for(let i=-5;i<=5;i++)box(lid,.065,.018,1.0,matte(0x30213e),i*.21,-.03,.72);
-  const glow=new THREE.MeshStandardMaterial({color:0xd7a7ff,emissive:0xa34fff,emissiveIntensity:1.6});
+  const glow=new THREE.MeshStandardMaterial({color:theme?tint:0xd7a7ff,emissive:theme?tint:0xa34fff,emissiveIntensity:1.6});
   for(const z of [-.56,.56])box(g,2.5,.018,.015,glow,0,.44,z);
   for(const x of [-1.24,1.24])box(g,.015,.018,1.12,glow,x,.44,0);
  }
@@ -133,5 +141,14 @@ window.renderTurntable=(name,inspect=false)=>{
   renderer.render(scene,camera);ctx.drawImage(renderer.domElement,(i%6)*width,Math.floor(i/6)*height);
  }
  scene.remove(pivot);disposeObject(obj);return atlas.toDataURL('image/webp',.88);
+};
+window.renderShowcase=(theme,kind)=>{
+ if(kind==='atlas'){
+  renderer.setSize(320,250);
+  const c=document.createElement('canvas');c.width=1600;c.height=1000;const ctx=c.getContext('2d');
+  for(let i=0;i<20;i++){const obj=caseModel(i/19,theme);scene.add(obj);renderer.render(scene,camera);ctx.drawImage(renderer.domElement,(i%5)*320,Math.floor(i/5)*250);scene.remove(obj);disposeObject(obj)}
+  return c.toDataURL('image/webp',.90);
+ }
+ renderer.setSize(720,560);const obj=caseModel(kind==='opened'?1:0,theme);scene.add(obj);renderer.render(scene,camera);const out=renderer.domElement.toDataURL('image/webp',.94);scene.remove(obj);disposeObject(obj);return out;
 };
 window.ready=true;

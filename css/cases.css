@@ -1709,3 +1709,11 @@
 [data-motion="reduced"] #case-openings .cb-score-flight,
 [data-motion="reduced"] #case-openings .cb-turntable { display:none; }
 [data-motion="reduced"] #case-openings .cb-has-turntable>img { visibility:visible; }
+/* Each chosen case keeps its own finish throughout the opening. */
+#case-openings .cb-case-art { filter:drop-shadow(0 12px 14px #0008); }
+#case-openings .cb-case-film { display:none; width:252px; background-size:500% 400%; }
+#case-openings.cb-filming .cb-case-film { display:block; }
+#case-openings.cb-filming img.cb-case-art { visibility:hidden; }
+@container(max-width:550px) {
+  #case-openings .cb-case-film { width:180px; }
+}

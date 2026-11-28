@@ -56,7 +56,7 @@ try {
   }
   const host = await client(1100);
   const guest = await client(390);
-  await host.locator('[data-visibility]').selectOption('private');
+  await host.locator('[data-battle-mode="private"]').click();
   await host.locator('[data-create]').click();
   await host.locator('.cases-invite input').waitFor();
   const invite = await host.locator('.cases-invite input').inputValue();

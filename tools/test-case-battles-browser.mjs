@@ -35,8 +35,22 @@ try {
   await page.getByRole('button', { name: 'Battle bot · 50 chips' }).waitFor();
   await page.clock.runFor(400);
   await page.locator('.acct-root').waitFor({ state: 'detached' });
-  await page.locator('[data-case="1"]').selectOption('neon-vault');
-  await page.locator('[data-case="2"]').selectOption('high-roller');
+  await page.locator('[data-edit-round="1"]').click();
+  await page.locator('[data-case-choice="neon-vault"]').click();
+  await page.locator('[data-edit-round="2"]').click();
+  await page.locator('[data-case-choice="high-roller"]').click();
+  // A retry must show and lock its original lineup, even if saved preferences differ.
+  await page.evaluate(() => {
+    localStorage.setItem('cc:cases:pending:CaseBrowser', JSON.stringify({ id: crypto.randomUUID(), cases: ['after-hours','neon-vault','high-roller'], visibility: 'bot' }));
+    localStorage.setItem('cc:cases:lineup', JSON.stringify(['high-roller','high-roller','high-roller']));
+  });
+  await page.reload();
+  await page.locator('.cs-builder').waitFor();
+  await page.clock.runFor(200);
+  await page.getByRole('button', { name: 'Retry pending battle', exact: true }).waitFor();
+  assert.deepEqual(await page.locator('.cs-round strong').allTextContents(), ['After Hours','Neon Vault','High Roller']);
+  assert.equal(await page.locator('[data-edit-round]:disabled').count(), 3);
+  assert(await page.locator('[data-shuffle]').isDisabled());
   await page.locator('[data-create]').click({ force: true });
   await page.locator('#case-openings').waitFor();
   assert.match(page.url(), /battle=[a-f0-9-]{36}/);

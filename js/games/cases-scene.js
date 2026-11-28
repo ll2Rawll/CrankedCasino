@@ -1,7 +1,9 @@
-import { CASE_ITEMS, CASE_ROUND_MS, caseById, drawCase } from './cases-data.js?v=e08da9841def';
-import { random } from '../rng.js?v=e08da9841def';
-import { esc, reducedMotion } from '../util.js?v=e08da9841def';
-import { sfx, soundOn, setSound, haptic } from '../sound.js?v=e08da9841def';
+import { CASE_ITEMS, CASE_ROUND_MS, caseById, drawCase } from './cases-data.js?v=cc44f0172e88';
+import { random } from '../rng.js?v=cc44f0172e88';
+import { esc, reducedMotion } from '../util.js?v=cc44f0172e88';
+import { sfx, soundOn, setSound, haptic } from '../sound.js?v=cc44f0172e88';
+
+import { caseCover, warmCasePreview } from './cases-showcase.js?v=cc44f0172e88';
 
 const art = (name) => `assets/cases/${name}.webp?v=2`;
 const STOP = 25;
@@ -10,7 +12,7 @@ const turnFrame = (el, frame) => { el.style.backgroundPosition = `${frame % 6 * 
 let warmup;
 export function warmCaseArt() {
   warmup ||= (async () => {
-    await Promise.all([...CASE_ITEMS.map((item) => item.id), 'case', ...Array.from({ length: 19 }, (_, i) => `caseFrame${i}`)].map((name) => {
+    await Promise.all(CASE_ITEMS.map((item) => item.id).map((name) => {
       const image = new Image();
       image.src = art(name);
       return image.decode().catch(() => {});
@@ -41,7 +43,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   root.setAttribute('aria-label', 'Case battle');
   root.innerHTML = `<header class="cb-header"><div><div class="cb-brand">CRANKED CASINO</div><h2>Case battle</h2></div><span class="cb-mode">${initial.practice ? 'Practice' : '1 vs 1'}</span></header>
     <div class="cb-case-stage"><div class="cb-case-copy"><span class="cb-caption"></span><strong class="cb-round-label">Getting ready</strong><div class="cb-rounds" aria-label="Three cases"><span></span><span></span><span></span></div></div>
-    <div class="cb-case-rays" aria-hidden="true"></div><div class="cb-case-halo" aria-hidden="true"></div><div class="cb-case-sparks" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i style="--spark:${i}"></i>`).join('')}</div><img class="cb-case-art" src="${art('case')}" alt="Cranked item case"><div class="cb-case-status"></div></div>
+    <div class="cb-case-rays" aria-hidden="true"></div><div class="cb-case-halo" aria-hidden="true"></div><div class="cb-case-sparks" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i style="--spark:${i}"></i>`).join('')}</div><img class="cb-case-art" src="${caseCover(initial.cases[0])}" alt="Cranked item case"><span class="cb-case-art cb-case-film" aria-hidden="true"></span><div class="cb-case-status"></div></div>
     <div class="cb-duel"><div class="cb-duel-caption"><span class="cb-momentum" role="status">Three cases. One winner.</span><span class="cb-pot">${initial.practice ? 'FREE PRACTICE' : '100 CHIP POT'}</span></div><div class="cb-balance" aria-hidden="true"><i></i><b></b></div></div>
     <div class="cb-battle">${initial.players.map((player, i) => playerMarkup(player, i, initial.seat)).join('')}</div>
     <div class="cb-finale" hidden><span class="cb-finale-crown" aria-hidden="true">♛</span><div><span class="cb-finale-kicker"></span><strong></strong><p></p></div><div class="cb-confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--n:${i};--drift:${(i % 5 - 2) * 32}px"></i>`).join('')}</div></div>
@@ -51,7 +53,9 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   const tracks = players.map((player) => player.querySelector('.cb-track'));
   const totals = players.map((player) => player.querySelector('.cb-total'));
   const verdict = root.querySelector('.cb-verdict');
-  const caseArt = root.querySelector('.cb-case-art');
+  const caseArt = root.querySelector('img.cb-case-art');
+  const caseFilm = root.querySelector('.cb-case-film');
+  const openingArt = new Map();
   const status = root.querySelector('.cb-case-status');
   const roundLabel = root.querySelector('.cb-round-label');
   const momentum = root.querySelector('.cb-momentum');
@@ -64,6 +68,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   let lastVisible = -1, shownTotals = [0, 0], countFrom = [0, 0], countTo = [0, 0], countAt = 0;
   let hadPull = false;
   let leader = -1, revealSprites = [], spriteFrame = -1, inspector = null, inspectorSource = null;
+  [...new Set(initial.cases)].forEach(id => warmCasePreview(id).then(image => { if (!destroyed && image) { openingArt.set(id, image); wake(); } }));
 
   players.forEach((player) => {
     const particles = player.querySelector('.cb-particles');
@@ -113,7 +118,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     root.style.setProperty('--case-hue', `${type.hue}deg`);
     root.querySelector('.cb-caption').textContent = `${type.name.toUpperCase()} CASE`;
     root.querySelectorAll('.cb-rounds span').forEach((el, i) => { el.className = i < index ? 'cb-done' : i === index ? 'cb-current' : ''; });
-    caseArt.src = art('case');
+    caseArt.src = caseCover(type.id);
+    root.classList.remove('cb-filming');
     players.forEach((player, side) => {
       player.classList.remove('cb-rare', 'cb-hit', 'cb-winner', 'cb-show', 'cb-premium');
       player.querySelector('.cb-drop-badge').textContent = '';
@@ -284,8 +290,14 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     }
     if (!hadPull && time >= 4300) status.textContent = 'Waiting for connection';
     const progress = Math.max(0, Math.min(1, (time - 160) / 540));
-    const frame = reduce ? (progress === 1 ? 18 : 0) : Math.round(18 * progress * progress * (3 - 2 * progress));
-    if (frame !== lastFrame) { lastFrame = frame; caseArt.src = art(`caseFrame${frame}`); }
+    const frame = reduce ? (progress === 1 ? 19 : 0) : Math.round(19 * progress * progress * (3 - 2 * progress));
+    const atlas = openingArt.get(battle.cases[index]);
+    root.classList.toggle('cb-filming', !!atlas && !reduce && progress > 0 && progress < 1);
+    if (frame !== lastFrame) {
+      lastFrame = frame;
+      if (frame === 0 || frame === 19) caseArt.src = caseCover(battle.cases[index], frame === 19);
+      if (atlas) { caseFilm.style.backgroundImage = `url("${atlas.src}")`; caseFilm.style.backgroundPosition = `${frame % 5 * 25}% ${Math.floor(frame / 5) * 100 / 3}%`; }
+    }
     if (revealSprites.length) {
       const p = Math.max(0, Math.min(1, (time - 4750) / 950));
       const frame = Math.min(23, Math.floor((1 - (1 - p) ** 2.4) * 24));

@@ -1,25 +1,30 @@
-import { engine, errorText } from '../engine.js?v=e08da9841def';
-import { store, on } from '../store.js?v=e08da9841def';
-import { esc, storage } from '../util.js?v=e08da9841def';
-import { openAccount } from '../account.js?v=e08da9841def';
-import { modal, toast } from '../ui.js?v=e08da9841def';
-import { sfx } from '../sound.js?v=e08da9841def';
-import { random } from '../rng.js?v=e08da9841def';
-import { CASES, CASE_ITEMS, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals } from './cases-data.js?v=e08da9841def';
-import { caseScene, warmCaseArt } from './cases-scene.js?v=e08da9841def';
+import { engine, errorText } from '../engine.js?v=cc44f0172e88';
+import { store, on } from '../store.js?v=cc44f0172e88';
+import { esc, storage } from '../util.js?v=cc44f0172e88';
+import { openAccount } from '../account.js?v=cc44f0172e88';
+import { modal, toast } from '../ui.js?v=cc44f0172e88';
+import { sfx } from '../sound.js?v=cc44f0172e88';
+import { random } from '../rng.js?v=cc44f0172e88';
+import { CASES, CASE_ITEMS, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals, validCases, caseById } from './cases-data.js?v=cc44f0172e88';
+import { caseScene, warmCaseArt } from './cases-scene.js?v=cc44f0172e88';
+
+import { caseCover, caseShowcase } from './cases-showcase.js?v=cc44f0172e88';
 
 const validId = (id) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id || '');
-const options = (selected) => CASES.map((type) => `<option value="${type.id}" ${selected === type.id ? 'selected' : ''}>${type.name}</option>`).join('');
+const caseTags = ['Violet mix', 'Rare focused', 'High variance'];
+const modeName = (mode) => ({ public: 'Public room', private: 'Invite only', bot: 'Bot battle' })[mode];
 
 export default {
   title: 'Case Battles',
   mount(view) {
-    view.innerHTML = `<section class="cases-page wrap"><div class="cases-heading"><div><span class="kicker">Cranked originals</span><h1>Case battles</h1><p>Open three cases. Highest item score takes the pot.</p></div><button class="btn btn-outline" data-rules type="button">Cases & odds</button></div><div class="cases-content"></div><p class="cases-error" role="status"></p></section>`;
+    view.innerHTML = `<section class="cases-page wrap"><div class="cases-heading"><div><span class="kicker">Cranked originals</span><h1>Case battles</h1><p>Three cases. Two players. One pot.</p></div><button class="cs-rules" data-rules type="button"><span aria-hidden="true">ⓘ</span> Cases & odds</button></div><div class="cases-content"></div><p class="cases-error" role="status"></p></section>`;
     const content = view.querySelector('.cases-content');
     const error = view.querySelector('.cases-error');
     let destroyed = false, busy = false, polling = false, timer = 0, generation = 0;
     let scene = null, battle = null, lastState = '', lobbyData = null, lobbySignature = '';
-    let selected = ['after-hours', 'after-hours', 'after-hours'];
+    const savedLineup = storage.get('cc:cases:lineup', null);
+    let selected = validCases(savedLineup) ? savedLineup : ['after-hours', 'neon-vault', 'high-roller'];
+    let activeRound = 0, showcase = null;
     let visibility = engine.mode === 'server' ? 'public' : 'bot';
     let roomId = new URLSearchParams(location.hash.split('?')[1] || '').get('battle');
     if (!validId(roomId)) roomId = null;
@@ -34,6 +39,8 @@ export default {
       error.textContent = errorText(reply, 'This battle could not be loaded. Try again.');
     }
     function clearScene() {
+      showcase?.destroy();
+      showcase = null;
       scene?.destroy();
       scene = null;
       lastState = '';
@@ -67,36 +74,77 @@ export default {
       resume.hidden = !lobbyData?.active;
       resume.dataset.room = lobbyData?.active || '';
     }
+    function startLabel() {
+      return store.signedIn ? visibility === 'bot' ? 'Battle bot · 50 chips' : 'Create battle · 50 chips' : 'Sign in to battle';
+    }
+    function updateStart() {
+      const button = content.querySelector('[data-create]');
+      if (!button) return;
+      button.setAttribute('aria-label', startLabel());
+      button.innerHTML = `<span>${store.signedIn ? visibility === 'bot' ? 'Battle Rook' : 'Create battle' : 'Sign in to battle'} <i class="cs-arrow" aria-hidden="true"></i></span><b>50 <small>CHIPS</small></b>`;
+    }
+    function updateLineup(animate = true) {
+      content.querySelectorAll('[data-edit-round]').forEach((button, i) => {
+        const type = caseById(selected[i]);
+        button.setAttribute('aria-pressed', String(i === activeRound));
+        button.setAttribute('aria-label', `Edit round ${i + 1}, ${type.name}`);
+        button.style.setProperty('--slot-color', type.color);
+        button.querySelector('img').src = caseCover(type.id);
+        button.querySelector('strong').textContent = type.name;
+        button.querySelector('.cs-round-edit').textContent = i === activeRound ? 'EDITING' : 'TAP TO EDIT';
+      });
+      content.querySelector('.cs-choose-label').textContent = `Choose a case for round ${activeRound + 1}`;
+      content.querySelectorAll('[data-case-choice]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.caseChoice === selected[activeRound]));
+        button.setAttribute('aria-label', `Use ${caseById(button.dataset.caseChoice).name} for round ${activeRound + 1}`);
+      });
+      showcase?.set(caseById(selected[activeRound]), activeRound, animate);
+    }
     function renderLobby() {
+      showcase?.destroy();
       view.querySelector('.cases-heading').hidden = false;
       const online = engine.mode === 'server';
-      const signedIn = store.signedIn;
+      const pending = storage.get(pendingKey(), null);
+      if (validId(pending?.id) && validCases(pending.cases)) { selected = [...pending.cases]; visibility = pending.visibility; }
       lobbySignature = '';
-      content.innerHTML = `<div class="cases-create panel">
-        <div class="cases-create-top"><h2>Build your battle</h2><span>50 chip entry <b>·</b> 100 chip pot</span></div>
-        <div class="cases-selection">${selected.map((id, i) => `<label class="cases-choice"><img src="assets/cases/case.webp?v=2" alt="" style="filter:hue-rotate(${CASES.find((type) => type.id === id).hue}deg)"><span>Round ${i + 1}</span><select data-case="${i}" aria-label="Case for round ${i + 1}">${options(id)}</select></label>`).join('')}</div>
-        <div class="cases-create-bottom"><label class="cases-mode">Battle type<select data-visibility aria-label="Battle type">${online ? `<option value="public" ${visibility === 'public' ? 'selected' : ''}>Public room</option><option value="private" ${visibility === 'private' ? 'selected' : ''}>Invite-only room</option>` : ''}<option value="bot" ${visibility === 'bot' ? 'selected' : ''}>Bot battle</option></select></label><div class="cases-create-buttons"><button class="btn btn-outline" data-practice type="button">Free practice</button><button class="btn btn-primary" data-create type="button">${signedIn ? visibility === 'bot' ? 'Battle bot · 50 chips' : 'Create battle · 50 chips' : 'Sign in to battle'}</button></div></div>
-        <p class="cases-note">${online ? 'Both players open the same cases. Item values count toward your score. A draw returns 50 chips to each player.' : 'Bot battles and free practice are available on this device. Online rooms become available when the casino connects.'}</p>
-        <button class="btn btn-outline" data-resume type="button" hidden>Resume your battle</button>
+      content.innerHTML = `<div class="cases-create cs-builder">
+        <div class="cs-showroom"></div>
+        <div class="cs-controls">
+          <div class="cs-lineup-heading"><div><span class="cs-eyebrow">YOUR LINEUP</span><h2>Build your battle</h2></div><button data-shuffle type="button" aria-label="Shuffle case lineup"><span aria-hidden="true">⤨</span> Shuffle</button></div>
+          <div class="cs-rounds" role="group" aria-label="Your three rounds">${selected.map((id, i) => `<button class="cs-round" data-edit-round="${i}" type="button"><span class="cs-round-number">0${i + 1}</span><img src="${caseCover(id)}" alt=""><strong></strong><span class="cs-round-edit">${i === 0 ? 'EDITING' : 'TAP TO EDIT'}</span></button>`).join('')}</div>
+          <dialog class="cs-picker-dialog" aria-label="Choose your case"><div class="cs-picker-heading"><div><span class="cs-eyebrow">THE COLLECTION</span><h3 class="cs-choose-label"></h3></div><button type="button" data-close-picker aria-label="Close case picker">×</button></div>
+          <div class="cs-case-picker" role="group" aria-label="Available cases">${CASES.map((type, i) => `<button data-case-choice="${type.id}" style="--choice-color:${type.color}" type="button"><img src="${caseCover(type.id)}" alt=""><span class="cs-case-option-copy"><strong>${type.name}</strong><small>${caseTags[i]}</small><span>${type.weights[5]}% Special · ${type.weights[0]}% Common</span></span><span class="cs-choice-check" aria-hidden="true">✓</span></button>`).join('')}</div><p class="cs-picker-note">Same entry price. Each case has its own item odds.</p></dialog>
+          <div class="cs-battle-mode">${online ? `<span class="cs-eyebrow">OPPONENT</span><div class="cs-mode-picker" role="group" aria-label="Battle type">${['public','private','bot'].map(mode => `<button type="button" data-battle-mode="${mode}" aria-pressed="${visibility === mode}">${modeName(mode)}</button>`).join('')}</div>` : '<span class="cs-bot-avatar" aria-hidden="true"><i></i><i></i></span><div><strong>You vs Rook</strong><span>Bot opponent · this device</span></div><span class="cs-mode-badge">1 VS 1</span>'}</div>
+          <div class="cs-stakes"><div><span>YOUR ENTRY</span><strong>50 <small>chips</small></strong></div><span class="cs-stakes-arrow" aria-hidden="true">→</span><div><span>WINNER’S POT</span><strong>100 <small>chips</small></strong></div><span class="cs-pot-stack" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <button class="cs-battle-start" data-create type="button"></button>
+          <button class="cs-practice" data-practice type="button"><span aria-hidden="true">▷</span> Free practice <small>No chips needed</small></button>
+          <p class="cs-fineprint">Highest item score wins. Ties split the pot.</p>
+          <button class="btn btn-outline" data-resume type="button" hidden>Resume your battle</button>
+        </div>
       </div>
-      <section class="cases-rooms" ${online && signedIn ? '' : 'hidden'}><h2>Open battles</h2><div data-rooms><p class="cases-empty">Loading rooms…</p></div></section>
+      <section class="cases-rooms" ${online && store.signedIn ? '' : 'hidden'}><h2>Open battles</h2><div data-rooms><p class="cases-empty">Loading rooms…</p></div></section>
       <section class="cases-rooms" data-recent-section hidden><h2>Your recent battles</h2><div data-recent></div></section>`;
+      showcase = caseShowcase(content.querySelector('.cs-showroom'));
+      updateLineup(false);
+      updateStart();
       if (lobbyData) renderRooms();
       updatePending();
     }
     function updatePending() {
       const pending = storage.get(pendingKey(), null);
-      if (!pending || !validId(pending.id)) return;
-      const create = content.querySelector('[data-create]');
-      if (create) create.textContent = 'Retry pending battle';
-      content.querySelectorAll('select').forEach((select) => { select.disabled = true; });
+      const locked = !!pending && validId(pending.id);
+      if (locked) {
+        const create = content.querySelector('[data-create]');
+        if (create) { create.textContent = 'Retry pending battle'; create.setAttribute('aria-label', 'Retry pending battle'); }
+      } else updateStart();
+      content.querySelectorAll('[data-edit-round],[data-case-choice],[data-shuffle],[data-battle-mode]').forEach(button => { button.disabled = locked; });
     }
 
     function renderWaiting() {
       clearScene();
       const own = battle.seat === 0;
       const invite = `${location.origin}${location.pathname}#/cases?battle=${battle.id}`;
-      content.innerHTML = `<div class="cases-waiting panel"><span class="kicker">${battle.visibility === 'private' ? 'Invite-only battle' : 'Public battle'}</span><h2>${own ? 'Your opponent has an open seat' : `Join ${esc(battle.players[0].name)}’s battle`}</h2><div class="cases-waiting-cases">${battle.cases.map((id) => `<div><img src="assets/cases/case.webp?v=2" alt=""><span>${caseByName(id)}</span></div>`).join('')}</div><p>3 rounds · 50 chips each · 100 chip pot</p>${own ? `<label class="cases-invite">Invite link<input value="${esc(invite)}" readonly aria-label="Battle invite link"></label><div class="cases-wait-actions"><button class="btn btn-primary" data-copy type="button">Copy invite</button><button class="btn btn-outline" data-cancel type="button">Cancel & return 50 chips</button></div><p class="cases-note">Your 50 chips are reserved. The battle starts when a second player joins. Unjoined rooms expire after 10 minutes.</p>` : '<button class="btn btn-primary" data-join type="button">Join battle · 50 chips</button>'}<button class="btn btn-ghost" data-back type="button">Back to battles</button></div>`;
+      content.innerHTML = `<div class="cases-waiting panel"><span class="kicker">${battle.visibility === 'private' ? 'Invite-only battle' : 'Public battle'}</span><h2>${own ? 'Your opponent has an open seat' : `Join ${esc(battle.players[0].name)}’s battle`}</h2><div class="cases-waiting-cases">${battle.cases.map((id) => `<div><img src="${caseCover(id)}" alt=""><span>${caseByName(id)}</span></div>`).join('')}</div><p>3 rounds · 50 chips each · 100 chip pot</p>${own ? `<label class="cases-invite">Invite link<input value="${esc(invite)}" readonly aria-label="Battle invite link"></label><div class="cases-wait-actions"><button class="btn btn-primary" data-copy type="button">Copy invite</button><button class="btn btn-outline" data-cancel type="button">Cancel & return 50 chips</button></div><p class="cases-note">Your 50 chips are reserved. The battle starts when a second player joins. Unjoined rooms expire after 10 minutes.</p>` : '<button class="btn btn-primary" data-join type="button">Join battle · 50 chips</button>'}<button class="btn btn-ghost" data-back type="button">Back to battles</button></div>`;
       lastState = 'waiting';
     }
 
@@ -213,21 +261,40 @@ export default {
       }
     }
 
-    content.addEventListener('change', (event) => {
-      if (event.target.matches('[data-case]')) {
-        const index = Number(event.target.dataset.case);
-        selected[index] = event.target.value;
-        const type = CASES.find((item) => item.id === selected[index]);
-        event.target.closest('label').querySelector('img').style.filter = `hue-rotate(${type.hue}deg)`;
-      }
-      if (event.target.matches('[data-visibility]')) {
-        visibility = event.target.value;
-        content.querySelector('[data-create]').textContent = store.signedIn ? visibility === 'bot' ? 'Battle bot · 50 chips' : 'Create battle · 50 chips' : 'Sign in to battle';
-      }
-    });
     content.addEventListener('click', async (event) => {
       const button = event.target.closest('button');
       if (!button || busy) return;
+      if (button.disabled) return;
+      if (button.hasAttribute('data-peek')) { showcase?.peek(); return; }
+      if (button.hasAttribute('data-close-picker')) { content.querySelector('.cs-picker-dialog').close(); return; }
+      if (button.hasAttribute('data-edit-round')) {
+        activeRound = Number(button.dataset.editRound);
+        updateLineup();
+        content.querySelector('.cs-picker-dialog').showModal();
+        sfx.click();
+        return;
+      }
+      if (button.dataset.caseChoice) {
+        selected[activeRound] = button.dataset.caseChoice;
+        content.querySelector('.cs-picker-dialog').close();
+        storage.set('cc:cases:lineup', selected);
+        updateLineup();
+        sfx.click();
+        return;
+      }
+      if (button.hasAttribute('data-shuffle')) {
+        selected = selected.map(() => CASES[Math.floor(random() * CASES.length)].id);
+        storage.set('cc:cases:lineup', selected);
+        updateLineup();
+        sfx.shuffle();
+        return;
+      }
+      if (button.dataset.battleMode) {
+        visibility = button.dataset.battleMode;
+        content.querySelectorAll('[data-battle-mode]').forEach(el => el.setAttribute('aria-pressed', String(el === button)));
+        updateStart();
+        return;
+      }
       if (button.hasAttribute('data-back')) { back(); return; }
       if (button.dataset.room) { openRoom(button.dataset.room); return; }
       if (button.hasAttribute('data-practice')) { practice(); return; }

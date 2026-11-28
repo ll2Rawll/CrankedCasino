@@ -17,11 +17,19 @@ try {
   await page.waitForFunction(() => window.ready);
   const items = ['blade', 'watch', 'headphones', 'diamond', 'chips', 'signet'];
   let bytes = 0;
-  for (const name of [...items, 'case', 'open', ...Array.from({ length: 19 }, (_, i) => `caseFrame${i}`), ...items.map(name => `${name}-turn`), ...items.map(name => `${name}-inspect`)]) {
+  for (const name of process.env.SHOWROOM_ONLY ? [] : [...items, 'case', 'open', ...Array.from({ length: 19 }, (_, i) => `caseFrame${i}`), ...items.map(name => `${name}-turn`), ...items.map(name => `${name}-inspect`)]) {
     const data = await page.evaluate(name => name.endsWith('-inspect') ? window.renderTurntable(name.slice(0, -8), true) : name.endsWith('-turn') ? window.renderTurntable(name.slice(0, -5)) : window.renderAsset(name), name);
     const buffer = Buffer.from(data.split(',')[1], 'base64');
     await writeFile(join(repo, 'assets/cases', `${name}.webp`), buffer);
     bytes += buffer.length;
+  }
+  for (const theme of ['after-hours', 'neon-vault', 'high-roller']) {
+    for (const kind of ['closed', 'opened', 'atlas']) {
+      const data = await page.evaluate(([theme,kind]) => window.renderShowcase(theme,kind), [theme,kind]);
+      const buffer = Buffer.from(data.split(',')[1], 'base64');
+      await writeFile(join(repo, 'assets/cases', `case-${theme}${kind === 'closed' ? '' : kind === 'atlas' ? '-open' : '-opened'}.webp`), buffer);
+      bytes += buffer.length;
+    }
   }
   console.log(`Rendered case, six items, 19 opening frames and reveal/inspection turntables: ${Math.round(bytes / 1024)} KiB total.`);
 } finally { await browser.close(); }
