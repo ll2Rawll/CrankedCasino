@@ -2,7 +2,7 @@
 // its own hash (hash01, shared with the server); an earlier generator stepped linearly from
 // one row to the next and lined whole stretches of road up in the same direction. The
 // server mirrors every function here in SQL (supabase/schema.sql, cc.rs_*).
-import { RR, rrHit, hash01 } from '../math.js?v=80f0d00a4d8e';
+import { RR, rrHit, hash01 } from '../math.js?v=9f4a3c573590';
 
 /** Uniform in [0, 1) for (seed, row, slot). */
 export const scoreRand = hash01;
@@ -11,6 +11,8 @@ export const scoreRand = hash01;
 export const LINE_GRACE = 8;
 export const LINE_SPEED = 0.5; // rows a second
 export const chaseLine = (t) => Math.max(0, (t - LINE_GRACE) * LINE_SPEED);
+/** Course seconds a hop spends in the air. Nothing can touch the rooster until she lands. */
+export const HOP_AIR = 0.1;
 
 // Cars, buses, trains and grass. `level` sets the pace. About a third of these rows are
 // grass, so roads come in short runs with a rest between them.
@@ -81,11 +83,13 @@ export function onPlatform(lane, col, t) {
 
 /**
  * Replay a bet run: moves = [[ms, move], ...] in course milliseconds (0 forward, 1 back,
- * 2 left, 3 right), until the rooster reaches row `goal` or endMs. It applies the game's
- * rules in the game's order (dangers on the current tile, then the hop). The server's
- * tolerances are a little kinder than the game's own checks (a narrower rooster, a later
- * red line, wider logs), so a run the game saw survive never fails on rounding.
- * Returns { alive, reached, score (furthest row), row, deathMs?, cause? }.
+ * 2 left, 3 right), until the rooster reaches row `goal` or endMs. The game's rules, in the
+ * game's order: a hop is in the air for HOP_AIR and can't be hit; it lands on the next tile
+ * (early, if the next tap comes first), and only then does what's there count: a vehicle on
+ * the tile, open water, or the red line past it. A standing rooster is in danger the whole
+ * time. The server's tolerances are a little kinder than the game's own checks (a narrower
+ * rooster, a later red line, wider logs), so a run the game saw survive never fails on
+ * rounding. Returns { alive, reached, score (furthest row landed), row, deathMs?, cause? }.
  */
 export function scoreReplay(seed, moves, endMs, goal, { hb = RR.HB_SERVER, line = 0.1, edge = 0.05 } = {}) {
   const lanes = new Map();
@@ -93,10 +97,25 @@ export function scoreReplay(seed, moves, endMs, goal, { hb = RR.HB_SERVER, line 
     if (!lanes.has(r)) lanes.set(r, scoreLane(seed, r));
     return lanes.get(r);
   };
-  let row = 0, col = RR.START_COL, landed = 0, best = 0, tprev = 0;
+  let row = 0, col = RR.START_COL, landed = 0, best = 0, tprev = 0, landAt = -1;
   const dead = (t, cause) => ({ alive: false, reached: false, score: best, row, deathMs: Math.round(t * 1000), cause });
   for (let i = 0; i <= moves.length; i++) {
     const t = (i < moves.length ? moves[i][0] : endMs) / 1000;
+    if (landAt >= 0) {
+      // The hop in the air touches down (early, if this tap came first).
+      const touch = Math.min(t, landAt);
+      const L = lane(row);
+      if (touch > LINE_GRACE + (row + 1 + line) / LINE_SPEED) return dead(touch, 'line');
+      if (L.kind === 'river') {
+        if (Math.abs(col - platformCenter(L, col, touch)) > L.width / 2 + edge) return dead(touch, 'river');
+      } else if (rrHit(L, col, touch, touch, hb) >= 0) return dead(touch, L.kind);
+      best = Math.max(best, row);
+      if (best >= goal) return { alive: true, reached: true, score: best, row };
+      landAt = -1;
+      tprev = touch;
+      landed = touch;
+    }
+    // Standing on the tile until t.
     const L = lane(row);
     let at = -1, cause = null;
     const sooner = (when, why) => {
@@ -114,19 +133,16 @@ export function scoreReplay(seed, moves, endMs, goal, { hb = RR.HB_SERVER, line 
     if (i === moves.length) break;
     const m = moves[i][1];
     let nr = row;
-    let nc = Math.round(col + (L.speed || 0) * (t - landed));
+    let nc = Math.round(col + (L.speed || 0) * Math.max(0, t - landed));
     if (m === 0) nr++;
     else if (m === 1) nr--;
     else if (m === 2) nc--;
     else nc++;
     if (nr >= 0 && nc >= 0 && nc < RR.COLS && !lane(nr).blocked.includes(nc)) {
-      const N = lane(nr);
       row = nr;
       col = nc;
-      landed = t;
-      if (N.kind === 'river' && Math.abs(nc - platformCenter(N, nc, t)) > N.width / 2 + edge) return dead(t, 'river');
-      best = Math.max(best, row);
-      if (best >= goal) return { alive: true, reached: true, score: best, row };
+      landAt = t + HOP_AIR;
+      landed = landAt;
     }
     tprev = t;
   }

@@ -2,15 +2,15 @@
 // The server spins every reel (and any free spins); this page animates the result.
 // Paytable and line maths live in ../math.js (RTP ≈ 97.5%).
 
-import { h, fmt, fmtMult, round2, signed, storage, sleep, reducedMotion, esc } from '../util.js?v=80f0d00a4d8e';
-import { icon } from '../icons.js?v=80f0d00a4d8e';
-import { store } from '../store.js?v=80f0d00a4d8e';
-import { engine } from '../engine.js?v=80f0d00a4d8e';
-import { weightedPick, randInt } from '../rng.js?v=80f0d00a4d8e';
-import { SLOT_WEIGHTS, SLOT_TOTAL_W, SLOT_PAY as PAY, WILD, SCAT, FS_MULT, LINES, slotEvaluate as evaluate, unflatGrid } from '../math.js?v=80f0d00a4d8e';
-import { sfx, haptic } from '../sound.js?v=80f0d00a4d8e';
-import { burstAt, coinRain, countTo, PALETTES, shake } from '../fx.js?v=80f0d00a4d8e';
-import { gameFrame, betInput, tryBet, toast, modal, serverRefused } from '../ui.js?v=80f0d00a4d8e';
+import { h, fmt, fmtMult, round2, signed, storage, sleep, reducedMotion, esc } from '../util.js?v=9f4a3c573590';
+import { icon } from '../icons.js?v=9f4a3c573590';
+import { store } from '../store.js?v=9f4a3c573590';
+import { engine } from '../engine.js?v=9f4a3c573590';
+import { weightedPick, randInt } from '../rng.js?v=9f4a3c573590';
+import { SLOT_WEIGHTS, SLOT_TOTAL_W, SLOT_PAY as PAY, WILD, SCAT, FS_MULT, LINES, slotEvaluate as evaluate, unflatGrid } from '../math.js?v=9f4a3c573590';
+import { sfx, haptic } from '../sound.js?v=9f4a3c573590';
+import { burstAt, coinRain, countTo, PALETTES, shake } from '../fx.js?v=9f4a3c573590';
+import { gameFrame, betInput, tryBet, toast, modal, serverRefused } from '../ui.js?v=9f4a3c573590';
 
 export const SYMBOLS = ['cherry', 'lemon', 'grape', 'bell', 'bar', 'diamond', 'seven', 'wild', 'scatter'];
 const NAMES = { cherry: 'Cherry', lemon: 'Lemon', grape: 'Grapes', bell: 'Bell', bar: 'Bar', diamond: 'Diamond', seven: 'Lucky 7', wild: 'Wild', scatter: 'Bonus star' };

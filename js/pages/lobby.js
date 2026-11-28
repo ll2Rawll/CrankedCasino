@@ -1,14 +1,14 @@
 // Lobby: neon marquee sign, searchlights, a hand of holographic game cards,
 // the cashier (stack, ad rewards, promo ticket), recent action, accounts, FAQ.
 
-import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=80f0d00a4d8e';
-import { icon } from '../icons.js?v=80f0d00a4d8e';
-import { store, on } from '../store.js?v=80f0d00a4d8e';
-import { engine, MODE } from '../engine.js?v=80f0d00a4d8e';
-import { sfx } from '../sound.js?v=80f0d00a4d8e';
-import { promoTicket } from '../ui.js?v=80f0d00a4d8e';
-import { openAccount } from '../account.js?v=80f0d00a4d8e';
-import { adButton, banner } from '../ads.js?v=80f0d00a4d8e';
+import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=9f4a3c573590';
+import { icon } from '../icons.js?v=9f4a3c573590';
+import { store, on } from '../store.js?v=9f4a3c573590';
+import { engine, MODE } from '../engine.js?v=9f4a3c573590';
+import { sfx } from '../sound.js?v=9f4a3c573590';
+import { promoTicket } from '../ui.js?v=9f4a3c573590';
+import { openAccount } from '../account.js?v=9f4a3c573590';
+import { adButton, banner } from '../ads.js?v=9f4a3c573590';
 
 const GAMES = [
   { id: 'blackjack', name: 'Blackjack', rank: 'A', suit: '♠', red: false, line: 'Beat the dealer to 21.', tags: ['Pays 3:2', 'Split · Double'] },
@@ -18,10 +18,10 @@ const GAMES = [
   { id: 'plinko', name: 'Plinko', rank: '10', suit: '♥', red: true, line: 'Drop it. Watch it bounce.', tags: ['Up to 1,000×', '3 risk levels'] },
   { id: 'mines', name: 'Mines', rank: '9', suit: '♠', red: false, line: 'Find gems, dodge the bombs.', tags: ['99% RTP', '1–24 mines'] },
   { id: 'flight', name: 'Night Flight', rank: '7', suit: '♣', red: false, line: 'Flap through the moonlit harbor.', tags: ['Free arcade', 'Bet flights up to 30×'] },
-  { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Bet on the row you reach.', tags: ['Free score run', 'Bet runs up to 12×'] },
+  { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Bet on the row you reach.', tags: ['Free score run', 'Bet runs up to 9×'] },
 ];
 
-const TICKER = ['New: Night Flight, tap to fly through the harbor', 'Road Rooster, reach row 200 for 12×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
+const TICKER = ['New: Night Flight, tap to fly through the harbor', 'Road Rooster, reach row 200 for 9×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
 
 const FAQ = [
   ['Is this real money?', 'No. Chips are pretend and have no cash value. You can’t buy them, win anything real, or withdraw. New players start with 1,000 chips.'],

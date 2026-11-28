@@ -178,7 +178,7 @@ export const cardText = (c) => c.r + { spade: 'S', heart: 'H', diamond: 'D', clu
 // The course itself lives in js/games/rooster-course.js. These pieces are shared with it and
 // mirrored in supabase/schema.sql step for step (same numbers, same order of operations),
 // so the server's replay agrees with the game. Don't "tidy" them.
-export const RR = { COLS: 9, START_COL: 4, HB_CLIENT: 0.3, HB_SERVER: 0.27 };
+export const RR = { COLS: 9, START_COL: 4, HB_CLIENT: 0.26, HB_SERVER: 0.23 };
 
 // ---------------------------------------------------------------- skill-game courses
 // One seeded hash lays out Road Rooster's score course and Night Flight's gates. The
@@ -197,9 +197,9 @@ export const hash01 = (seed, a, b) =>
 // Bet targets: [goal, multiplier]. Reach the goal before you're caught to win bet × multiplier.
 // Calibrated with simulated players (a planner with human timing error): a good player
 // about breaks even, an average one loses slowly, and real skill wins. Rooster at 25/50/100/200
-// rows on the 9-column course: good 77/61/33/8%, average 64/38/10/1%. Flight at 5/10/25/50 gates: good 62/38/8/1%,
+// rows on the 9-column course, hops safe in the air: good 82/64/39/11%, average 67/43/14/4%. Flight at 5/10/25/50 gates: good 62/38/8/1%,
 // average 55/28/4/0%.
-export const RR_TARGETS = [[25, 1.3], [50, 1.6], [100, 3], [200, 12]]; // Road Rooster rows
+export const RR_TARGETS = [[25, 1.2], [50, 1.5], [100, 2.5], [200, 9]]; // Road Rooster rows
 export const NF_TARGETS = [[5, 1.5], [10, 2.5], [25, 8], [50, 30]]; // Night Flight gates
 export const targetMult = (table, goal) => table.find(([g]) => g === goal)?.[1] ?? 0;
 

@@ -1,15 +1,15 @@
 // App shell: header, cashier, drawer, theme, footer and the hash router.
 
-import { $, $$, esc, fmt, signed, storage } from './util.js?v=80f0d00a4d8e';
-import { icon } from './icons.js?v=80f0d00a4d8e';
-import { store, on } from './store.js?v=80f0d00a4d8e';
-import { engine, MODE } from './engine.js?v=80f0d00a4d8e';
-import { CONFIG } from './config.js?v=80f0d00a4d8e';
-import { sfx, unlockAudio, setSound, soundOn, music, musicOn, setMusic } from './sound.js?v=80f0d00a4d8e';
-import { countTo, floatFrom } from './fx.js?v=80f0d00a4d8e';
-import { toast, confirmDialog, promoTicket } from './ui.js?v=80f0d00a4d8e';
-import { openAccount, signOut } from './account.js?v=80f0d00a4d8e';
-import { adButton } from './ads.js?v=80f0d00a4d8e';
+import { $, $$, esc, fmt, signed, storage } from './util.js?v=9f4a3c573590';
+import { icon } from './icons.js?v=9f4a3c573590';
+import { store, on } from './store.js?v=9f4a3c573590';
+import { engine, MODE } from './engine.js?v=9f4a3c573590';
+import { CONFIG } from './config.js?v=9f4a3c573590';
+import { sfx, unlockAudio, setSound, soundOn, music, musicOn, setMusic } from './sound.js?v=9f4a3c573590';
+import { countTo, floatFrom } from './fx.js?v=9f4a3c573590';
+import { toast, confirmDialog, promoTicket } from './ui.js?v=9f4a3c573590';
+import { openAccount, signOut } from './account.js?v=9f4a3c573590';
+import { adButton } from './ads.js?v=9f4a3c573590';
 
 const app = $('#app');
 const root = document.documentElement;
@@ -335,17 +335,17 @@ $('#siteFoot').innerHTML = `
 
 // ---------------------------------------------------------------- router
 const routes = {
-  '': () => import('./pages/lobby.js?v=80f0d00a4d8e'),
-  blackjack: () => import('./games/blackjack.js?v=80f0d00a4d8e'),
-  roulette: () => import('./games/roulette.js?v=80f0d00a4d8e'),
-  mines: () => import('./games/mines.js?v=80f0d00a4d8e'),
-  plinko: () => import('./games/plinko.js?v=80f0d00a4d8e'),
-  slots: () => import('./games/slots.js?v=80f0d00a4d8e'),
-  crash: () => import('./games/crash.js?v=80f0d00a4d8e'),
-  rooster: () => import('./games/rooster.js?v=80f0d00a4d8e'),
-  flight: () => import('./games/flight.js?v=80f0d00a4d8e'),
-  leaderboard: () => import('./pages/leaderboard.js?v=80f0d00a4d8e'),
-  profile: () => import('./pages/profile.js?v=80f0d00a4d8e'),
+  '': () => import('./pages/lobby.js?v=9f4a3c573590'),
+  blackjack: () => import('./games/blackjack.js?v=9f4a3c573590'),
+  roulette: () => import('./games/roulette.js?v=9f4a3c573590'),
+  mines: () => import('./games/mines.js?v=9f4a3c573590'),
+  plinko: () => import('./games/plinko.js?v=9f4a3c573590'),
+  slots: () => import('./games/slots.js?v=9f4a3c573590'),
+  crash: () => import('./games/crash.js?v=9f4a3c573590'),
+  rooster: () => import('./games/rooster.js?v=9f4a3c573590'),
+  flight: () => import('./games/flight.js?v=9f4a3c573590'),
+  leaderboard: () => import('./pages/leaderboard.js?v=9f4a3c573590'),
+  profile: () => import('./pages/profile.js?v=9f4a3c573590'),
 };
 // Background music: a mood per game, quiet in the lobby and on the other pages.
 const MOODS = { blackjack: 'lounge', roulette: 'lounge', mines: 'lounge', plinko: 'lounge', slots: 'lounge', crash: 'lounge', rooster: 'rooster', flight: 'night' };

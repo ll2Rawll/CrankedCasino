@@ -1129,7 +1129,7 @@ $$;
 
 -- Bet targets (js/math.js RR_TARGETS and NF_TARGETS): goal → multiplier, 0 for anything else.
 create or replace function cc.rr_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
-  select (case goal when 25 then 1.3 when 50 then 1.6 when 100 then 3 when 200 then 12 else 0 end)::numeric
+  select (case goal when 25 then 1.2 when 50 then 1.5 when 100 then 2.5 when 200 then 9 else 0 end)::numeric
 $$;
 create or replace function cc.nf_target_mult(goal integer) returns numeric language sql immutable set search_path = '' as $$
   select (case goal when 5 then 1.5 when 10 then 2.5 when 25 then 8 when 50 then 30 else 0 end)::numeric
@@ -1240,20 +1240,43 @@ begin
 end $$;
 
 -- Replay a bet run ([[ms, move], ...]: 0 forward, 1 back, 2 left, 3 right) until the
--- rooster reaches row goal (rooster-course.js scoreReplay). hb, line and edge are the
--- server's slightly kinder tolerances: rooster half-width, red-line slack, log slack.
+-- rooster reaches row goal (rooster-course.js scoreReplay). A hop is in the air for 0.1 s and
+-- can't be hit; it lands (early, if the next tap comes first) and only then does what's on
+-- the tile count. hb, line and edge are the server's slightly kinder tolerances: rooster
+-- half-width, red-line slack, log slack.
 create or replace function cc.rs_replay(seed bigint, moves jsonb, end_ms bigint, goal integer, hb float8, line float8, edge float8) returns jsonb
 language plpgsql immutable set search_path = '' as $$
 declare
   cur integer := 0; col integer := 4; landed float8 := 0; best integer := 0; tprev float8 := 0; t float8; m integer;
+  land_at float8 := -1; touch float8;
   L cc.rs_lane; nl cc.rs_lane; at float8; why text; w float8; nr integer; nc integer; f float8;
   n integer := coalesce(jsonb_array_length(moves), 0);
 begin
   for i in 0..n loop
     t := case when i < n then (moves -> i ->> 0)::float8 / 1000::float8 else end_ms::float8 / 1000::float8 end;
+    if land_at >= 0 then
+      -- the hop in the air touches down (early, if this tap came first)
+      touch := least(t, land_at);
+      L := cc.rs_lane(seed, cur);
+      why := null;
+      if touch > 8::float8 + ((cur + 1)::float8 + line) / 0.5::float8 then
+        why := 'line';
+      elsif L.kind = 'river' then
+        f := L.off + L.speed * touch;
+        if abs(col::float8 - (f + floor((col::float8 - f) / L.period + 0.5::float8) * L.period)) > L.width / 2::float8 + edge then why := 'river'; end if;
+      elsif cc.rr_hit((L.kind, L.dir, L.len, L.v, L.p, L.phase, L.blocked)::cc.rr_lane, col, touch, touch, hb) >= 0 then
+        why := L.kind;
+      end if;
+      if why is not null then
+        return jsonb_build_object('alive', false, 'reached', false, 'score', best, 'row', cur, 'death_ms', floor(touch * 1000::float8 + 0.5::float8), 'cause', why);
+      end if;
+      best := greatest(best, cur);
+      if best >= goal then return jsonb_build_object('alive', true, 'reached', true, 'score', best, 'row', cur); end if;
+      land_at := -1; tprev := touch; landed := touch;
+    end if;
+    -- standing on the tile until t
     L := cc.rs_lane(seed, cur);
     at := -1; why := null;
-    -- the red line
     w := greatest(tprev, 8::float8 + ((cur + 1)::float8 + line) / 0.5::float8);
     if w <= t then at := w; why := 'line'; end if;
     if L.kind = 'river' then
@@ -1272,20 +1295,12 @@ begin
     exit when i = n;
     m := (moves -> i ->> 1)::integer;
     nr := cur;
-    nc := floor(col::float8 + coalesce(L.speed, 0::float8) * (t - landed) + 0.5::float8)::integer;
+    nc := floor(col::float8 + coalesce(L.speed, 0::float8) * greatest(0::float8, t - landed) + 0.5::float8)::integer;
     if m = 0 then nr := nr + 1; elsif m = 1 then nr := nr - 1; elsif m = 2 then nc := nc - 1; else nc := nc + 1; end if;
     if nr >= 0 and nc >= 0 and nc < 9 then
       nl := cc.rs_lane(seed, nr);
       if not (nc = any (nl.blocked)) then
-        cur := nr; col := nc; landed := t;
-        if nl.kind = 'river' then
-          f := nl.off + nl.speed * t;
-          if abs(nc::float8 - (f + floor((nc::float8 - f) / nl.period + 0.5::float8) * nl.period)) > nl.width / 2::float8 + edge then
-            return jsonb_build_object('alive', false, 'reached', false, 'score', best, 'row', cur, 'death_ms', floor(t * 1000::float8 + 0.5::float8), 'cause', 'river');
-          end if;
-        end if;
-        best := greatest(best, cur);
-        if best >= goal then return jsonb_build_object('alive', true, 'reached', true, 'score', best, 'row', cur); end if;
+        cur := nr; col := nc; land_at := t + 0.1::float8; landed := land_at;
       end if;
     end if;
     tprev := t;
@@ -1355,7 +1370,7 @@ begin
   if p_end_ms < prev or p_end_ms > el + 2000 then
     return cc.rr_settle(pid, false, 0, 'invalid run') || jsonb_build_object('alive', false, 'cause', 'invalid');
   end if;
-  res := cc.rs_replay(r.seed, p_moves, p_end_ms, r.target, 0.27::float8, 0.1::float8, 0.05::float8);
+  res := cc.rs_replay(r.seed, p_moves, p_end_ms, r.target, 0.23::float8, 0.1::float8, 0.05::float8);
   score := (res ->> 'score')::integer;
   if (res ->> 'reached')::boolean then
     out := cc.rr_settle(pid, true, score, 'reached row ' || r.target);

@@ -2,7 +2,7 @@
 // It reads the same lane recipes and collision maths as the game, so any route it
 // finds is one the game accepts. Time is in course seconds (the game's world clock).
 import { RR, rrHit } from '../js/math.js';
-import { scoreLane, platformCenter, chaseLine } from '../js/games/rooster-course.js';
+import { scoreLane, platformCenter, chaseLine, HOP_AIR } from '../js/games/rooster-course.js';
 
 export const COURSE_SPEED = 0.9; // SCORE_COURSE_SPEED in js/games/rooster.js
 export { chaseLine };
@@ -21,17 +21,20 @@ export function pilot(seed, { stepMs = 40, hopSteps = 4, margin = 0.04, course =
     if (!L) lanes.set(r, (L = course(seed, r)));
     return L;
   };
-  // A rooster state is { row, col, tl }: on a log, the column drifts from col at time tl.
-  const xAt = (s, t) => s.col + (lane(s.row).speed || 0) * (t - s.tl);
+  // A rooster state is { row, col, tl, land }: she hopped at tl and lands at `land` (no land:
+  // already standing). On a log, the column drifts from col once she lands.
+  const xAt = (s, t) => s.col + (lane(s.row).speed || 0) * Math.max(0, t - (s.land ?? s.tl));
   const supported = (L, x, t, m = margin) =>
     x >= -0.5 + m && x < RR.COLS - 0.5 - m && Math.abs(x - platformCenter(L, x, t)) <= L.width / 2 - m;
 
-  /** Does a rooster standing still in state s survive from t0 to t1? */
+  /** Does a rooster in state s survive from t0 to t1? Nothing touches her before she lands. */
   function safe(s, t0, t1) {
     if (chaseLine(t1) > s.row + 1 - margin) return false;
+    const a = Math.max(t0, s.land ?? t0);
+    if (t1 < a) return true;
     const L = lane(s.row);
-    if (L.kind === 'river') return supported(L, xAt(s, t0), t0) && supported(L, xAt(s, t1), t1);
-    return rrHit(L, s.col, t0, t1, RR.HB_CLIENT + margin) < 0;
+    if (L.kind === 'river') return supported(L, xAt(s, a), a) && supported(L, xAt(s, t1), t1);
+    return rrHit(L, s.col, a, t1, RR.HB_CLIENT + margin) < 0;
   }
 
   /** The game's move(): where move m at time t lands, or null for a bump or a drowning. */
@@ -44,8 +47,8 @@ export function pilot(seed, { stepMs = 40, hopSteps = 4, margin = 0.04, course =
     else col++;
     if (row < 0 || col < 0 || col >= RR.COLS || lane(row).blocked.includes(col)) return null;
     const L = lane(row);
-    if (L.kind === 'river' && !supported(L, col, t)) return null;
-    return { row, col, tl: t };
+    if (L.kind === 'river' && !supported(L, col, t + HOP_AIR)) return null; // water where she lands
+    return { row, col, tl: t, land: t + HOP_AIR };
   }
 
   /**

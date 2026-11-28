@@ -129,10 +129,13 @@ try {
       await shot('02-hop');
     }
     if (kind === 'log' && seen.log === 1) {
+      // In the air she holds her column; once she lands she rides the log.
+      assert.equal((await state()).x, st.col, 'no drift in the air');
+      await page.clock.runFor(115);
       const x0 = (await state()).x;
-      await page.clock.runFor(120);
+      await page.clock.runFor(40);
       const x1 = (await state()).x;
-      assert(Math.abs(x1 - x0 - L.speed * 0.12 * COURSE_SPEED) < 1e-6, 'the rooster drifts with the log');
+      assert(Math.abs(x1 - x0 - L.speed * 0.04 * COURSE_SPEED) < 1e-6, 'the rooster drifts with the log');
       await shot('03-log');
     }
     if (kind === 'pad' && seen.pad === 1) {
@@ -280,13 +283,14 @@ try {
   }
   {
     const { p, before } = await startBet(25);
-    const st = await drive(p, (st) => st.phase !== 'run' || st.best >= 25);
-    assert.equal(st.phase, 'ending', 'reaching the target ends the run at once');
+    await drive(p, (st) => st.phase !== 'run' || st.best >= 25);
+    await page.clock.runFor(130); // the winning hop lands
+    assert.equal((await state()).phase, 'ending', 'landing on the target row ends the run at once');
     await shot('10-bet-reached');
     await page.clock.runFor(400);
     assert.equal((await state()).phase, 'over');
-    assert.match(await centerText(), /Row 25 reached[\s\S]*\+13\.00/);
-    assert.equal(await balance(), before + 3, 'row 25 pays 1.3×');
+    assert.match(await centerText(), /Row 25 reached[\s\S]*\+12\.00/);
+    assert.equal(await balance(), before + 2, 'row 25 pays 1.2×');
     await page.clock.runFor(600);
     await shot('11-bet-won');
   }

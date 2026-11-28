@@ -5,17 +5,17 @@
 // the server hands out the seed that lays out the course, replays the moves, and pays
 // bet × that target's multiplier if the rooster reached it.
 
-import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=80f0d00a4d8e';
-import { icon } from '../icons.js?v=80f0d00a4d8e';
-import { store } from '../store.js?v=80f0d00a4d8e';
-import { engine, errorText } from '../engine.js?v=80f0d00a4d8e';
-import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=80f0d00a4d8e';
-import { sfx, haptic } from '../sound.js?v=80f0d00a4d8e';
-import { burst, PALETTES, coinRain } from '../fx.js?v=80f0d00a4d8e';
-import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=80f0d00a4d8e';
-import { scoreLane, onPlatform, chaseLine, LINE_GRACE } from './rooster-course.js?v=80f0d00a4d8e';
-import { landscape } from './rooster-landscape.js?v=80f0d00a4d8e';
-import { loadArt } from './rooster-art.js?v=80f0d00a4d8e';
+import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=9f4a3c573590';
+import { icon } from '../icons.js?v=9f4a3c573590';
+import { store } from '../store.js?v=9f4a3c573590';
+import { engine, errorText } from '../engine.js?v=9f4a3c573590';
+import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=9f4a3c573590';
+import { sfx, haptic } from '../sound.js?v=9f4a3c573590';
+import { burst, PALETTES, coinRain } from '../fx.js?v=9f4a3c573590';
+import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=9f4a3c573590';
+import { scoreLane, onPlatform, chaseLine, LINE_GRACE, HOP_AIR } from './rooster-course.js?v=9f4a3c573590';
+import { landscape } from './rooster-landscape.js?v=9f4a3c573590';
+import { loadArt } from './rooster-art.js?v=9f4a3c573590';
 
 const HOP_MS = 110;
 // Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.
@@ -152,7 +152,9 @@ export default {
     let best = 0;
     let landedAt = 0;
     let lastTouchdown = null;
-    const ridingCol = (t) => col + (lane(row).speed || 0) * (t - landedAt);
+    // On a log she rides from the moment she lands (landedAt); in the air she holds her column.
+    const ridingCol = (t) => col + (lane(row).speed || 0) * Math.max(0, t - landedAt);
+    let landAt = null; // course time the hop in the air lands, or null when she's standing
     let lastCheck = 0;
     let deathAt = null; // { t, cause, at, row, col, impactAt, struck }
     let cashedAt = null; // { t, mult, pay }
@@ -172,6 +174,7 @@ export default {
       scene.reset();
       lastTouchdown = null;
       landedAt = 0;
+      landAt = null;
       lanes = new Map();
       moves = [];
       row = 0;
@@ -319,9 +322,39 @@ export default {
       }, COUNTDOWN_MS);
     }
 
+    /**
+     * The hop lands at t. Nothing could touch her in the air; now whatever is on the tile
+     * counts: a vehicle there, open water, or the red line past her. A bet run that lands
+     * on its target row wins here. Returns true when the run ended.
+     */
+    function touchDown(t) {
+      landAt = null;
+      landedAt = t;
+      lastCheck = t;
+      const L = lane(row);
+      if (chaseLine(t) > row + 1) {
+        die(t, 'line');
+        return true;
+      }
+      if (L.kind === 'river' ? !onPlatform(L, col, t) : rrHit(L, col, t, t, RR.HB_CLIENT) >= 0) {
+        die(t, L.kind === 'river' ? 'river' : L.kind);
+        return true;
+      }
+      if (!free && best >= goalRow) {
+        win(t);
+        return true;
+      }
+      return false;
+    }
+
     /** Did anything get us between the last check and t (seconds)? */
     function checkDeath(t) {
-      if (phase !== 'run' || t < lastCheck) return false;
+      if (phase !== 'run') return false;
+      if (landAt != null) {
+        if (t < landAt) return false; // in the air: nothing can touch her
+        if (touchDown(landAt)) return true;
+      }
+      if (t < lastCheck) return false;
       const L = lane(row);
       if (chaseLine(t) > row + 1) {
         die(t, 'line');
@@ -343,6 +376,8 @@ export default {
       const now = performance.now();
       // Whole course milliseconds, so the server's replay sees exactly this moment.
       const t = Math.round(worldT(now) * 1000) / 1000;
+      // A tap before the last hop lands sets it down now, and that tile is checked.
+      if (landAt != null && t < landAt && touchDown(t)) return;
       if (checkDeath(t)) return;
       let nr = row;
       let nc = Math.round(ridingCol(t));
@@ -366,11 +401,9 @@ export default {
       chick.duration = hopDuration() * (m === 0 ? 1 - from.takeoff : 1);
       row = nr;
       col = nc;
-      landedAt = t;
-      if (lane(nr).kind === 'river' && !onPlatform(lane(nr), nc, t)) {
-        die(t, 'river');
-        return;
-      }
+      // In the air until it lands: the landing decides what happens (see touchDown).
+      landAt = t + HOP_AIR;
+      landedAt = landAt;
       sfx.hop();
       // Wood or water underfoot when the hop lands.
       const ground = lane(row);
@@ -391,7 +424,7 @@ export default {
         }
         floats.push({ r: row, c: col, t0: now });
         if (best % 25 === 0) sfx.chime?.();
-        if (!free && best >= goalRow) win(t);
+        // A bet run is won when this hop lands safely (touchDown).
       }
     }
 

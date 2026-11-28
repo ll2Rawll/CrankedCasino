@@ -113,7 +113,7 @@ for (const seed of seeds.slice(0, 30)) {
   const moves = [];
   const run = pilot(seed).run(50, { onMove: (mv) => moves.push([Math.round(mv.s.tl * 1000), mv.m]) });
   if (run.stuck) continue;
-  const end = moves.at(-1)[0];
+  const end = moves.at(-1)[0] + 100; // the last hop lands 0.1 s later
   for (const tol of [{ hb: RR.HB_CLIENT, line: 0, edge: 0 }, undefined]) {
     const r = scoreReplay(seed, moves, end, 50, tol);
     assert(r.alive && r.reached && r.score === 50, `seed ${seed}: the pilot's run replays as reaching row 50 ${JSON.stringify(r)}`);
