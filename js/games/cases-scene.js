@@ -1,17 +1,27 @@
-import { CASE_ITEMS, CASE_ROUND_MS, caseById, drawCase } from './cases-data.js?v=88d999005677';
-import { random } from '../rng.js?v=88d999005677';
-import { esc, reducedMotion } from '../util.js?v=88d999005677';
-import { sfx, soundOn, setSound, haptic } from '../sound.js?v=88d999005677';
+import { CASE_ITEMS, CASE_ROUND_MS, caseById, drawCase } from './cases-data.js?v=e08da9841def';
+import { random } from '../rng.js?v=e08da9841def';
+import { esc, reducedMotion } from '../util.js?v=e08da9841def';
+import { sfx, soundOn, setSound, haptic } from '../sound.js?v=e08da9841def';
 
-const art = (name) => `assets/cases/${name}.webp`;
+const art = (name) => `assets/cases/${name}.webp?v=2`;
 const STOP = 25;
+const turntables = new Set();
+const turnFrame = (el, frame) => { el.style.backgroundPosition = `${frame % 6 * 20}% ${Math.floor(frame / 6) * 100 / 3}%`; };
 let warmup;
 export function warmCaseArt() {
-  warmup ||= Promise.all([...CASE_ITEMS.map((item) => item.id), 'case', ...Array.from({ length: 19 }, (_, i) => `caseFrame${i}`)].map((name) => {
-    const image = new Image();
-    image.src = art(name);
-    return image.decode().catch(() => {});
-  }));
+  warmup ||= (async () => {
+    await Promise.all([...CASE_ITEMS.map((item) => item.id), 'case', ...Array.from({ length: 19 }, (_, i) => `caseFrame${i}`)].map((name) => {
+      const image = new Image();
+      image.src = art(name);
+      return image.decode().catch(() => {});
+    }));
+    // Decode the small turntables after essential reel art. Mounting never awaits this.
+    await Promise.all(CASE_ITEMS.map(async ({ id }) => {
+      const image = new Image();
+      image.src = art(`${id}-turn`);
+      try { await image.decode(); turntables.add(id); } catch { /* Static art is the fallback. */ }
+    }));
+  })();
   return warmup;
 }
 
@@ -19,9 +29,9 @@ function playerMarkup(player, side, seat) {
   const name = player?.name || 'Open seat';
   return `<article class="cb-player" data-player="${side}" aria-label="${esc(name)} openings">
     <div class="cb-player-head"><span class="cb-avatar">${esc(name[0])}</span><div class="cb-identity"><b>${esc(name)}</b><span class="cb-player-state">${player?.bot ? 'Bot' : side === seat ? 'You' : 'Opponent'}</span></div><span class="cb-total">0<span> points</span></span></div>
-    <div class="cb-window"><div class="cb-track" aria-hidden="true"></div><div class="cb-pointer" aria-hidden="true"></div><div class="cb-impact" aria-hidden="true"></div><div class="cb-particles" aria-hidden="true"></div></div>
+    <div class="cb-window"><div class="cb-track" aria-hidden="true"></div><div class="cb-pointer" aria-hidden="true"></div><div class="cb-impact" aria-hidden="true"></div><div class="cb-particles" aria-hidden="true"></div><span class="cb-drop-badge" aria-hidden="true"></span><span class="cb-score-flight" aria-hidden="true"></span></div>
     <div class="cb-result"><span class="cb-result-tier">NEXT PULL</span><strong class="cb-result-name">Opening soon</strong><span class="cb-result-value">—</span></div>
-    <div class="cb-history" aria-label="Collected items">${Array.from({ length: 3 }, () => '<div class="cb-past">·</div>').join('')}</div>
+    <div class="cb-history" aria-label="Collected items">${Array.from({ length: 3 }, (_, i) => `<button class="cb-past" type="button" disabled aria-label="Round ${i + 1} unopened">·</button>`).join('')}</div>
   </article>`;
 }
 
@@ -31,8 +41,10 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   root.setAttribute('aria-label', 'Case battle');
   root.innerHTML = `<header class="cb-header"><div><div class="cb-brand">CRANKED CASINO</div><h2>Case battle</h2></div><span class="cb-mode">${initial.practice ? 'Practice' : '1 vs 1'}</span></header>
     <div class="cb-case-stage"><div class="cb-case-copy"><span class="cb-caption"></span><strong class="cb-round-label">Getting ready</strong><div class="cb-rounds" aria-label="Three cases"><span></span><span></span><span></span></div></div>
-    <div class="cb-case-rays" aria-hidden="true"></div><img class="cb-case-art" src="${art('case')}" alt="Cranked item case"><div class="cb-case-status"></div></div>
+    <div class="cb-case-rays" aria-hidden="true"></div><div class="cb-case-halo" aria-hidden="true"></div><div class="cb-case-sparks" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i style="--spark:${i}"></i>`).join('')}</div><img class="cb-case-art" src="${art('case')}" alt="Cranked item case"><div class="cb-case-status"></div></div>
+    <div class="cb-duel"><div class="cb-duel-caption"><span class="cb-momentum" role="status">Three cases. One winner.</span><span class="cb-pot">${initial.practice ? 'FREE PRACTICE' : '100 CHIP POT'}</span></div><div class="cb-balance" aria-hidden="true"><i></i><b></b></div></div>
     <div class="cb-battle">${initial.players.map((player, i) => playerMarkup(player, i, initial.seat)).join('')}</div>
+    <div class="cb-finale" hidden><span class="cb-finale-crown" aria-hidden="true">♛</span><div><span class="cb-finale-kicker"></span><strong></strong><p></p></div><div class="cb-confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--n:${i};--drift:${(i % 5 - 2) * 32}px"></i>`).join('')}</div></div>
     <div class="cb-footer"><div class="cb-verdict" role="status">${initial.practice ? 'Practice · no chips wagered' : '100 chip pot · highest score wins'}</div><div class="cb-actions"><button class="cb-sound" type="button" aria-pressed="${soundOn()}">Sound ${soundOn() ? 'on' : 'off'}</button><button class="cb-start" type="button">Back to battles</button></div></div>`;
   container.replaceChildren(root);
   const players = [...root.querySelectorAll('.cb-player')];
@@ -42,11 +54,16 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   const caseArt = root.querySelector('.cb-case-art');
   const status = root.querySelector('.cb-case-status');
   const roundLabel = root.querySelector('.cb-round-label');
+  const momentum = root.querySelector('.cb-momentum');
+  const balance = root.querySelector('.cb-balance');
+  const finale = root.querySelector('.cb-finale');
   let battle = initial, serverTime = Date.now(), receivedAt = performance.now(), hasClock = false;
   let round = -1, phaseName = '', cards = [], starts = [], ends = [], widths = [];
+  const trackPositions = [];
   let raf = 0, destroyed = false, complete = false, lastFrame = -1, lastTick = -1, lastCountdown = -1;
   let lastVisible = -1, shownTotals = [0, 0], countFrom = [0, 0], countTo = [0, 0], countAt = 0;
   let hadPull = false;
+  let leader = -1, revealSprites = [], spriteFrame = -1, inspector = null, inspectorSource = null;
 
   players.forEach((player) => {
     const particles = player.querySelector('.cb-particles');
@@ -86,6 +103,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     round = index;
     phaseName = '';
     lastFrame = lastTick = -1;
+    revealSprites = [];
+    spriteFrame = -1;
     hadPull = false;
     cards = [];
     root.classList.remove('cb-opening', 'cb-unlocking');
@@ -96,7 +115,9 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     root.querySelectorAll('.cb-rounds span').forEach((el, i) => { el.className = i < index ? 'cb-done' : i === index ? 'cb-current' : ''; });
     caseArt.src = art('case');
     players.forEach((player, side) => {
-      player.classList.remove('cb-rare', 'cb-hit', 'cb-winner');
+      player.classList.remove('cb-rare', 'cb-hit', 'cb-winner', 'cb-show', 'cb-premium');
+      player.querySelector('.cb-drop-badge').textContent = '';
+      player.querySelector('.cb-score-flight').textContent = '';
       const track = tracks[side];
       track.replaceChildren();
       for (let i = 0; i < 29; i++) {
@@ -127,6 +148,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   function setPhase(next, quiet) {
     if (phaseName === next) return;
     phaseName = next;
+    root.dataset.phase = next;
     if (next === 'unlock') {
       root.classList.add('cb-unlocking');
       status.textContent = 'Unlocking case';
@@ -148,6 +170,11 @@ export function caseScene(container, initial, { onBack, onFinish }) {
       status.textContent = 'Items revealed';
       players.forEach((player, side) => {
         const item = CASE_ITEMS[battle.pulls[round][side]];
+        player.style.setProperty('--drop-color', item.color);
+        player.classList.add('cb-show');
+        if (item.value >= 48) player.classList.add('cb-premium');
+        player.querySelector('.cb-drop-badge').textContent = item.tier === 'Special' ? '✦ SPECIAL DROP' : item.tier === 'Legendary' ? '✦ LEGENDARY' : '';
+        player.querySelector('.cb-score-flight').textContent = `+${item.value}`;
         cards[side].classList.add('cb-landed', 'cb-revealed');
         cards[side].classList.remove('cb-sealed');
         if (item.id === 'blade') player.classList.add('cb-rare');
@@ -155,6 +182,14 @@ export function caseScene(container, initial, { onBack, onFinish }) {
         player.querySelector('.cb-result-tier').style.color = item.color;
         player.querySelector('.cb-result-name').textContent = item.name;
         player.querySelector('.cb-result-value').textContent = `+${item.value} points`;
+        if (!quiet && turntables.has(item.id)) {
+          const sprite = document.createElement('span');
+          sprite.className = 'cb-turntable';
+          sprite.style.backgroundImage = `url("${art(`${item.id}-turn`)}")`;
+          cards[side].append(sprite);
+          cards[side].classList.add('cb-has-turntable');
+          revealSprites.push(sprite);
+        }
       });
       if (!quiet) {
         if (battle.pulls[round].includes(5)) { sfx.caseRare(); haptic([15, 30, 25]); }
@@ -174,13 +209,28 @@ export function caseScene(container, initial, { onBack, onFinish }) {
         next[side] += item.value;
         if (slot.dataset.item === item.id) return;
         slot.dataset.item = item.id;
-        slot.setAttribute('aria-label', `${item.name}, ${item.value} points`);
+        slot.dataset.round = i;
+        slot.disabled = false;
+        slot.style.setProperty('--item-color', item.color);
+        slot.setAttribute('aria-label', `Inspect ${item.name}, ${item.value} points, round ${i + 1}`);
         slot.innerHTML = `<img src="${art(item.id)}" alt=""><small>${item.value}</small>`;
       });
     });
     countFrom = [...shownTotals];
     countTo = next;
     countAt = performance.now();
+    const nextLeader = next[0] === next[1] ? -1 : next[0] > next[1] ? 0 : 1;
+    const changed = leader !== -1 && nextLeader !== -1 && leader !== nextLeader;
+    if (visible >= 0) {
+      momentum.textContent = nextLeader === -1 ? 'All square · tied battle' : `${changed ? 'Lead stolen! ' : ''}${battle.players[nextLeader].name} +${Math.abs(next[0] - next[1])} pts`;
+      momentum.classList.toggle('cb-comeback', changed);
+      if (changed && !reducedMotion()) sfx.caseLead();
+    }
+    leader = nextLeader;
+    const ratio = next[0] + next[1] ? next[0] / (next[0] + next[1]) : .5;
+    balance.style.setProperty('--share', ratio);
+    balance.setAttribute('aria-label', `${next[0]} to ${next[1]} points`);
+    players.forEach((player, side) => player.classList.toggle('cb-leading', side === leader));
     players.forEach((player, side) => {
       const tag = battle.players[side]?.bot ? 'Bot · ' : side === battle.seat ? 'You · ' : '';
       player.querySelector('.cb-player-state').textContent = `${tag}${next[side] === next[1 - side] ? 'Tied' : next[side] > next[1 - side] ? 'Leading' : 'Chasing'}`;
@@ -194,6 +244,11 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     const tied = scores[0] === scores[1];
     const winner = scores[0] > scores[1] ? 0 : 1;
     if (!tied) players[winner].classList.add('cb-winner');
+    root.classList.add('cb-complete');
+    finale.hidden = false;
+    finale.querySelector('.cb-finale-kicker').textContent = tied ? 'HONORS EVEN' : 'BATTLE WINNER';
+    finale.querySelector('strong').textContent = tied ? 'A perfect tie' : battle.players[winner].name;
+    finale.querySelector('p').textContent = `${scores[0]} – ${scores[1]} points · ${battle.practice ? 'Practice complete' : tied ? '50 chips each' : '100 chip pot awarded'}`;
     root.querySelectorAll('.cb-rounds span').forEach((el) => { el.className = 'cb-done'; });
     players.forEach((player, side) => { player.querySelector('.cb-player-state').textContent = tied ? 'Draw' : side === winner ? 'Winner' : 'Battle complete'; });
     const result = tied ? 'Draw · pot split' : `${battle.players[winner].name}${battle.players[winner].bot ? ' (bot)' : ''} wins`;
@@ -216,10 +271,12 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     const quiet = elapsed > CASE_ROUND_MS * 3 || reduce;
     if (elapsed < 0) {
       const countdown = Math.ceil(-elapsed / 1000);
-      roundLabel.textContent = `Opening in ${countdown}`;
+      if (countdown !== lastCountdown) roundLabel.textContent = `Opening in ${countdown}`;
       if (countdown !== lastCountdown) { lastCountdown = countdown; if (!reduce) sfx.click(); }
+      status.textContent = 'Ready to open';
     } else {
-      roundLabel.textContent = `Round ${index + 1} of 3`;
+      const label = `Round ${index + 1} of 3`;
+      if (roundLabel.textContent !== label) roundLabel.textContent = label;
       if (time < 800) setPhase('unlock', quiet);
       else if (time < 4300 || !hadPull) setPhase('spin', quiet);
       else if (time < 4750) setPhase('land', quiet);
@@ -229,10 +286,22 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     const progress = Math.max(0, Math.min(1, (time - 160) / 540));
     const frame = reduce ? (progress === 1 ? 18 : 0) : Math.round(18 * progress * progress * (3 - 2 * progress));
     if (frame !== lastFrame) { lastFrame = frame; caseArt.src = art(`caseFrame${frame}`); }
+    if (revealSprites.length) {
+      const p = Math.max(0, Math.min(1, (time - 4750) / 950));
+      const frame = Math.min(23, Math.floor((1 - (1 - p) ** 2.4) * 24));
+      if (frame !== spriteFrame) { spriteFrame = frame; revealSprites.forEach(sprite => turnFrame(sprite, frame)); }
+      if (p === 1 || reduce) {
+        revealSprites.forEach(sprite => { sprite.parentElement.classList.remove('cb-has-turntable'); sprite.remove(); });
+        revealSprites = [];
+      }
+    }
     let spin = Math.max(0, Math.min(1, (time - 800) / 3500));
     if (!hadPull) spin = Math.min(spin, .65);
     const travel = reduce ? (spin === 1 ? 1 : 0) : 1 - (1 - spin) ** 3.2;
-    tracks.forEach((track, side) => { track.style.transform = `translate3d(${starts[side] + (ends[side] - starts[side]) * travel}px,0,0)`; });
+    tracks.forEach((track, side) => {
+      const position = (starts[side] + (ends[side] - starts[side]) * travel).toFixed(2);
+      if (trackPositions[side] !== position) { trackPositions[side] = position; track.style.transform = `translate3d(${position}px,0,0)`; }
+    });
     const tickIndex = Math.floor(travel * (STOP - 2));
     if (tickIndex !== lastTick && spin > 0 && spin < 1) { lastTick = tickIndex; if (!quiet) sfx.tick(tickIndex); }
     history(hadPull && time >= 4750 ? index : index - 1);
@@ -250,6 +319,39 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   const resize = new ResizeObserver(() => { measure(); wake(); });
   resize.observe(root);
   document.addEventListener('visibilitychange', wake);
+  root.addEventListener('click', (event) => {
+    const slot = event.target.closest('.cb-past[data-item]');
+    if (!slot || inspector) return;
+    const item = CASE_ITEMS.find(item => item.id === slot.dataset.item);
+    const type = caseById(battle.cases[Number(slot.dataset.round)]);
+    const odds = type.weights[CASE_ITEMS.indexOf(item)];
+    inspector = document.createElement('dialog');
+    inspector.className = 'cb-inspect';
+    inspector.setAttribute('aria-label', item.name);
+    inspector.style.setProperty('--item-color', item.color);
+    inspector.innerHTML = `<button class="cb-inspect-close" type="button" aria-label="Close item" autofocus>×</button><span class="cb-inspect-tier">${item.tier}</span><h3>${item.name}</h3><div class="cb-inspect-art"><img src="${art(item.id)}" alt="${item.name}">${turntables.has(item.id) ? `<span class="cb-inspect-turn" style="background-image:url('${art(`${item.id}-turn`)}')"></span>` : ''}</div>${turntables.has(item.id) ? '<label class="cb-rotate-label">Rotate item<input type="range" min="0" max="23" value="23" aria-label="Rotate item"></label>' : ''}<div class="cb-inspect-stats"><strong>${item.value}<small>POINTS</small></strong><span>${type.name}<small>${odds}% drop chance · round ${Number(slot.dataset.round) + 1}</small></span></div><p>Item value adds to your battle score.</p>`;
+    root.append(inspector);
+    inspectorSource = slot;
+    const dialog = inspector;
+    const sprite = dialog.querySelector('.cb-inspect-turn');
+    if (sprite) {
+      turnFrame(sprite, 23);
+      // Load only the inspected item's larger atlas; phones keep the small reveal pack.
+      const detail = new Image();
+      detail.src = art(`${item.id}-inspect`);
+      detail.decode().then(() => {
+        if (dialog.isConnected) { sprite.style.backgroundImage = `url("${detail.src}")`; sprite.dataset.detail = 'ready'; }
+      }).catch(() => {});
+    }
+    dialog.querySelector('input')?.addEventListener('input', event => {
+      dialog.classList.add('cb-inspect-rotating');
+      turnFrame(sprite, Number(event.target.value));
+    });
+    dialog.querySelector('.cb-inspect-close').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+    dialog.addEventListener('close', () => { dialog.remove(); inspector = null; if (!destroyed) inspectorSource?.focus(); });
+    dialog.showModal();
+  });
   root.querySelector('.cb-start').addEventListener('click', onBack);
   root.querySelector('.cb-sound').addEventListener('click', (event) => {
     setSound(!soundOn());
@@ -268,6 +370,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     },
     destroy() {
       destroyed = true;
+      inspector?.close();
+      inspector?.remove();
       cancelAnimationFrame(raf);
       resize.disconnect();
       document.removeEventListener('visibilitychange', wake);

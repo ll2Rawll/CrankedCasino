@@ -1,12 +1,12 @@
-import { engine, errorText } from '../engine.js?v=88d999005677';
-import { store, on } from '../store.js?v=88d999005677';
-import { esc, storage } from '../util.js?v=88d999005677';
-import { openAccount } from '../account.js?v=88d999005677';
-import { modal, toast } from '../ui.js?v=88d999005677';
-import { sfx } from '../sound.js?v=88d999005677';
-import { random } from '../rng.js?v=88d999005677';
-import { CASES, CASE_ITEMS, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals } from './cases-data.js?v=88d999005677';
-import { caseScene, warmCaseArt } from './cases-scene.js?v=88d999005677';
+import { engine, errorText } from '../engine.js?v=e08da9841def';
+import { store, on } from '../store.js?v=e08da9841def';
+import { esc, storage } from '../util.js?v=e08da9841def';
+import { openAccount } from '../account.js?v=e08da9841def';
+import { modal, toast } from '../ui.js?v=e08da9841def';
+import { sfx } from '../sound.js?v=e08da9841def';
+import { random } from '../rng.js?v=e08da9841def';
+import { CASES, CASE_ITEMS, CASE_ENTRY, CASE_ROUND_MS, drawCase, caseTotals } from './cases-data.js?v=e08da9841def';
+import { caseScene, warmCaseArt } from './cases-scene.js?v=e08da9841def';
 
 const validId = (id) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id || '');
 const options = (selected) => CASES.map((type) => `<option value="${type.id}" ${selected === type.id ? 'selected' : ''}>${type.name}</option>`).join('');
@@ -74,7 +74,7 @@ export default {
       lobbySignature = '';
       content.innerHTML = `<div class="cases-create panel">
         <div class="cases-create-top"><h2>Build your battle</h2><span>50 chip entry <b>·</b> 100 chip pot</span></div>
-        <div class="cases-selection">${selected.map((id, i) => `<label class="cases-choice"><img src="assets/cases/case.webp" alt="" style="filter:hue-rotate(${CASES.find((type) => type.id === id).hue}deg)"><span>Round ${i + 1}</span><select data-case="${i}" aria-label="Case for round ${i + 1}">${options(id)}</select></label>`).join('')}</div>
+        <div class="cases-selection">${selected.map((id, i) => `<label class="cases-choice"><img src="assets/cases/case.webp?v=2" alt="" style="filter:hue-rotate(${CASES.find((type) => type.id === id).hue}deg)"><span>Round ${i + 1}</span><select data-case="${i}" aria-label="Case for round ${i + 1}">${options(id)}</select></label>`).join('')}</div>
         <div class="cases-create-bottom"><label class="cases-mode">Battle type<select data-visibility aria-label="Battle type">${online ? `<option value="public" ${visibility === 'public' ? 'selected' : ''}>Public room</option><option value="private" ${visibility === 'private' ? 'selected' : ''}>Invite-only room</option>` : ''}<option value="bot" ${visibility === 'bot' ? 'selected' : ''}>Bot battle</option></select></label><div class="cases-create-buttons"><button class="btn btn-outline" data-practice type="button">Free practice</button><button class="btn btn-primary" data-create type="button">${signedIn ? visibility === 'bot' ? 'Battle bot · 50 chips' : 'Create battle · 50 chips' : 'Sign in to battle'}</button></div></div>
         <p class="cases-note">${online ? 'Both players open the same cases. Item values count toward your score. A draw returns 50 chips to each player.' : 'Bot battles and free practice are available on this device. Online rooms become available when the casino connects.'}</p>
         <button class="btn btn-outline" data-resume type="button" hidden>Resume your battle</button>
@@ -96,7 +96,7 @@ export default {
       clearScene();
       const own = battle.seat === 0;
       const invite = `${location.origin}${location.pathname}#/cases?battle=${battle.id}`;
-      content.innerHTML = `<div class="cases-waiting panel"><span class="kicker">${battle.visibility === 'private' ? 'Invite-only battle' : 'Public battle'}</span><h2>${own ? 'Your opponent has an open seat' : `Join ${esc(battle.players[0].name)}’s battle`}</h2><div class="cases-waiting-cases">${battle.cases.map((id) => `<div><img src="assets/cases/case.webp" alt=""><span>${caseByName(id)}</span></div>`).join('')}</div><p>3 rounds · 50 chips each · 100 chip pot</p>${own ? `<label class="cases-invite">Invite link<input value="${esc(invite)}" readonly aria-label="Battle invite link"></label><div class="cases-wait-actions"><button class="btn btn-primary" data-copy type="button">Copy invite</button><button class="btn btn-outline" data-cancel type="button">Cancel & return 50 chips</button></div><p class="cases-note">Your 50 chips are reserved. The battle starts when a second player joins. Unjoined rooms expire after 10 minutes.</p>` : '<button class="btn btn-primary" data-join type="button">Join battle · 50 chips</button>'}<button class="btn btn-ghost" data-back type="button">Back to battles</button></div>`;
+      content.innerHTML = `<div class="cases-waiting panel"><span class="kicker">${battle.visibility === 'private' ? 'Invite-only battle' : 'Public battle'}</span><h2>${own ? 'Your opponent has an open seat' : `Join ${esc(battle.players[0].name)}’s battle`}</h2><div class="cases-waiting-cases">${battle.cases.map((id) => `<div><img src="assets/cases/case.webp?v=2" alt=""><span>${caseByName(id)}</span></div>`).join('')}</div><p>3 rounds · 50 chips each · 100 chip pot</p>${own ? `<label class="cases-invite">Invite link<input value="${esc(invite)}" readonly aria-label="Battle invite link"></label><div class="cases-wait-actions"><button class="btn btn-primary" data-copy type="button">Copy invite</button><button class="btn btn-outline" data-cancel type="button">Cancel & return 50 chips</button></div><p class="cases-note">Your 50 chips are reserved. The battle starts when a second player joins. Unjoined rooms expire after 10 minutes.</p>` : '<button class="btn btn-primary" data-join type="button">Join battle · 50 chips</button>'}<button class="btn btn-ghost" data-back type="button">Back to battles</button></div>`;
       lastState = 'waiting';
     }
 

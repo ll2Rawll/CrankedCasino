@@ -66,6 +66,25 @@ try {
   assert.equal(state.balance, 950 + state.battles[0].payout);
   assert.equal(state.stats.games.cases.bets, 1);
   assert.equal(await page.locator('.cb-rare').count(), 1);
+  assert.match(await page.locator('.cb-momentum').textContent(), /Lead stolen! CaseBrowser \+29 pts/);
+  assert.equal(await page.locator('.cb-finale strong').textContent(), 'CaseBrowser');
+  assert.equal(await page.locator('.cb-past:enabled').count(), 6);
+  // The accelerated clock can finish three rounds before deferred image decoding.
+  await page.evaluate(async () => {
+    const version = new URL(document.querySelector('script[type="module"]').src).search;
+    await (await import(`/js/games/cases-scene.js${version}`)).warmCaseArt();
+  });
+  await page.getByRole('button', { name: 'Inspect Prism Edge, 220 points, round 3' }).click({ force: true });
+  await page.getByRole('dialog', { name: 'Prism Edge' }).waitFor();
+  assert.match(await page.locator('.cb-inspect-stats').textContent(), /3% drop chance/);
+  const rotation = page.getByRole('slider', { name: 'Rotate item' });
+  await rotation.fill('6');
+  const rotationPosition = await page.locator('.cb-inspect-turn').evaluate(el => el.style.backgroundPosition.split(' ').map(parseFloat));
+  assert.equal(rotationPosition[0], 0);
+  assert(Math.abs(rotationPosition[1] - 100 / 3) < .001);
+  await page.keyboard.press('Escape');
+  await page.locator('.cb-inspect').waitFor({ state: 'detached' });
+  assert.match(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), /Inspect Prism Edge/);
   assert.equal(state.history.filter((row) => row.g === 'cases').length, 1);
   assert.deepEqual(await page.locator('.cb-result-name').allTextContents(), state.battles[0].pulls[2].map((index) => ['House Stack','Violet Audio','Emerald Signet','Ice Cut','Midnight Dial','Prism Edge'][index]));
   await page.screenshot({ path: `/workspace/scratch/rooster-tests/cases-app-${engine.name()}.png`, fullPage: true });

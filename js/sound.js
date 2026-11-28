@@ -1,6 +1,6 @@
 // Tiny Web Audio synth. Every sound is generated on the fly, so there are no audio files.
 
-import { storage } from './util.js?v=88d999005677';
+import { storage } from './util.js?v=e08da9841def';
 
 let ctx = null;
 let master = null;
@@ -90,6 +90,9 @@ const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28];
 const note = (base, semis) => base * Math.pow(2, semis / 12);
 
 export const sfx = {
+  caseLead() {
+    [392, 587.33, 783.99].forEach((freq, i) => tone({ freq, type: 'sine', dur: 0.18, gain: 0.045, delay: i * 0.065 }));
+  },
   caseUnlock() {
     tone({ freq: 240, slideTo: 110, type: 'triangle', dur: 0.12, gain: 0.11 });
     tone({ freq: 310, slideTo: 140, type: 'triangle', dur: 0.12, gain: 0.09, delay: 0.13 });

@@ -60,6 +60,10 @@ In device mode, paid bot battles use the existing browser account and balance. F
 
 Validation uses `node tools/test-case-battles.mjs`, `node tools/test-case-battles-browser.mjs` with Playwright Core, and `python3 tools/test-case-battles-postgres.py CONTAINER_NAME` against a disposable PostgreSQL container loaded with the schema. `BROWSER=webkit` runs the browser suite with Safari’s engine.
 
+Openings include animated case latches, rotating item reveals, rarity bursts, a score meter, lead changes, and a winner celebration. Collected item buttons open an inspection dialog with rotation, points, and the selected case's actual drop chance. Effects respect reduced motion and stop when the scene is destroyed.
+
+Artwork is original, generated offline by `node tools/render-cases-art.mjs` using the bundled Three.js and Playwright Core. The game uses WebP images and short 24-frame atlases, with no runtime WebGL. Essential artwork loads first; larger inspection atlases load only for the item being inspected. `node tools/test-case-effects.mjs` checks reveal transitions and cleanup. `PERF=1` measures a real-time battle under 4× CPU throttling in Chromium. These runs require Playwright Core on Node's module path and an installed browser. Cloud WebKit coverage does not replace testing on a physical iPhone.
+
 ### How it stops cheating
 
 - **Balances live on the server.** Every bet is placed, decided and paid inside Postgres, under a row lock. Editing the page or the network traffic can't change a result.

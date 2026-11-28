@@ -1,12 +1,12 @@
 // Shared UI: toasts, modals, bet input, segmented controls, game page frame.
 
-import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=88d999005677';
-import { icon } from './icons.js?v=88d999005677';
-import { store, on, BetError } from './store.js?v=88d999005677';
-import { sfx } from './sound.js?v=88d999005677';
-import { needAccount } from './account.js?v=88d999005677';
-import { banner } from './ads.js?v=88d999005677';
-import { errorText } from './engine.js?v=88d999005677';
+import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=e08da9841def';
+import { icon } from './icons.js?v=e08da9841def';
+import { store, on, BetError } from './store.js?v=e08da9841def';
+import { sfx } from './sound.js?v=e08da9841def';
+import { needAccount } from './account.js?v=e08da9841def';
+import { banner } from './ads.js?v=e08da9841def';
+import { errorText } from './engine.js?v=e08da9841def';
 
 // ---------------------------------------------------------------- toasts
 const toastRoot = document.getElementById('toasts');
@@ -339,7 +339,7 @@ export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it i
       el.insertAdjacentHTML('beforeend', '<span class="stamp">Redeemed</span>');
       input.value = '';
       sfx.jackpot();
-      import('./fx.js?v=88d999005677').then(({ coinRain, burstAt, PALETTES }) => {
+      import('./fx.js?v=e08da9841def').then(({ coinRain, burstAt, PALETTES }) => {
         coinRain(120);
         burstAt(el, { count: 90, colors: PALETTES.gold, speed: [5, 15] });
       });
