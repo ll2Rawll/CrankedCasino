@@ -123,7 +123,9 @@ for invalid in [{'start': 99, 'flaps': [], 'frames': 1}, {'start': 0, 'flaps': [
 assert sql("select cc.duel_score('flight',123,'{\"start\":0,\"flaps\":[],\"frames\":45}',1500) = (cc.fl_replay(123,0,'{}',1000000,45)->>'score')::integer;") == 't'
 
 # Two people share a real table, see the same dealer, act in turn and settle once.
-table_id = rpc('cc_bjm_join', host, None)['table']['id']
+# Keep this fixture independent of seats left by another disposable test suite.
+table_id = sql("insert into cc.bjm_tables(name,shoe,cut) values ('QA regression',cc.bjm_new_shoe(),60) returning id;")
+assert rpc('cc_bjm_join', host, table_id)['table']['me'] == 0
 assert rpc('cc_bjm_join', guest, table_id)['table']['me'] == 1
 assert rpc('cc_bjm_bet', third, table_id, 10)['error'] == 'not_seated'
 before = balance(host)

@@ -251,7 +251,7 @@ try {
   assert(await guest.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   assert.deepEqual(errors, []);
   assert.deepEqual(failedRPCs, []);
-  console.log('PASS shared Blackjack: two seats, unequal bets, hidden dealer, turns, matching results, settlement, reload recovery, pre-deal refund, delayed polls after leaving, mid-hand departure and lobby payouts.');
+  console.log(`PASS shared Blackjack: two seats, unequal bets, hidden dealer, turns, matching results, settlement, reload recovery, pre-deal refund, ${container ? 'delayed polls after leaving, ' : ''}mid-hand departure and lobby payouts.`);
   console.log(JSON.stringify({ accounts: accounts.map(a => a.name), duelId, tableId, browser: engine.name() }));
 } catch (e) {
   console.error(e.stack);
