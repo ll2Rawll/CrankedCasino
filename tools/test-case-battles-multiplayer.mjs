@@ -21,8 +21,10 @@ function sql(query) {
   });
 }
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium' });
+const pages=[];
+const errors=[];
 try {
-  const errors = [];
+  let failNextJoin = false;
   async function client(width) {
     const context = await browser.newContext({ viewport: { width, height: 900 } });
     await context.route('https://casino.test/**', async (route) => {
@@ -33,6 +35,7 @@ try {
     await context.route('https://case-db.test/rest/v1/rpc/**', async (route) => {
       const name = new URL(route.request().url()).pathname.split('/').pop();
       const args = route.request().postDataJSON();
+      if (name === 'cc_cases_join' && failNextJoin) { failNextJoin = false; return route.fulfill({status:503,contentType:'application/json',body:'{}'}); }
       assert(/^cc_[a-z_]+$/.test(name));
       assert(Object.keys(args).every((key) => /^p_[a-z_]+$/.test(key)));
       try {
@@ -44,6 +47,7 @@ try {
       }
     });
     const page = await context.newPage();
+    pages.push(page);
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto('https://casino.test/#/cases');
     await page.locator('[data-create]').click();
@@ -61,13 +65,31 @@ try {
     await host.locator(`[data-case-choice="${id}"]`).click();
   }
   await host.locator('[data-battle-mode="private"]').click();
+  await host.getByRole('spinbutton',{name:'Your bet',exact:true}).fill('125.75');
   await host.locator('[data-create]').click();
   await host.locator('.cases-invite input').waitFor();
   const invite = await host.locator('.cases-invite input').inputValue();
   await guest.goto(invite);
+  const guestWager = guest.getByRole('spinbutton',{name:'Your bet',exact:true});
+  await guestWager.fill('20.25');
+  assert.equal(await guest.locator('[data-join-pot]').textContent(),'146.00');
+  failNextJoin = true;
+  await guest.locator('[data-join]').click();
+  await guest.getByRole('button',{name:'Retry join · 20.25 chips',exact:true}).waitFor();
+  await guest.locator('.cases-error').filter({hasText:'server hiccuped'}).waitFor();
+  assert(await guestWager.isDisabled());
+  await guest.evaluate(()=>localStorage.setItem('cc:bet:cases','800'));
+  await guest.reload();
+  await guest.getByRole('button',{name:'Retry join · 20.25 chips',exact:true}).waitFor();
+  assert.equal(await guestWager.inputValue(),'20.25');
+  assert(await guestWager.isDisabled());
   await guest.locator('[data-join]').click();
   await Promise.all([host.locator('#case-openings').waitFor(),guest.locator('#case-openings').waitFor()]);
   await Promise.all([host.getByRole('button',{name:'Battle again',exact:true}).waitFor({timeout:35000}),guest.getByRole('button',{name:'Battle again',exact:true}).waitFor({timeout:35000})]);
+  assert.equal(await guest.locator('.cb-pot').textContent(),'146.00 CHIP POT');
+  assert.deepEqual(await guest.locator('.cb-player-wager strong').allTextContents(),['125.75','20.25']);
+  assert(await guest.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await guest.screenshot({path:'/workspace/scratch/rooster-tests/cases-unequal-stakes.png',fullPage:true});
   assert.deepEqual(await host.locator('.cb-result-name').allTextContents(),await guest.locator('.cb-result-name').allTextContents());
   assert.deepEqual(await host.locator('.cb-total').allTextContents(),await guest.locator('.cb-total').allTextContents());
   assert.equal(await host.locator('.cb-history img').count(),6);
@@ -75,5 +97,9 @@ try {
   assert.match(await host.locator('.cb-verdict').textContent(), /chips returned/);
   assert.match(await guest.locator('.cb-verdict').textContent(), /chips returned/);
   assert.deepEqual(errors,[]);
-  console.log('Two authenticated browser sessions passed private-room creation, invite navigation, joining, synchronized reveals, matching scores and settlement against the real PostgreSQL RPCs as anon.');
+  console.log('Two authenticated browser sessions passed private-room creation, invite navigation, unequal decimal bets, join failure/reload recovery, joining, synchronized reveals, matching scores and settlement against the real PostgreSQL RPCs as anon.');
+} catch(error) {
+  console.error('Browser errors',errors);
+  for(const page of pages) console.error(await page.locator('.cases-page').innerText());
+  throw error;
 } finally { await browser.close(); }

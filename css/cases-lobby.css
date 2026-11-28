@@ -281,3 +281,19 @@
 }
 @media(prefers-reduced-motion:reduce) { .cs-is-open .cs-treasures button img { transform:none!important; } }
 [data-motion="reduced"] .cs-is-open .cs-treasures button img { transform:none!important; }
+/* Custom stakes use the same chip controls as the other games. */
+.cs-wager { margin-top:16px; min-width:0; }
+.cs-wager .field { margin:0; }
+.cs-wager .input-group { min-width:0; }
+.cs-wager input { min-width:0; font-size:16px; }
+.cs-wager .rack { flex-wrap:wrap; }
+.cs-bet-note { margin:10px 0 0; color:#bba8bd; font-size:11px; line-height:1.5; }
+.cs-stakes>div { min-width:0; }
+.cs-stakes strong { overflow-wrap:anywhere; }
+.cs-stakes strong b { font-weight:inherit; }
+.cs-battle-start>b { overflow-wrap:anywhere; }
+.cases-join-pot { color:#f2d59b; }
+#case-openings .cb-player-wager { padding:0 12px 10px; font-size:10px; color:#b4a3bb; overflow-wrap:anywhere; }
+#case-openings .cb-player-wager strong { color:#f2d59b; font-weight:600; }
+#case-openings .cb-pot { overflow-wrap:anywhere; }
+@media(max-width:360px) { .cs-wager .mini { padding-left:9px; padding-right:9px; } .cs-stakes { gap:12px; } .cs-stakes strong { font-size:20px; } }

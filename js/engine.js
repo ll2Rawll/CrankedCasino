@@ -7,7 +7,7 @@
 //
 // Calls run one at a time, in order, so balance updates always arrive in sequence.
 
-import { CONFIG } from './config.js?v=7dd2455b7c8d';
+import { CONFIG } from './config.js?v=7ea755b2a1a3';
 
 const url = String(CONFIG.supabaseUrl || '').trim().replace(/\/+$/, '');
 const key = String(CONFIG.supabaseKey || '').trim();
@@ -37,7 +37,7 @@ const emit = (type, data) => listeners.forEach((fn) => fn(type, data));
 let localApi = null;
 async function rpc(fn, args) {
   if (MODE === 'device') {
-    localApi ||= await import('./engine-local.js?v=7dd2455b7c8d');
+    localApi ||= await import('./engine-local.js?v=7ea755b2a1a3');
     return localApi.call(fn, args);
   }
   const headers = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };
@@ -138,8 +138,8 @@ export const engine = {
   // ---------------------------------------------------------------- games
   casesList: () => call('cc_cases_list'),
   casesGet: (id) => call('cc_cases_get', { p_id: id }),
-  casesCreate: (requestId, cases, visibility) => call('cc_cases_create', { p_request_id: requestId, p_cases: cases, p_visibility: visibility }),
-  casesJoin: (id) => call('cc_cases_join', { p_id: id }),
+  casesCreate: (requestId, cases, visibility, bet = 50) => call('cc_cases_create', { p_request_id: requestId, p_cases: cases, p_visibility: visibility, p_bet: bet }),
+  casesJoin: (id, bet = 50) => call('cc_cases_join', { p_id: id, p_bet: bet }),
   casesCancel: (id) => call('cc_cases_cancel', { p_id: id }),
   plinko: (bet, risk, rows) => call('cc_plinko', { p_bet: bet, p_risk: risk, p_rows: rows }),
   roulette: (bets) => call('cc_roulette', { p_bets: bets }),

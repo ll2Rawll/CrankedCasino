@@ -1,12 +1,12 @@
 // Shared UI: toasts, modals, bet input, segmented controls, game page frame.
 
-import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=7dd2455b7c8d';
-import { icon } from './icons.js?v=7dd2455b7c8d';
-import { store, on, BetError } from './store.js?v=7dd2455b7c8d';
-import { sfx } from './sound.js?v=7dd2455b7c8d';
-import { needAccount } from './account.js?v=7dd2455b7c8d';
-import { banner } from './ads.js?v=7dd2455b7c8d';
-import { errorText } from './engine.js?v=7dd2455b7c8d';
+import { h, esc, fmt, round2, storage, signed, fmtMult } from './util.js?v=7ea755b2a1a3';
+import { icon } from './icons.js?v=7ea755b2a1a3';
+import { store, on, BetError } from './store.js?v=7ea755b2a1a3';
+import { sfx } from './sound.js?v=7ea755b2a1a3';
+import { needAccount } from './account.js?v=7ea755b2a1a3';
+import { banner } from './ads.js?v=7ea755b2a1a3';
+import { errorText } from './engine.js?v=7ea755b2a1a3';
 
 // ---------------------------------------------------------------- toasts
 const toastRoot = document.getElementById('toasts');
@@ -93,9 +93,9 @@ export const CHIP_VALUES = [1, 5, 10, 25, 100, 500];
 export const chipClass = (v) => (v >= 1000 ? 'c-1k' : v >= 500 ? 'c-500' : v >= 100 ? 'c-100' : v >= 25 ? 'c-25' : v >= 10 ? 'c-10' : v >= 5 ? 'c-5' : 'c-1');
 export const chipLabel = (v) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}K` : String(v));
 
-export function betInput(game, { label = 'Bet amount', min = 0.01, rack = true } = {}) {
+export function betInput(game, { label = 'Bet amount', min = 0.01, rack = true, defaultValue = 10 } = {}) {
   const key = `cc:bet:${game}`;
-  let value = storage.get(key, 10);
+  let value = storage.get(key, defaultValue);
   const el = h(`
     <div class="field">
       <div class="field-label"><span>${esc(label)}</span><button type="button" class="dim tnum" data-act="clear" style="font-size:11px;letter-spacing:.1em">CLEAR</button></div>
@@ -339,7 +339,7 @@ export function promoTicket({ title = 'Promo code', sub = 'Got a code? Cash it i
       el.insertAdjacentHTML('beforeend', '<span class="stamp">Redeemed</span>');
       input.value = '';
       sfx.jackpot();
-      import('./fx.js?v=7dd2455b7c8d').then(({ coinRain, burstAt, PALETTES }) => {
+      import('./fx.js?v=7ea755b2a1a3').then(({ coinRain, burstAt, PALETTES }) => {
         coinRain(120);
         burstAt(el, { count: 90, colors: PALETTES.gold, speed: [5, 15] });
       });

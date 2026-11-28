@@ -21,6 +21,9 @@ create index if not exists case_battles_host on cc.case_battles(host_id, created
 create index if not exists case_battles_guest on cc.case_battles(guest_id, created_at desc);
 create index if not exists case_battles_lobby on cc.case_battles(created_at desc) where state = 'waiting' and visibility = 'public';
 alter table cc.case_battles enable row level security;
+-- Defaults preserve all existing 50-chip battles, including in-flight rooms.
+alter table cc.case_battles add column if not exists host_bet numeric not null default 50 check (cc.valid_bet(host_bet));
+alter table cc.case_battles add column if not exists guest_bet numeric not null default 50 check (cc.valid_bet(guest_bet));
 
 create or replace function cc.case_valid(ids text[]) returns boolean
 language sql immutable set search_path = '' as $$
@@ -59,13 +62,13 @@ end $$;
 create or replace function cc.case_resolve(battle_id uuid) returns void
 language plpgsql volatile set search_path = '' as $$
 declare b cc.case_battles; scores integer[] := array[0,0]; values integer[] := array[8,24,48,65,110,220];
-  i integer; side integer; pid uuid; pay numeric; receipt jsonb; result_receipts jsonb := '[]';
+  i integer; side integer; pid uuid; stake numeric; pay numeric; receipt jsonb; result_receipts jsonb := '[]';
 begin
   select * into b from cc.case_battles where id = battle_id for update;
   if not found then return; end if;
   if b.state = 'waiting' and b.expires_at <= clock_timestamp() then
     perform 1 from cc.players where id = b.host_id for update;
-    perform cc.move(b.host_id, 50);
+    perform cc.move(b.host_id, b.host_bet);
     update cc.case_battles set state = 'cancelled', cancel_reason = 'expired' where id = b.id;
     return;
   end if;
@@ -79,9 +82,10 @@ begin
   for side in 0..1 loop
     pid := case side when 0 then b.host_id else b.guest_id end;
     if pid is null then result_receipts := result_receipts || '[null]'::jsonb; continue; end if;
-    pay := case when scores[1] = scores[2] then 50 when scores[side+1] > scores[2-side] then 100 else 0 end;
+    stake := case side when 0 then b.host_bet else b.guest_bet end;
+    pay := case when scores[1] = scores[2] then stake when scores[side+1] > scores[2-side] then b.host_bet + b.guest_bet else 0 end;
     perform cc.move(pid, pay);
-    receipt := cc.record(pid, 'cases', 50, pay,
+    receipt := cc.record(pid, 'cases', stake, pay,
       '3 cases · ' || scores[side+1] || ' to ' || scores[2-side] || case when b.visibility = 'bot' then ' · bot battle' else '' end);
     result_receipts := result_receipts || jsonb_build_array(receipt);
   end loop;
@@ -110,7 +114,10 @@ begin
       and clock_timestamp() >= b.started_at + i * interval '6.2 seconds' then b.pulls -> i else null end);
   end loop;
   return jsonb_build_object(
-    'id', b.id, 'state', b.state, 'visibility', b.visibility, 'cases', b.cases, 'entry', 50, 'pot', 100,
+    'id', b.id, 'state', b.state, 'visibility', b.visibility, 'cases', b.cases,
+    'entry', case when seat = 1 then b.guest_bet else b.host_bet end,
+    'entries', jsonb_build_array(b.host_bet, case when b.guest_id is not null or b.visibility = 'bot' then b.guest_bet else null end),
+    'pot', b.host_bet + case when b.guest_id is not null or b.visibility = 'bot' then b.guest_bet else 0 end,
     'created', floor(extract(epoch from b.created_at)*1000), 'expires', floor(extract(epoch from b.expires_at)*1000),
     'started', floor(extract(epoch from b.started_at)*1000), 'seat', seat,
     'players', jsonb_build_array(jsonb_build_object('name', host_name, 'bot', false),
@@ -127,7 +134,7 @@ language sql stable set search_path = '' as $$
     'server_now', floor(extract(epoch from clock_timestamp())*1000)) from cc.players p where id = pid
 $$;
 
-create or replace function public.cc_cases_create(p_token text, p_request_id uuid, p_cases text[], p_visibility text) returns jsonb
+create or replace function public.cc_cases_create(p_token text, p_request_id uuid, p_cases text[], p_visibility text, p_bet numeric default 50) returns jsonb
 language plpgsql volatile security definer set search_path = '' as $$
 declare pid uuid := cc.auth(p_token); p cc.players; b cc.case_battles; active uuid;
 begin
@@ -142,16 +149,17 @@ begin
   end if;
   select id into active from cc.case_battles where (host_id = pid or guest_id = pid) and state in ('waiting','running') limit 1;
   if found then return cc.err('battle_active', jsonb_build_object('battle_id',active)); end if;
-  if p.balance < 50 then return cc.err('funds'); end if;
-  insert into cc.case_battles(id,host_id,visibility,state,cases,started_at,pulls) values
-    (p_request_id,pid,p_visibility,case when p_visibility = 'bot' then 'running' else 'waiting' end,p_cases,
+  if not cc.valid_bet(p_bet) then return cc.err('bad_bet'); end if;
+  if p.balance < p_bet then return cc.err('funds'); end if;
+  insert into cc.case_battles(id,host_id,visibility,state,cases,host_bet,guest_bet,started_at,pulls) values
+    (p_request_id,pid,p_visibility,case when p_visibility = 'bot' then 'running' else 'waiting' end,p_cases,p_bet,p_bet,
      case when p_visibility = 'bot' then clock_timestamp() + interval '3 seconds' else null end,
      case when p_visibility = 'bot' then cc.case_roll(p_cases) else null end) returning * into b;
-  perform cc.move(pid,-50);
+  perform cc.move(pid,-p_bet);
   return cc.case_reply(b,pid);
 end $$;
 
-create or replace function public.cc_cases_join(p_token text, p_id uuid) returns jsonb
+create or replace function public.cc_cases_join(p_token text, p_id uuid, p_bet numeric default 50) returns jsonb
 language plpgsql volatile security definer set search_path = '' as $$
 declare pid uuid := cc.auth(p_token); b cc.case_battles; balance numeric; active uuid;
 begin
@@ -165,9 +173,10 @@ begin
   select id into active from cc.case_battles where (host_id = pid or guest_id = pid) and state in ('waiting','running') limit 1;
   if found then return cc.err('battle_active',jsonb_build_object('battle_id',active)); end if;
   select p.balance into balance from cc.players p where id = pid;
-  if balance < 50 then return cc.err('funds'); end if;
-  perform cc.move(pid,-50);
-  update cc.case_battles set guest_id = pid, state = 'running', started_at = clock_timestamp() + interval '3 seconds',
+  if not cc.valid_bet(p_bet) then return cc.err('bad_bet'); end if;
+  if balance < p_bet then return cc.err('funds'); end if;
+  perform cc.move(pid,-p_bet);
+  update cc.case_battles set guest_id = pid, guest_bet = p_bet, state = 'running', started_at = clock_timestamp() + interval '3 seconds',
     pulls = cc.case_roll(cases) where id = b.id returning * into b;
   return cc.case_reply(b,pid);
 end $$;
@@ -194,7 +203,7 @@ begin
   if b.state = 'cancelled' then return cc.case_reply(b,pid); end if;
   if b.state <> 'waiting' then return cc.err('battle_started'); end if;
   perform 1 from cc.players where id = pid for update;
-  perform cc.move(pid,50);
+  perform cc.move(pid,b.host_bet);
   update cc.case_battles set state = 'cancelled', cancel_reason = 'host' where id = b.id returning * into b;
   return cc.case_reply(b,pid);
 end $$;
@@ -215,13 +224,18 @@ begin
     'balance',p.balance,'seq',p.seq,'server_now',floor(extract(epoch from clock_timestamp())*1000));
 end $$;
 
+-- Remove the old overloads so PostgREST resolves optional wager arguments uniquely.
+drop function if exists public.cc_cases_create(text,uuid,text[],text);
+drop function if exists public.cc_cases_join(text,uuid);
+
 do $$ declare f text;
 begin
-  foreach f in array array['cc_cases_create(text,uuid,text[],text)','cc_cases_join(text,uuid)',
+  foreach f in array array['cc_cases_create(text,uuid,text[],text,numeric)','cc_cases_join(text,uuid,numeric)',
     'cc_cases_get(text,uuid)','cc_cases_cancel(text,uuid)','cc_cases_list(text)'] loop
     execute format('revoke all on function public.%s from public',f);
     execute format('grant execute on function public.%s to anon, authenticated',f);
   end loop;
 end $$;
 
+notify pgrst, 'reload schema';
 commit;

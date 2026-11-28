@@ -1,11 +1,11 @@
-import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem } from './cases-data.js?v=7dd2455b7c8d';
-import { random } from '../rng.js?v=7dd2455b7c8d';
-import { esc, reducedMotion } from '../util.js?v=7dd2455b7c8d';
-import { sfx, soundOn, setSound, haptic } from '../sound.js?v=7dd2455b7c8d';
+import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem, caseEntries } from './cases-data.js?v=7ea755b2a1a3';
+import { random } from '../rng.js?v=7ea755b2a1a3';
+import { esc, reducedMotion, fmt } from '../util.js?v=7ea755b2a1a3';
+import { sfx, soundOn, setSound, haptic } from '../sound.js?v=7ea755b2a1a3';
 
-import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=7dd2455b7c8d';
+import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=7ea755b2a1a3';
 
-import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=7dd2455b7c8d';
+import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=7ea755b2a1a3';
 
 const art = (name) => `assets/cases/${name}.webp?v=2`;
 const STOP = 25;
@@ -25,11 +25,11 @@ export function warmCaseArt(ids = ['after-hours']) {
   }));
 }
 
-function playerMarkup(player, side, seat) {
+function playerMarkup(player, side, seat, entry) {
   const name = player?.name || 'Open seat';
   return `<article class="cb-player" data-player="${side}" aria-label="${esc(name)} openings">
     <div class="cb-player-head"><span class="cb-avatar">${esc(name[0])}</span><div class="cb-identity"><b>${esc(name)}</b><span class="cb-player-state">${player?.bot ? 'Bot' : side === seat ? 'You' : 'Opponent'}</span></div><span class="cb-total">0<span> points</span></span></div>
-    <div class="cb-window"><div class="cb-track" aria-hidden="true"></div><div class="cb-pointer" aria-hidden="true"></div><div class="cb-impact" aria-hidden="true"></div><div class="cb-particles" aria-hidden="true"></div><span class="cb-drop-badge" aria-hidden="true"></span><span class="cb-score-flight" aria-hidden="true"></span></div>
+    ${entry == null ? '' : `<div class="cb-player-wager">BET <strong>${fmt(entry)}</strong> chips</div>`}<div class="cb-window"><div class="cb-track" aria-hidden="true"></div><div class="cb-pointer" aria-hidden="true"></div><div class="cb-impact" aria-hidden="true"></div><div class="cb-particles" aria-hidden="true"></div><span class="cb-drop-badge" aria-hidden="true"></span><span class="cb-score-flight" aria-hidden="true"></span></div>
     <div class="cb-result"><span class="cb-result-tier">NEXT PULL</span><strong class="cb-result-name">Opening soon</strong><span class="cb-result-value">—</span></div>
     <div class="cb-history" aria-label="Collected items">${Array.from({ length: 3 }, (_, i) => `<button class="cb-past" type="button" disabled aria-label="Round ${i + 1} unopened">·</button>`).join('')}</div>
   </article>`;
@@ -42,10 +42,10 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   root.innerHTML = `<header class="cb-header"><div><div class="cb-brand">CRANKED CASINO</div><h2>Case battle</h2></div><span class="cb-mode">${initial.practice ? 'Practice' : '1 vs 1'}</span></header>
     <div class="cb-case-stage"><div class="cb-case-copy"><span class="cb-caption"></span><strong class="cb-round-label">Getting ready</strong><div class="cb-rounds" aria-label="Three cases"><span></span><span></span><span></span></div></div>
     ${caseEffectMarkup()}<div class="cb-case-rays" aria-hidden="true"></div><div class="cb-case-halo" aria-hidden="true"></div><div class="cb-case-sparks" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i style="--spark:${i}"></i>`).join('')}</div><img class="cb-case-art" src="${caseCover(initial.cases[0])}" alt="Cranked item case"><span class="cb-case-art cb-case-film" aria-hidden="true"></span><div class="cb-case-status"></div></div>
-    <div class="cb-duel"><div class="cb-duel-caption"><span class="cb-momentum" role="status">Three cases. One winner.</span><span class="cb-pot">${initial.practice ? 'FREE PRACTICE' : '100 CHIP POT'}</span></div><div class="cb-balance" aria-hidden="true"><i></i><b></b></div></div>
-    <div class="cb-battle">${initial.players.map((player, i) => playerMarkup(player, i, initial.seat)).join('')}</div>
+    <div class="cb-duel"><div class="cb-duel-caption"><span class="cb-momentum" role="status">Three cases. One winner.</span><span class="cb-pot">${initial.practice ? 'FREE PRACTICE' : `${fmt(initial.pot ?? 100)} CHIP POT`}</span></div><div class="cb-balance" aria-hidden="true"><i></i><b></b></div></div>
+    <div class="cb-battle">${initial.players.map((player, i) => playerMarkup(player, i, initial.seat, initial.practice ? null : caseEntries(initial)[i])).join('')}</div>
     <div class="cb-finale" hidden><span class="cb-finale-crown" aria-hidden="true">♛</span><div><span class="cb-finale-kicker"></span><strong></strong><p></p></div><div class="cb-confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--n:${i};--drift:${(i % 5 - 2) * 32}px"></i>`).join('')}</div></div>
-    <div class="cb-footer"><div class="cb-verdict" role="status">${initial.practice ? 'Practice · no chips wagered' : '100 chip pot · highest score wins'}</div><div class="cb-actions"><button class="cb-sound" type="button" aria-pressed="${soundOn()}">Sound ${soundOn() ? 'on' : 'off'}</button><button class="cb-start" type="button">Back to battles</button></div></div>`;
+    <div class="cb-footer"><div class="cb-verdict" role="status">${initial.practice ? 'Practice · no chips wagered' : `${fmt(initial.pot ?? 100)} chip pot · highest score wins`}</div><div class="cb-actions"><button class="cb-sound" type="button" aria-pressed="${soundOn()}">Sound ${soundOn() ? 'on' : 'off'}</button><button class="cb-start" type="button">Back to battles</button></div></div>`;
   container.replaceChildren(root);
   const players = [...root.querySelectorAll('.cb-player')];
   const tracks = players.map((player) => player.querySelector('.cb-track'));
@@ -255,11 +255,11 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     finale.hidden = false;
     finale.querySelector('.cb-finale-kicker').textContent = tied ? 'HONORS EVEN' : 'BATTLE WINNER';
     finale.querySelector('strong').textContent = tied ? 'A perfect tie' : battle.players[winner].name;
-    finale.querySelector('p').textContent = `${scores[0]} – ${scores[1]} points · ${battle.practice ? 'Practice complete' : tied ? '50 chips each' : '100 chip pot awarded'}`;
+    finale.querySelector('p').textContent = `${scores[0]} – ${scores[1]} points · ${battle.practice ? 'Practice complete' : tied ? 'Both wagers returned' : `${fmt(battle.pot ?? 100)} chip pot awarded`}`;
     root.querySelectorAll('.cb-rounds span').forEach((el) => { el.className = 'cb-done'; });
     players.forEach((player, side) => { player.querySelector('.cb-player-state').textContent = tied ? 'Draw' : side === winner ? 'Winner' : 'Battle complete'; });
-    const result = tied ? 'Draw · pot split' : `${battle.players[winner].name}${battle.players[winner].bot ? ' (bot)' : ''} wins`;
-    verdict.textContent = battle.practice ? `${result} · practice complete` : `${result}${battle.seat < 0 ? ' · 100 chip pot' : ` · ${battle.payout} chips returned`}`;
+    const result = tied ? 'Draw · wagers returned' : `${battle.players[winner].name}${battle.players[winner].bot ? ' (bot)' : ''} wins`;
+    verdict.textContent = battle.practice ? `${result} · practice complete` : `${result}${battle.seat < 0 ? ` · ${fmt(battle.pot ?? 100)} chip pot` : ` · ${fmt(battle.payout)} chips returned`}`;
     status.textContent = 'Battle complete';
     root.querySelector('.cb-start').textContent = 'Battle again';
     if (!battle.practice && (tied || winner === battle.seat)) sfx.cashout();

@@ -2,7 +2,7 @@
 // its own hash (hash01, shared with the server); an earlier generator stepped linearly from
 // one row to the next and lined whole stretches of road up in the same direction. The
 // server mirrors every function here in SQL (supabase/schema.sql, cc.rs_*).
-import { RR, rrHit, hash01 } from '../math.js?v=7dd2455b7c8d';
+import { RR, rrHit, hash01 } from '../math.js?v=7ea755b2a1a3';
 
 /** Uniform in [0, 1) for (seed, row, slot). */
 export const scoreRand = hash01;

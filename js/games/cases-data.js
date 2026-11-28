@@ -1,4 +1,4 @@
-// Item values are battle scores. The winner receives the fixed chip pot.
+// Item values are battle scores. Wagers contribute chips, never extra points.
 export const CASE_ENTRY = 50;
 export const CASE_ROUND_MS = 6200;
 export const CASE_COUNTDOWN_MS = 3000;
@@ -40,7 +40,8 @@ export function drawCase(id, random) {
 export function caseTotals(pulls) {
   return pulls.reduce((totals, row) => totals.map((total, side) => total + CASE_ITEMS[row[side]].value), [0, 0]);
 }
-export function casePayout(totals, side) {
-  if (totals[side] === totals[1 - side]) return CASE_ENTRY;
-  return totals[side] > totals[1 - side] ? CASE_ENTRY * 2 : 0;
+export const caseEntries = (battle) => battle.entries || [CASE_ENTRY, CASE_ENTRY];
+export function casePayout(totals, side, entries = [CASE_ENTRY, CASE_ENTRY]) {
+  if (totals[side] === totals[1 - side]) return entries[side];
+  return totals[side] > totals[1 - side] ? Math.round((entries[0] + entries[1]) * 100) / 100 : 0;
 }

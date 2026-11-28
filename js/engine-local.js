@@ -1,4 +1,4 @@
-import { caseApi } from './cases-local.js?v=7dd2455b7c8d';
+import { caseApi } from './cases-local.js?v=7ea755b2a1a3';
 // On-device casino server.
 //
 // Used only when js/config.js has no Supabase project. It answers the same calls as
@@ -6,10 +6,10 @@ import { caseApi } from './cases-local.js?v=7dd2455b7c8d';
 // accounts live in this browser's localStorage. Connect Supabase for accounts that
 // follow players to any browser and can't be reset by clearing site data.
 
-import { random, randInt, sample, weightedPick } from './rng.js?v=7dd2455b7c8d';
-import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=7dd2455b7c8d';
-import { scoreReplay } from './games/rooster-course.js?v=7dd2455b7c8d';
-import { flightReplay, FPS } from './games/flight-course.js?v=7dd2455b7c8d';
+import { random, randInt, sample, weightedPick } from './rng.js?v=7ea755b2a1a3';
+import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=7ea755b2a1a3';
+import { scoreReplay } from './games/rooster-course.js?v=7ea755b2a1a3';
+import { flightReplay, FPS } from './games/flight-course.js?v=7ea755b2a1a3';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const err = (error, extra = {}) => ({ ok: false, error, ...extra });
@@ -705,7 +705,7 @@ function minesFinish(p, won) {
   return money(p, { ok: true, mult: Math.round(mult * 10000) / 10000, payout: pay, cells: [...r.cells], revealed: [...r.revealed], entry });
 }
 
-const localCases = caseApi({ move, record, money, err });
+const localCases = caseApi({ move, record, money, err, validBet });
 Object.assign(API, localCases.api);
 
 const NO_AUTH = new Set(['cc_signup', 'cc_login', 'cc_logout', 'cc_leaderboard']);

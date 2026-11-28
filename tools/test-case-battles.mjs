@@ -24,6 +24,7 @@ assert.equal((await rpc('cc_cases_cancel', { p_id: id })).error, 'battle_started
 const db = JSON.parse(localStorage.getItem('cc:device:db'));
 const player = Object.values(db.players)[0];
 player.caseBattles[0].started = Date.now() - 20000;
+delete player.caseBattles[0].entries; // An unfinished battle saved before custom wagers.
 player.caseBattles[0].pulls = [[5,0],[4,0],[3,0]];
 localStorage.setItem('cc:device:db', JSON.stringify(db));
 const settled = await rpc('cc_cases_get', { p_id: id });
@@ -64,3 +65,34 @@ assert.deepEqual(mythicResult.battle.totals,[395,24]);
 assert.equal(mythicResult.battle.payout,100);
 assert.equal((await rpc('cc_cases_get',{p_id:mythicId})).balance,1100);
 console.log('Case battles passed odds boundaries, hidden future pulls, balance reservation, retry safety, settlement, history and tie payout checks.');
+
+// Custom bot stakes: persisted entries drive debits, payouts and history.
+for (const bad of [0, -.01, .001, NaN, Infinity, null, '75', 1e12 + 1]) {
+  assert.equal((await rpc('cc_cases_create', {...args, p_request_id:crypto.randomUUID(), p_bet:bad})).error, 'bad_bet');
+}
+assert.equal((await rpc('cc_cases_create', {...args,p_request_id:crypto.randomUUID(),p_bet:999999})).error, 'funds');
+for (const [amount,pulls,multiplier] of [[125.75,[[5,0],[4,0],[3,0]],2],[.01,[[0,0],[1,1],[2,2]],1],[300,[[0,5],[0,4],[0,3]],0]]) {
+  const before=(await rpc('cc_me')).balance;
+  const request={...args,p_request_id:crypto.randomUUID(),p_bet:amount};
+  const created=await rpc('cc_cases_create',request);
+  assert.equal(created.balance,Math.round((before-amount)*100)/100);
+  assert.deepEqual(created.battle.entries,[amount,amount]);
+  assert.equal(created.battle.pot,amount*2);
+  const retry=await rpc('cc_cases_create',{...request,p_bet:800});
+  assert.deepEqual(retry.battle.entries,[amount,amount]);
+  assert.equal(retry.balance,created.balance);
+  const db=JSON.parse(localStorage.getItem('cc:device:db'));
+  const battle=Object.values(db.players)[0].caseBattles.find(b=>b.id===request.p_request_id);
+  battle.started=Date.now()-30000; battle.pulls=pulls;
+  localStorage.setItem('cc:device:db',JSON.stringify(db));
+  const result=await rpc('cc_cases_get',{p_id:request.p_request_id});
+  assert.equal(result.battle.payout,amount*multiplier);
+  assert.equal(result.battle.receipt.a,amount);
+  assert.equal(result.balance,Math.round((before+amount*(multiplier-1))*100)/100);
+  assert.equal((await rpc('cc_cases_get',{p_id:request.p_request_id})).balance,result.balance);
+}
+assert.equal(casePayout([24,24],0,[125.75,20.25]),125.75);
+assert.equal(casePayout([24,24],1,[125.75,20.25]),20.25);
+assert.equal(casePayout([24,25],1,[125.75,20.25]),146);
+assert.equal(casePayout([25,24],0,[.1,.2]),.3);
+console.log('Custom wagers passed decimal bets, wins/losses/ties, invalid amounts, insufficient funds, immutable retries and exact history amounts.');

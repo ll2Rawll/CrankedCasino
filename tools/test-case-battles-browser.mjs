@@ -35,17 +35,39 @@ try {
   await page.locator('input[name=password]').fill('case-browser-123');
   await page.locator('.acct-go').click({ force: true });
   await page.waitForFunction(() => !!JSON.parse(localStorage.getItem('cc:session'))?.token);
-  await page.getByRole('button', { name: 'Battle bot · 50 chips' }).waitFor();
+  await page.getByRole('button', { name: 'Battle bot · 50.00 chips' }).waitFor();
   await page.clock.runFor(400);
   await page.locator('.acct-root').waitFor({ state: 'detached' });
+  const wager = page.getByRole('spinbutton', {name:'Your bet',exact:true});
+  await wager.fill('0');
+  await page.locator('[data-create]').click({force:true});
+  assert.match(await page.locator('.cases-error').textContent(),/Bets go from/);
+  await wager.fill('2000');
+  await page.locator('[data-create]').click({force:true});
+  assert.match(await page.locator('.cases-error').textContent(),/Not enough chips/);
+  await wager.fill('125.75');
+  await wager.blur();
+  assert.equal(await page.locator('[data-pot]').textContent(),'251.50');
+  await page.getByRole('button',{name:'Double bet',exact:true}).click();
+  assert.equal(await wager.inputValue(),'251.50');
+  await page.getByRole('button',{name:'Halve bet',exact:true}).click();
+  assert.equal(await wager.inputValue(),'125.75');
+  await page.getByRole('button',{name:'Max bet',exact:true}).click();
+  assert.equal(await wager.inputValue(),'1000.00');
+  await wager.fill('125.75'); await wager.blur();
+  await page.setViewportSize({width:320,height:740});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.screenshot({path:`/workspace/scratch/rooster-tests/cases-wager-${engine.name()}.png`,fullPage:true});
+  await page.setViewportSize({width:390,height:844});
   await page.locator('[data-edit-round="1"]').click();
   await page.locator('[data-case-choice="neon-vault"]').click();
   await page.locator('[data-edit-round="2"]').click();
   await page.locator('[data-case-choice="high-roller"]').click();
   // A retry must show and lock its original lineup, even if saved preferences differ.
   await page.evaluate(cases => {
-    localStorage.setItem('cc:cases:pending:CaseBrowser', JSON.stringify({ id: crypto.randomUUID(), cases, visibility: 'bot' }));
+    localStorage.setItem('cc:cases:pending:CaseBrowser', JSON.stringify({ id: crypto.randomUUID(), cases, visibility: 'bot', bet:125.75 }));
     localStorage.setItem('cc:cases:lineup', JSON.stringify(['high-roller','high-roller','high-roller']));
+    localStorage.setItem('cc:bet:cases','800');
   }, testCases);
   await page.reload();
   await page.locator('.cs-builder').waitFor();
@@ -54,11 +76,13 @@ try {
   assert.deepEqual(await page.locator('.cs-round strong').allTextContents(), mythic ? ['Dragonheart','Starfall','Leviathan'] : ['After Hours','Neon Vault','High Roller']);
   assert.equal(await page.locator('[data-edit-round]:disabled').count(), 3);
   assert(await page.locator('[data-shuffle]').isDisabled());
+  assert.equal(await wager.inputValue(),'125.75');
+  assert(await wager.isDisabled());
   await page.locator('[data-create]').click({ force: true });
   await page.locator('#case-openings').waitFor();
   assert.match(page.url(), /battle=[a-f0-9-]{36}/);
   await page.clock.runFor(1600);
-  assert.equal(await page.locator('#balanceNum').textContent(), '950.00');
+  assert.equal(await page.locator('#balanceNum').textContent(), '874.25');
   // A fixed QA fixture exercises the special-item reveal and comeback every run.
   await page.evaluate(() => {
     const db = JSON.parse(localStorage.getItem('cc:device:db'));
@@ -80,8 +104,12 @@ try {
   assert.equal(state.battles.length, 1);
   assert.equal(state.battles[0].id, battleId);
   assert.equal(state.battles[0].state, 'complete');
-  assert.equal(state.balance, 950 + state.battles[0].payout);
+  assert.equal(state.balance, 874.25 + state.battles[0].payout);
   assert.equal(state.stats.games.cases.bets, 1);
+  assert.equal(state.stats.games.cases.wagered,125.75);
+  assert.equal(state.battles[0].payout,251.50);
+  assert.match(await page.locator('.cb-pot').textContent(),/251.50/);
+  assert.deepEqual(await page.locator('.cb-player-wager strong').allTextContents(),['125.75','125.75']);
   assert.equal(await page.locator('.cb-rare').count(), 1);
   assert.match(await page.locator('.cb-momentum').textContent(), /Lead stolen! CaseBrowser \+29 pts/);
   assert.equal(await page.locator('.cb-finale strong').textContent(), 'CaseBrowser');
@@ -128,7 +156,7 @@ try {
   assert.match(await page.locator('.cb-verdict').textContent(), /practice complete/);
   assert.equal(await page.locator('#case-openings').evaluate(el=>el.getAnimations({subtree:true}).length),0);
   assert.deepEqual(errors, []);
-  console.log(engine.name(), 'passed free practice, account creation, case selection, paid entry, reload recovery, complete battle, exact reel landing, single payout, history, odds and 320px layout.');
+  console.log(engine.name(), 'passed free practice, account creation, case selection, custom decimal wagers, chip controls, validation, paid entry, reload recovery, complete battle, exact reel landing, single payout, history, odds and 320px layout.');
 } catch (error) {
   console.error('Page errors', errors);
   console.error('Game state', await page.locator('.cases-page').innerText());

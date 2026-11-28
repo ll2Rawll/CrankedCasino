@@ -85,3 +85,49 @@ assert rpc('cc_me', host)['balance'] == 1050
 assert rpc('cc_me', join_token)['balance'] == 950
 assert sum(rpc('cc_me', token)['balance'] for token in tokens) == 3000
 print('PostgreSQL case battles passed concurrent joins, concurrent settlement, retries, privacy, hidden future pulls, cancellation, expiry, ties, conserved balances and account history.')
+
+# Unequal wagers preserve actual reserved amounts through every terminal state.
+from decimal import Decimal
+money = lambda value: Decimal(str(value))
+for bad in ['0','-1','.001','NaN','Infinity','1000000000001']:
+    assert rpc('cc_cases_create',host,str(uuid.uuid4()),cases,'private',bad)['error'] == 'bad_bet'
+assert rpc('cc_cases_create',host,str(uuid.uuid4()),cases,'bot','999999')['error'] == 'funds'
+for expired in [False,True]:
+    before=rpc('cc_me',host)['balance']
+    bid=str(uuid.uuid4())
+    result=rpc('cc_cases_create',host,bid,cases,'private','123.45')
+    assert money(result['balance']) == money(before)-Decimal('123.45')
+    assert result['battle']['entries'] == [123.45,None]
+    if expired:
+        sql("update cc.case_battles set expires_at=clock_timestamp()-interval '1 second' where id="+quote(bid)+';')
+        assert rpc('cc_cases_list',host)['balance'] == before
+    else:
+        assert rpc('cc_cases_cancel',host,bid)['balance'] == before
+    assert rpc('cc_cases_cancel',host,bid)['balance'] == before
+for pulls,payouts in [([[5,0],[4,0],[3,0]],[146,0]), ([[0,5],[0,4],[0,3]],[0,146]), ([[0,0],[1,1],[2,2]],[125.75,20.25])]:
+    before=[money(rpc('cc_me',t)['balance']) for t in [host,join_token]]
+    bid=str(uuid.uuid4())
+    created=rpc('cc_cases_create',host,bid,cases,'private','125.75')
+    assert created['battle']['pot']==125.75
+    assert rpc('cc_cases_create',host,bid,cases,'private','1')['battle']['entry']==125.75
+    assert rpc('cc_cases_join',join_token,bid,'.001')['error']=='bad_bet'
+    assert rpc('cc_cases_join',join_token,bid,'999999')['error']=='funds'
+    joined=rpc('cc_cases_join',join_token,bid,'20.25')
+    assert joined['battle']['entries']==[125.75,20.25]
+    assert joined['battle']['entry']==20.25 and joined['battle']['pot']==146
+    assert rpc('cc_cases_join',join_token,bid,'900')['battle']['entries']==[125.75,20.25]
+    sql("update cc.case_battles set started_at=clock_timestamp()-interval '30 seconds',pulls="+quote(json.dumps(pulls))+"::jsonb where id="+quote(bid)+';')
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results=list(pool.map(lambda t:rpc('cc_cases_get',t,bid),[host,join_token,host,join_token]))
+    for side,token in enumerate([host,join_token]):
+        settled=rpc('cc_cases_get',token,bid)
+        assert settled['battle']['payout']==payouts[side]
+        assert settled['battle']['receipt']['a']==[125.75,20.25][side]
+        assert money(settled['balance'])==before[side]-money([125.75,20.25][side])+money(payouts[side])
+    assert sum(money(rpc('cc_me',t)['balance']) for t in [host,join_token])==sum(before)
+bid=str(uuid.uuid4())
+created=rpc('cc_cases_create',host,bid,cases,'bot','67.89')
+assert created['battle']['entries']==[67.89,67.89] and created['battle']['pot']==135.78
+sql("update cc.case_battles set started_at=clock_timestamp()-interval '30 seconds',pulls='[[5,0],[4,0],[3,0]]'::jsonb where id="+quote(bid)+';')
+assert rpc('cc_cases_get',host,bid)['battle']['payout']==135.78
+print('PostgreSQL custom wagers passed unequal stakes, decimal pots, both winners, exact tie refunds, bot matching, invalid/funds checks, retry immutability, custom cancellation and expiry.')
