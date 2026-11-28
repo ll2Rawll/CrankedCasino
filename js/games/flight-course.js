@@ -5,7 +5,7 @@
 // and the scoring window all come from whole-frame steps, so the browser renders between
 // frames instead of changing the physics.
 
-import { hash01 } from '../math.js?v=a65f52998e3f';
+import { hash01 } from '../math.js?v=88d999005677';
 
 export const FPS = 30;
 export const VIEW_W = 288;

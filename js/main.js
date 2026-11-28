@@ -1,15 +1,15 @@
 // App shell: header, cashier, drawer, theme, footer and the hash router.
 
-import { $, $$, esc, fmt, signed, storage } from './util.js?v=a65f52998e3f';
-import { icon } from './icons.js?v=a65f52998e3f';
-import { store, on } from './store.js?v=a65f52998e3f';
-import { engine, MODE } from './engine.js?v=a65f52998e3f';
-import { CONFIG } from './config.js?v=a65f52998e3f';
-import { sfx, unlockAudio, setSound, soundOn, music, musicOn, setMusic } from './sound.js?v=a65f52998e3f';
-import { countTo, floatFrom } from './fx.js?v=a65f52998e3f';
-import { toast, confirmDialog, promoTicket } from './ui.js?v=a65f52998e3f';
-import { openAccount, signOut } from './account.js?v=a65f52998e3f';
-import { adButton } from './ads.js?v=a65f52998e3f';
+import { $, $$, esc, fmt, signed, storage } from './util.js?v=88d999005677';
+import { icon } from './icons.js?v=88d999005677';
+import { store, on } from './store.js?v=88d999005677';
+import { engine, MODE } from './engine.js?v=88d999005677';
+import { CONFIG } from './config.js?v=88d999005677';
+import { sfx, unlockAudio, setSound, soundOn, music, musicOn, setMusic } from './sound.js?v=88d999005677';
+import { countTo, floatFrom } from './fx.js?v=88d999005677';
+import { toast, confirmDialog, promoTicket } from './ui.js?v=88d999005677';
+import { openAccount, signOut } from './account.js?v=88d999005677';
+import { adButton } from './ads.js?v=88d999005677';
 
 const app = $('#app');
 const root = document.documentElement;
@@ -206,6 +206,7 @@ const NAV = [
   ['mines', 'Mines', '♠'],
   ['rooster', 'Road Rooster', '♥'],
   ['flight', 'Night Flight', '♣'],
+  ['cases', 'Case Battles', '♦'],
   ['leaderboard', 'Leaderboard', '♛'],
   ['profile', 'Profile', '☺'],
 ];
@@ -326,7 +327,7 @@ $('#siteFoot').innerHTML = `
     <div class="foot-grid">
       <div class="foot-links">
         <a href="#/blackjack">Blackjack</a><a href="#/roulette">Roulette</a><a href="#/slots">Slots</a><a href="#/crash">Crash</a>
-        <a href="#/plinko">Plinko</a><a href="#/mines">Mines</a><a href="#/rooster">Road Rooster</a><a href="#/flight">Night Flight</a><a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
+        <a href="#/plinko">Plinko</a><a href="#/mines">Mines</a><a href="#/rooster">Road Rooster</a><a href="#/flight">Night Flight</a><a href="#/cases">Case Battles</a><a href="#/leaderboard">Leaderboard</a><a href="#/profile">Profile</a>
         <a href="${esc(CONFIG.repoUrl)}" target="_blank" rel="noopener">GitHub</a>
       </div>
       <p class="foot-note">CrankedCasino is a free game that uses fake chips with no cash value. Nothing can be bought, won or withdrawn. If real-money gambling ever stops being fun, talk to someone. <a href="https://www.begambleaware.org/" target="_blank" rel="noopener">BeGambleAware</a> can help.</p>
@@ -335,17 +336,18 @@ $('#siteFoot').innerHTML = `
 
 // ---------------------------------------------------------------- router
 const routes = {
-  '': () => import('./pages/lobby.js?v=a65f52998e3f'),
-  blackjack: () => import('./games/blackjack.js?v=a65f52998e3f'),
-  roulette: () => import('./games/roulette.js?v=a65f52998e3f'),
-  mines: () => import('./games/mines.js?v=a65f52998e3f'),
-  plinko: () => import('./games/plinko.js?v=a65f52998e3f'),
-  slots: () => import('./games/slots.js?v=a65f52998e3f'),
-  crash: () => import('./games/crash.js?v=a65f52998e3f'),
-  rooster: () => import('./games/rooster.js?v=a65f52998e3f'),
-  flight: () => import('./games/flight.js?v=a65f52998e3f'),
-  leaderboard: () => import('./pages/leaderboard.js?v=a65f52998e3f'),
-  profile: () => import('./pages/profile.js?v=a65f52998e3f'),
+  '': () => import('./pages/lobby.js?v=88d999005677'),
+  blackjack: () => import('./games/blackjack.js?v=88d999005677'),
+  roulette: () => import('./games/roulette.js?v=88d999005677'),
+  mines: () => import('./games/mines.js?v=88d999005677'),
+  plinko: () => import('./games/plinko.js?v=88d999005677'),
+  slots: () => import('./games/slots.js?v=88d999005677'),
+  crash: () => import('./games/crash.js?v=88d999005677'),
+  rooster: () => import('./games/rooster.js?v=88d999005677'),
+  flight: () => import('./games/flight.js?v=88d999005677'),
+  cases: () => import('./games/cases.js?v=88d999005677'),
+  leaderboard: () => import('./pages/leaderboard.js?v=88d999005677'),
+  profile: () => import('./pages/profile.js?v=88d999005677'),
 };
 // Background music: a mood per game, quiet in the lobby and on the other pages.
 const MOODS = { blackjack: 'lounge', roulette: 'lounge', mines: 'lounge', plinko: 'lounge', slots: 'lounge', crash: 'lounge', rooster: 'rooster', flight: 'night' };
@@ -467,7 +469,7 @@ async function boot() {
     } catch {
       /* ignore */
     }
-    if (!seen) setTimeout(() => !store.signedIn && !['rooster', 'flight'].includes(currentRoute()) && !document.querySelector('.modal-root') && openAccount(), 1400);
+    if (!seen) setTimeout(() => !store.signedIn && !['rooster', 'flight', 'cases'].includes(currentRoute()) && !document.querySelector('.modal-root') && openAccount(), 1400);
   }
   navigate();
 }

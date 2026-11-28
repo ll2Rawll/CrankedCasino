@@ -2,15 +2,15 @@
 // Multiplier after k gems with m mines = 0.99 × Π (25 − i) / (25 − m − i), i < k  (1% house edge)
 // The server hides the mines and checks every tile, so the board can't be peeked at.
 
-import { h, fmt, fmtMult, round2, signed, storage, esc } from '../util.js?v=a65f52998e3f';
-import { icon } from '../icons.js?v=a65f52998e3f';
-import { store } from '../store.js?v=a65f52998e3f';
-import { engine, errorText } from '../engine.js?v=a65f52998e3f';
-import { randInt } from '../rng.js?v=a65f52998e3f';
-import { minesMult as multiplier } from '../math.js?v=a65f52998e3f';
-import { sfx, haptic } from '../sound.js?v=a65f52998e3f';
-import { burstAt, shake, celebrate, PALETTES, floatFrom } from '../fx.js?v=a65f52998e3f';
-import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js?v=a65f52998e3f';
+import { h, fmt, fmtMult, round2, signed, storage, esc } from '../util.js?v=88d999005677';
+import { icon } from '../icons.js?v=88d999005677';
+import { store } from '../store.js?v=88d999005677';
+import { engine, errorText } from '../engine.js?v=88d999005677';
+import { randInt } from '../rng.js?v=88d999005677';
+import { minesMult as multiplier } from '../math.js?v=88d999005677';
+import { sfx, haptic } from '../sound.js?v=88d999005677';
+import { burstAt, shake, celebrate, PALETTES, floatFrom } from '../fx.js?v=88d999005677';
+import { gameFrame, betInput, tryBet, toast, serverRefused } from '../ui.js?v=88d999005677';
 
 const N = 25;
 export { multiplier };

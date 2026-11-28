@@ -1,0 +1,51 @@
+// Run with node tools/test-case-battles.mjs.
+import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
+const memory = new Map();
+globalThis.localStorage = { getItem: (key) => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value), removeItem: (key) => memory.delete(key) };
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+const { call } = await import('../js/engine-local.js');
+const { CASES, CASE_ITEMS, drawCase, casePayout, caseTotals } = await import('../js/games/cases-data.js');
+const signup = await call('cc_signup', { p_username: 'CaseTester', p_password: 'testing-cases-892' });
+assert.equal(signup.ok, true);
+const token = signup.token;
+const rpc = (name, args = {}) => call(name, { p_token: token, ...args });
+const id = crypto.randomUUID();
+const args = { p_request_id: id, p_cases: ['after-hours', 'neon-vault', 'high-roller'], p_visibility: 'bot' };
+assert.equal((await rpc('cc_cases_create', { ...args, p_cases: ['bad'] })).error, 'bad_cases');
+assert.equal((await rpc('cc_cases_create', { ...args, p_visibility: 'public' })).error, 'multiplayer_unavailable');
+const created = await rpc('cc_cases_create', args);
+assert.equal(created.balance, 950);
+assert.deepEqual(created.battle.pulls, [null, null, null]);
+assert.equal(created.battle.players[1].bot, true);
+assert.equal((await rpc('cc_cases_create', args)).balance, 950);
+assert.equal((await rpc('cc_cases_create', { ...args, p_request_id: crypto.randomUUID() })).error, 'battle_active');
+assert.equal((await rpc('cc_cases_cancel', { p_id: id })).error, 'battle_started');
+const db = JSON.parse(localStorage.getItem('cc:device:db'));
+const player = Object.values(db.players)[0];
+player.caseBattles[0].started = Date.now() - 20000;
+player.caseBattles[0].pulls = [[5,0],[4,0],[3,0]];
+localStorage.setItem('cc:device:db', JSON.stringify(db));
+const settled = await rpc('cc_cases_get', { p_id: id });
+assert.equal(settled.battle.state, 'complete');
+assert.equal(settled.battle.payout, 100);
+assert.equal(settled.balance, 1050);
+assert.deepEqual(settled.battle.totals, [395,24]);
+assert.equal((await rpc('cc_cases_get', { p_id: id })).balance, 1050);
+assert.equal((await rpc('cc_cases_create', args)).balance, 1050);
+assert.equal((await rpc('cc_me')).stats.games.cases.bets, 1);
+assert.equal((await rpc('cc_cases_list')).active, null);
+assert.equal(casePayout([24,24],0), 50);
+assert.equal(casePayout([24,32],0), 0);
+assert.deepEqual(caseTotals([[0,1],[1,0],[4,5]]), [142,252]);
+for (const type of CASES) {
+  assert.equal(type.weights.reduce((a,b)=>a+b,0),100);
+  let boundary = 0;
+  type.weights.forEach((weight,index) => {
+    assert.equal(drawCase(type.id, () => (boundary + .00001) / 100), index);
+    assert.equal(drawCase(type.id, () => (boundary + weight - .00001) / 100), index);
+    boundary += weight;
+  });
+}
+assert.equal(CASE_ITEMS.length,6);
+console.log('Case battles passed odds boundaries, hidden future pulls, balance reservation, retry safety, settlement, history and tie payout checks.');

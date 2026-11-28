@@ -8,6 +8,7 @@ A free fake-money casino with a neon "after hours" look. Every player picks a us
 
 | Game | What happens | Return to player |
 | --- | --- | --- |
+| **Case Battles** | Two players open the same three selected cases. Each entry costs 50 chips. The higher item score wins the 100-chip pot, and ties return both entries. Public rooms, invite-only rooms, bot battles, and free practice. | 100% of the combined player entries |
 | **Blackjack** | Six-deck shoe with a cut card. Hit, stand, double, split and insurance. The dealer stands on all 17s and blackjack pays 3:2. | ≈99.5% (basic strategy) |
 | **Roulette** | Single-zero European wheel with a rolling ball that lands in the winning pocket. Straight up 35:1, dozens and columns 2:1, even-money bets. | 97.3% |
 | **Slots** | Five reels, ten lines, wilds, and bonus stars that trigger free spins at ×2 (with retriggers). | ≈97.5% |
@@ -46,6 +47,18 @@ Until you do this, the site runs in **offline mode**: everything works, but acco
 Both values are meant to be public. All the tables sit in a private `cc` schema that the API can't reach; visitors can only call the `cc_*` functions, and those check the player's session on every call.
 
 Free Supabase projects pause after a week without any visits. If that happens, open the dashboard and press **Restore**.
+
+### Case Battles
+
+Open `#/cases` to choose three cases, inspect each item’s probability, and create a battle. After Hours, Neon Vault, and High Roller have different distributions. Item points determine the winner. The chip payout comes from the fixed 100-chip pot.
+
+With Supabase connected, public rooms appear in the lobby and private rooms are shared by invite link. The server reserves the entry, starts both players on one clock, hides future rounds, and records each payout once. A host can cancel an unjoined room for a refund. Waiting rooms expire after ten minutes, and their refunds are reconciled on the host’s next account or battle request. Started battles survive leaving the page and reloading.
+
+The full `supabase/schema.sql` includes the battle upgrade. Run the updated schema when connecting or updating the casino. `supabase/case-battles.sql` contains the standalone battle tables and RPC functions for deployments that already have the current account functions.
+
+In device mode, paid bot battles use the existing browser account and balance. Free practice needs no account and never changes chips or stats. Bots are labeled and draw from the same item probabilities.
+
+Validation uses `node tools/test-case-battles.mjs`, `node tools/test-case-battles-browser.mjs` with Playwright Core, and `python3 tools/test-case-battles-postgres.py CONTAINER_NAME` against a disposable PostgreSQL container loaded with the schema. `BROWSER=webkit` runs the browser suite with Safari’s engine.
 
 ### How it stops cheating
 

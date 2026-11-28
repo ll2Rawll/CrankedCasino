@@ -1,3 +1,4 @@
+import { caseApi } from './cases-local.js?v=88d999005677';
 // On-device casino server.
 //
 // Used only when js/config.js has no Supabase project. It answers the same calls as
@@ -5,10 +6,10 @@
 // accounts live in this browser's localStorage. Connect Supabase for accounts that
 // follow players to any browser and can't be reset by clearing site data.
 
-import { random, randInt, sample, weightedPick } from './rng.js?v=a65f52998e3f';
-import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=a65f52998e3f';
-import { scoreReplay } from './games/rooster-course.js?v=a65f52998e3f';
-import { flightReplay, FPS } from './games/flight-course.js?v=a65f52998e3f';
+import { random, randInt, sample, weightedPick } from './rng.js?v=88d999005677';
+import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=88d999005677';
+import { scoreReplay } from './games/rooster-course.js?v=88d999005677';
+import { flightReplay, FPS } from './games/flight-course.js?v=88d999005677';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const err = (error, extra = {}) => ({ ok: false, error, ...extra });
@@ -284,6 +285,7 @@ const blankPlayer = (username, salt, hash) => ({
 });
 
 function meOf(db, p) {
+  localCases.reconcile(p);
   const crash = crashResolve(p);
   if (p.rooster && Date.now() - p.rooster.started > 600000) roosterSettle(p, false, 0, 'abandoned');
   if (p.flight && Date.now() - p.flight.started > 600000) flightSettle(p, false, 0, 'abandoned');
@@ -703,10 +705,13 @@ function minesFinish(p, won) {
   return money(p, { ok: true, mult: Math.round(mult * 10000) / 10000, payout: pay, cells: [...r.cells], revealed: [...r.revealed], entry });
 }
 
+const localCases = caseApi({ move, record, money, err });
+Object.assign(API, localCases.api);
+
 const NO_AUTH = new Set(['cc_signup', 'cc_login', 'cc_logout', 'cc_leaderboard']);
 
 /** Same shape as a call to the real server: call('cc_plinko', { p_token, p_bet, ... }). */
-export async function call(fn, args = {}) {
+async function callLocked(fn, args = {}) {
   const impl = API[fn];
   if (!impl) return err('unknown_function');
   if (NO_AUTH.has(fn)) return impl(args);
@@ -717,4 +722,10 @@ export async function call(fn, args = {}) {
   const res = impl(args, db, p);
   writeDb(db);
   return res;
+}
+
+// Serialize device transactions across tabs, including asynchronous account writes.
+export function call(fn, args = {}) {
+  const run = () => callLocked(fn, args);
+  return globalThis.navigator?.locks ? navigator.locks.request(DB_KEY, run) : run();
 }

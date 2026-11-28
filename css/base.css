@@ -67,6 +67,7 @@
   --roulette: #ff4d6d;
   --rooster: #ff9f43;
   --flight: #ffb468;
+  --cases: #bc8bf3;
 
   --accent: var(--mint);
   --radius-sm: 12px;
@@ -587,7 +588,7 @@ kbd { font: inherit; font-weight: 750; padding: 1px 6px; border-radius: 6px; bor
 /* ---------- toasts ---------- */
 .toasts { position: fixed; z-index: 130; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; pointer-events: none; width: min(92vw, 430px); }
 .toast {
-  pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: 100%;
+  pointer-events: none; display: flex; align-items: center; gap: 12px; max-width: 100%;
   padding: 12px 18px 12px 14px; border-radius: 999px; font-weight: 650; font-size: 14px;
   background: var(--glass); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--line-2); box-shadow: var(--shadow-sm);

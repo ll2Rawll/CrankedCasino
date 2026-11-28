@@ -1,16 +1,17 @@
 // Lobby: neon marquee sign, searchlights, a hand of holographic game cards,
 // the cashier (stack, ad rewards, promo ticket), recent action, accounts, FAQ.
 
-import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=a65f52998e3f';
-import { icon } from '../icons.js?v=a65f52998e3f';
-import { store, on } from '../store.js?v=a65f52998e3f';
-import { engine, MODE } from '../engine.js?v=a65f52998e3f';
-import { sfx } from '../sound.js?v=a65f52998e3f';
-import { promoTicket } from '../ui.js?v=a65f52998e3f';
-import { openAccount } from '../account.js?v=a65f52998e3f';
-import { adButton, banner } from '../ads.js?v=a65f52998e3f';
+import { esc, fmt, fmtMult, signed, reducedMotion, timeAgo, clamp } from '../util.js?v=88d999005677';
+import { icon } from '../icons.js?v=88d999005677';
+import { store, on } from '../store.js?v=88d999005677';
+import { engine, MODE } from '../engine.js?v=88d999005677';
+import { sfx } from '../sound.js?v=88d999005677';
+import { promoTicket } from '../ui.js?v=88d999005677';
+import { openAccount } from '../account.js?v=88d999005677';
+import { adButton, banner } from '../ads.js?v=88d999005677';
 
 const GAMES = [
+  { id: 'cases', name: 'Case Battles', rank: 'A', suit: '♦', red: true, line: 'Open cases. Pull rare items. Take the pot.', tags: ['3 rounds', '100 chip pot'] },
   { id: 'blackjack', name: 'Blackjack', rank: 'A', suit: '♠', red: false, line: 'Beat the dealer to 21.', tags: ['Pays 3:2', 'Split · Double'] },
   { id: 'roulette', name: 'Roulette', rank: 'K', suit: '♥', red: true, line: 'Spin the wheel, call the number.', tags: ['35:1 straight', 'European'] },
   { id: 'slots', name: 'Slots', rank: 'Q', suit: '♦', red: true, line: 'Five reels, wilds and free spins.', tags: ['≈97.5% RTP', 'Free spins ×2'] },
@@ -21,7 +22,7 @@ const GAMES = [
   { id: 'rooster', name: 'Road Rooster', rank: '8', suit: '♦', red: true, line: 'Cross the river. Bet on the row you reach.', tags: ['Free score run', 'Bet runs up to 9×'] },
 ];
 
-const TICKER = ['New: Night Flight, tap to fly through the harbor', 'Road Rooster, reach row 200 for 9×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
+const TICKER = ['New: Case Battles, three cases and a 100-chip pot', 'New: Night Flight, tap to fly through the harbor', 'Road Rooster, reach row 200 for 9×', 'Blackjack pays 3 to 2', 'Roulette straight up 35 to 1', 'Crash up to 10,000×', 'Plinko up to 1,000×', 'Watch an ad, get +250 chips', 'Free spins at double pay', 'Got a promo code? Cash it in', 'One username, any browser'];
 
 const FAQ = [
   ['Is this real money?', 'No. Chips are pretend and have no cash value. You can’t buy them, win anything real, or withdraw. New players start with 1,000 chips.'],
@@ -53,7 +54,7 @@ export default {
             <h1 class="sign-neon neon" aria-label="Cranked Casino">${letters.map((c, i) => `<span class="nl" style="--n:${i}" aria-hidden="true">${c}</span>`).join('')}</h1>
             <div class="sign-casino gold-text" aria-hidden="true">CASINO</div>
           </div>
-          <p class="hero-sub">Eight games. Fake chips. Real adrenaline.<br>One username, and your stack follows you to any browser.</p>
+          <p class="hero-sub">Nine games. Fake chips. Real adrenaline.<br>One username, and your stack follows you to any browser.</p>
           <div class="hero-ctas">
             <button type="button" class="btn btn-primary btn-lg" data-cta="seat">${icon('cards')}<span>Take a seat</span></button>
             <button type="button" class="btn btn-ghost btn-lg" data-cta="promo">${icon('ticket')}<span>Redeem code</span></button>
@@ -322,7 +323,7 @@ export default {
         ? rows
             .map(
               (r) => `<li style="--c:var(--${esc(r.g)})">
-                <span class="rg"><i></i>${esc(r.g === 'rooster' ? 'road rooster' : r.g === 'flight' ? 'night flight' : r.g)}</span>
+                <span class="rg"><i></i>${esc(r.g === 'cases' ? 'case battles' : r.g === 'rooster' ? 'road rooster' : r.g === 'flight' ? 'night flight' : r.g)}</span>
                 <span class="rm ${r.m >= 1 ? 'win-text' : 'dim'}">${fmtMult(r.m)}</span>
                 <span class="rp ${r.p > r.a ? 'win-text' : 'dim'}">${r.p > r.a ? signed(r.p - r.a) : r.p === r.a ? 'push' : '−' + fmt(r.a - r.p)}</span>
                 <span class="rt dim">${timeAgo(r.t)}</span>

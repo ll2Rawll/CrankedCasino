@@ -6,14 +6,14 @@
 // Either way the chips come from the server (cc_ad_reward), which enforces the
 // cooldown and the daily cap, so the button can't be farmed.
 
-import { CONFIG } from './config.js?v=a65f52998e3f';
-import { h, esc, fmt, loadScript } from './util.js?v=a65f52998e3f';
-import { icon } from './icons.js?v=a65f52998e3f';
-import { store, on } from './store.js?v=a65f52998e3f';
-import { engine, errorText } from './engine.js?v=a65f52998e3f';
-import { sfx, setSound, soundOn } from './sound.js?v=a65f52998e3f';
-import { toast } from './ui.js?v=a65f52998e3f';
-import { needAccount } from './account.js?v=a65f52998e3f';
+import { CONFIG } from './config.js?v=88d999005677';
+import { h, esc, fmt, loadScript } from './util.js?v=88d999005677';
+import { icon } from './icons.js?v=88d999005677';
+import { store, on } from './store.js?v=88d999005677';
+import { engine, errorText } from './engine.js?v=88d999005677';
+import { sfx, setSound, soundOn } from './sound.js?v=88d999005677';
+import { toast } from './ui.js?v=88d999005677';
+import { needAccount } from './account.js?v=88d999005677';
 
 const A = CONFIG.ads || {};
 const CLIENT = String(A.adsenseClient || '').trim();
@@ -253,7 +253,7 @@ export async function watchAdForChips(fromEl) {
     }
     store.sync(r);
     sfx.jackpot();
-    const { coinRain, burstAt, PALETTES } = await import('./fx.js?v=a65f52998e3f');
+    const { coinRain, burstAt, PALETTES } = await import('./fx.js?v=88d999005677');
     coinRain(90);
     if (fromEl?.isConnected) burstAt(fromEl, { count: 70, colors: PALETTES.gold, speed: [4, 13] });
     toast(`+${fmt(r.chips).replace(/\.00$/, '')} chips. Thanks for watching!`, { type: 'win', iconName: 'coins', timeout: 3800 });
