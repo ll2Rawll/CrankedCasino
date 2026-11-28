@@ -7,7 +7,7 @@
 //
 // Calls run one at a time, in order, so balance updates always arrive in sequence.
 
-import { CONFIG } from './config.js?v=2ed58281572d';
+import { CONFIG } from './config.js?v=9d49cab85bc5';
 
 const url = String(CONFIG.supabaseUrl || '').trim().replace(/\/+$/, '');
 const key = String(CONFIG.supabaseKey || '').trim();
@@ -37,7 +37,7 @@ const emit = (type, data) => listeners.forEach((fn) => fn(type, data));
 let localApi = null;
 async function rpc(fn, args) {
   if (MODE === 'device') {
-    localApi ||= await import('./engine-local.js?v=2ed58281572d');
+    localApi ||= await import('./engine-local.js?v=9d49cab85bc5');
     return localApi.call(fn, args);
   }
   const headers = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };
@@ -156,6 +156,21 @@ export const engine = {
   roosterEnd: (moves, endMs) => call('cc_rooster_end', { p_moves: moves, p_end_ms: Math.round(endMs) }),
   flightStart: (bet, target) => call('cc_flight_start', { p_bet: bet, p_target: target }),
   flightEnd: (start, flaps, frames) => call('cc_flight_end', { p_start: start, p_flaps: flaps, p_frames: frames }),
+
+  // ---------------------------------------------------------------- multiplayer (server only)
+  // 1v1 challenges for 'rooster' and 'flight'; a run is {moves, end_ms} or {start, flaps, frames}.
+  duelList: (game) => call('cc_duel_list', { p_game: game }, { queue: false }),
+  duelGet: (id) => call('cc_duel_get', { p_id: id }, { queue: false }),
+  duelCreate: (game, bet) => call('cc_duel_create', { p_game: game, p_bet: bet }),
+  duelJoin: (id, bet) => call('cc_duel_join', { p_id: id, p_bet: bet }),
+  duelFinish: (id, run) => call('cc_duel_finish', { p_id: id, p_run: run }),
+  // Shared Blackjack tables.
+  bjmLobby: () => call('cc_bjm_lobby', {}, { queue: false }),
+  bjmJoin: (table = null) => call('cc_bjm_join', { p_table: table }),
+  bjmState: (table) => call('cc_bjm_state', { p_table: table }, { queue: false }),
+  bjmBet: (table, bet) => call('cc_bjm_bet', { p_table: table, p_bet: bet }),
+  bjmAct: (table, action) => call('cc_bjm_act', { p_table: table, p_action: action }),
+  bjmLeave: (table) => call('cc_bjm_leave', { p_table: table }),
 };
 
 /** Friendly text for the error codes the server sends back. */
@@ -189,6 +204,28 @@ export function errorText(r, fallback = 'Something went wrong. Try again.') {
       return 'Finish the round you already have going first.';
     case 'no_round':
       return 'That round already ended.';
+    case 'duel_missing':
+      return 'That challenge is no longer available.';
+    case 'duel_taken':
+      return 'Someone already took that challenge (or it expired).';
+    case 'duel_own':
+      return 'That’s your own challenge. Share the game so someone can accept it.';
+    case 'duel_limit':
+      return 'You already have five open challenges. Wait for one to be accepted.';
+    case 'table_missing':
+      return 'That table closed. Pick another one.';
+    case 'table_full':
+      return 'That table is full. Try another one.';
+    case 'tables_full':
+      return 'Every table is busy right now. Try again in a moment.';
+    case 'table_active':
+      return 'Finish your hand at your current table first.';
+    case 'not_seated':
+      return 'Take a seat at the table first.';
+    case 'not_your_turn':
+      return 'Hold on, it’s not your turn.';
+    case 'bad_action':
+      return 'That move isn’t available for this hand.';
     default:
       return fallback;
   }

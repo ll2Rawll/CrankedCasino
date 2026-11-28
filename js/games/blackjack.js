@@ -5,16 +5,17 @@
 // The server holds the shoe and the dealer's hole card and plays the dealer's hand;
 // this page deals out the events it sends back, card by card.
 
-import { h, fmt, round2, sleep, reducedMotion, esc } from '../util.js?v=2ed58281572d';
-import { icon } from '../icons.js?v=2ed58281572d';
-import { store, BetError } from '../store.js?v=2ed58281572d';
-import { engine, errorText } from '../engine.js?v=2ed58281572d';
-import { needAccount } from '../account.js?v=2ed58281572d';
-import { parseCard } from '../math.js?v=2ed58281572d';
-import { sfx, haptic } from '../sound.js?v=2ed58281572d';
-import { burstAt, coinRain, PALETTES, shake } from '../fx.js?v=2ed58281572d';
-import { gameFrame, betInput, toast, betError, serverRefused, chipClass, chipLabel } from '../ui.js?v=2ed58281572d';
-import { cardEl, reveal, setFace, handValue, isBlackjack } from './cards.js?v=2ed58281572d';
+import { h, fmt, round2, sleep, reducedMotion, esc, storage } from '../util.js?v=9d49cab85bc5';
+import { icon } from '../icons.js?v=9d49cab85bc5';
+import { store, BetError } from '../store.js?v=9d49cab85bc5';
+import { engine, errorText } from '../engine.js?v=9d49cab85bc5';
+import { needAccount } from '../account.js?v=9d49cab85bc5';
+import { parseCard } from '../math.js?v=9d49cab85bc5';
+import { sfx, haptic } from '../sound.js?v=9d49cab85bc5';
+import { burstAt, coinRain, PALETTES, shake } from '../fx.js?v=9d49cab85bc5';
+import { gameFrame, betInput, toast, betError, serverRefused, chipClass, chipLabel } from '../ui.js?v=9d49cab85bc5';
+import { cardEl, reveal, setFace, handValue, isBlackjack } from './cards.js?v=9d49cab85bc5';
+import { blackjackTable } from './blackjack-table.js?v=9d49cab85bc5';
 
 const HIDDEN = { r: 'A', s: 'spade' }; // placeholder face for the dealer's hole card (never shown)
 
@@ -24,6 +25,11 @@ const RULES = `
     <li>Get closer to 21 than the dealer without going over. Picture cards count 10, aces 1 or 11.</li>
     <li><strong>Hit</strong> for another card, <strong>Stand</strong> to stop, <strong>Double</strong> to double your bet for exactly one more card, <strong>Split</strong> a pair into two hands.</li>
     <li>Dealer draws to 16 and stands on all 17s. Blackjack pays <strong>3 to 2</strong>, insurance pays 2 to 1 when the dealer shows an ace.</li>
+  </ol>
+  <h3>Table (multiplayer)</h3><ol class="rules">
+    <li>Up to five players share a table and a shoe; each plays their own hand against the same dealer, with the same payouts.</li>
+    <li>Betting opens with the first bet and closes after 15 seconds, or as soon as everyone at the table is in.</li>
+    <li>Players act in seat order with 20 seconds per decision; a hand that runs out of time stands. Insurance isn’t offered at shared tables.</li>
   </ol>
   <p class="dim" style="margin-top:14px;font-size:14px">Six-deck shoe, reshuffled at the cut card. Shortcuts: <kbd>Space</kbd> deal · <kbd>H</kbd> hit · <kbd>S</kbd> stand · <kbd>D</kbd> double · <kbd>P</kbd> split.</p>`;
 
@@ -100,7 +106,31 @@ export default {
       </div>`);
     const playBtn = h(`<button type="button" class="btn btn-primary btn-play">${icon('cards')}<span>Deal</span></button>`);
     const insRow = h(`<div class="bj-ins" hidden><p>Dealer shows an ace. <strong>Insurance?</strong></p><div class="row2"><button type="button" class="btn btn-primary" data-ins="yes">Yes</button><button type="button" class="btn btn-outline" data-ins="no">No thanks</button></div></div>`);
-    controls.append(bet.el, playBtn, insRow, actions, h(`<p class="hint"><kbd>Space</kbd> deal · <kbd>H</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>P</kbd></p>`));
+    const soloHint = h(`<p class="hint"><kbd>Space</kbd> deal · <kbd>H</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>P</kbd></p>`);
+    controls.append(bet.el, playBtn, insRow, actions, soloHint);
+
+    // ---------------------------------------------------------- solo or a shared table
+    const shared = blackjackTable({ stage, controls, bet });
+    let tableMode = false;
+    const modePicker = h(`<fieldset class="rr-modes bj-modes"><legend class="sr-only">Blackjack mode</legend>
+      <label><input type="radio" name="bj-mode" value="solo" checked> Solo</label>
+      <label><input type="radio" name="bj-mode" value="table"> Table · multiplayer</label></fieldset>`);
+    frame.el.querySelector('.game-head').append(modePicker);
+    function setMode(next) {
+      if (next === tableMode) return;
+      if (next && (round || busy)) {
+        modePicker.querySelector('[value="solo"]').checked = true;
+        return toast('Finish this hand first.', { iconName: 'cards' });
+      }
+      tableMode = next;
+      storage.set('cc:blackjack:mode', next ? 'table' : 'solo');
+      modePicker.querySelector(`[value="${next ? 'table' : 'solo'}"]`).checked = true;
+      felt.hidden = next;
+      for (const el of [playBtn, insRow, actions, soloHint]) el.classList.toggle('bj-solo-off', next);
+      shared.show(next);
+      if (!next) setButtons();
+    }
+    modePicker.addEventListener('change', () => setMode(modePicker.querySelector(':checked').value === 'table'));
 
     const renderSpot = () => {
       spotStack.innerHTML = round ? '' : stackHTML(bet.value);
@@ -589,7 +619,7 @@ export default {
       if (b) insure(b.dataset.ins === 'yes');
     });
     const onKey = (e) => {
-      if (e.target.closest('input, select, textarea') || e.metaKey || e.ctrlKey) return;
+      if (tableMode || e.target.closest('input, select, textarea') || e.metaKey || e.ctrlKey) return;
       const k = e.key.toLowerCase();
       if (e.code === 'Space') {
         e.preventDefault();
@@ -604,6 +634,7 @@ export default {
     document.addEventListener('keydown', onKey);
     restore(store.takeRound('blackjack'));
     setButtons();
+    if (storage.get('cc:blackjack:mode', 'solo') === 'table' && !round) setMode(true);
 
     return () => {
       destroyed = true;
@@ -615,6 +646,7 @@ export default {
         toast('Your hand is saved. Come back to Blackjack to finish it.', { iconName: 'cards', timeout: 4200 });
       }
       document.querySelectorAll('.mchip.fly').forEach((c) => c.remove());
+      shared.destroy();
       frame.destroy();
     };
   },

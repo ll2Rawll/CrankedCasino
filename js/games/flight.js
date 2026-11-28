@@ -11,14 +11,15 @@
 
 import {
   flightCourse, FPS, VIEW_W, VIEW_H, FLOOR, BIRD_X, BIRD_W, BIRD_H, GATE_W, GAP, medalFor,
-} from './flight-course.js?v=2ed58281572d';
-import { icon } from '../icons.js?v=2ed58281572d';
-import { engine, errorText } from '../engine.js?v=2ed58281572d';
-import { store } from '../store.js?v=2ed58281572d';
-import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=2ed58281572d';
-import { NF_TARGETS, targetMult } from '../math.js?v=2ed58281572d';
-import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=2ed58281572d';
-import { storage, reducedMotion, fmt, fmtMult, round2 } from '../util.js?v=2ed58281572d';
+} from './flight-course.js?v=9d49cab85bc5';
+import { icon } from '../icons.js?v=9d49cab85bc5';
+import { engine, errorText } from '../engine.js?v=9d49cab85bc5';
+import { store } from '../store.js?v=9d49cab85bc5';
+import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=9d49cab85bc5';
+import { NF_TARGETS, targetMult } from '../math.js?v=9d49cab85bc5';
+import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=9d49cab85bc5';
+import { storage, reducedMotion, fmt, fmtMult, round2, esc } from '../util.js?v=9d49cab85bc5';
+import { duelPanel, duelOutcome } from './duels.js?v=9d49cab85bc5';
 
 const BEST = 'cc:flight:best';
 const STEP = 1000 / FPS;
@@ -101,12 +102,14 @@ export default {
     let resumeTo = 'flying';
     let course = flightCourse();
     // Betting: a free flight, or a bet on clearing a number of gates.
-    let mode = storage.get('cc:flight:mode', 'free') === 'bet' ? 'bet' : 'free';
+    let mode = ['bet', 'duel'].includes(storage.get('cc:flight:mode', 'free')) ? storage.get('cc:flight:mode', 'free') : 'free';
     let target = Number(storage.get('cc:flight:target', 10)) || 10;
     if (!targetMult(NF_TARGETS, target)) target = 10;
     let ticket = null; // the bet riding on this flight, until it settles
     let goal = null; // gates the bet flight in play must clear
     let settlement = null; // the server's answer for that flight
+    let duelRun = null; // { duel, ticket, role } while a 1v1 flight is in the air
+    let duelSettlement = null; // the challenge once that flight is in
     let busy = false;
     let destroyed = false;
     let winTimer = 0;
@@ -132,7 +135,7 @@ export default {
 
     // ---------------------------------------------------------- the bet panel
     const betBox = $('.nf-bet');
-    const modes = segmented([{ value: 'free', label: 'Free flight' }, { value: 'bet', label: 'Bet flight' }], mode, (v) => {
+    const modes = segmented([{ value: 'free', label: 'Free' }, { value: 'bet', label: 'Bet flight' }, { value: 'duel', label: '1v1' }], mode, (v) => {
       mode = v;
       storage.set('cc:flight:mode', v);
       show(phase);
@@ -148,7 +151,17 @@ export default {
     goalField.innerHTML = '<div class="field-label"><span>Gates to clear</span><span class="dim">clear them all to win</span></div>';
     goalField.append(goals.el);
     modes.el.classList.add('nf-modes');
-    betBox.append(modes.el, bet.el, goalField);
+    const duels = duelPanel({
+      game: 'flight', bet, unit: 'gates', label: 'fly',
+      canStart: () => !busy && (phase === 'title' || phase === 'over'),
+      onStart: (active) => {
+        duelRun = active;
+        ticket = null;
+        goal = null;
+        getReady(active.duel.seed);
+      },
+    });
+    betBox.append(modes.el, bet.el, goalField, duels.el);
     const winFor = (amount, gates) => round2(amount * targetMult(NF_TARGETS, gates));
     listen(bet.el, 'change', () => show(phase));
 
@@ -165,10 +178,14 @@ export default {
       score.hidden = !(phase === 'flying' || phase === 'falling' || phase === 'won');
       pause.hidden = phase !== 'flying';
       board.hidden = phase !== 'over';
-      const betting = mode === 'bet';
-      field.classList.toggle('is-betting', betting);
+      const betting = mode === 'bet', dueling = mode === 'duel';
+      field.classList.toggle('is-betting', betting || dueling);
+      field.classList.toggle('is-dueling', dueling);
       betBox.hidden = phase !== 'title';
-      for (const el of [bet.el, goalField]) el.hidden = !betting;
+      bet.el.hidden = !betting && !dueling;
+      goalField.hidden = !betting;
+      duels.show(dueling && phase === 'title');
+      startBtn.hidden = dueling && phase === 'title';
       modes.set(mode);
       goals.set(target);
       field.classList.toggle('is-playing', playing);
@@ -176,7 +193,7 @@ export default {
         record.hidden = false;
         record.lastElementChild.textContent = best;
         heading.innerHTML = 'Night<br><em>Flight</em>';
-        note.textContent = betting ? `Clear ${target} gates to win ${fmt(winFor(bet.value, target))}.` : 'Tap to flap. Slip through the harbor gates.';
+        note.textContent = dueling ? 'Same harbor, hidden scores: more gates wins 2× its own bet.' : betting ? `Clear ${target} gates to win ${fmt(winFor(bet.value, target))}.` : 'Tap to flap. Slip through the harbor gates.';
         startBtn.lastElementChild.textContent = betting ? `Bet ${fmt(bet.value)}` : 'Start flight';
         startBtn.disabled = busy;
       } else if (phase === 'paused') {
@@ -330,11 +347,13 @@ export default {
         goal = null;
       }
       settlement = null;
+      duelSettlement = null;
       course = flightCourse(seed ?? 1 + Math.floor(Math.random() * 2147483640));
       prev = { y: course.state.y, rot: 0, distance: 0 };
       score.firstElementChild.textContent = '0';
-      goalEl.hidden = !goal;
+      goalEl.hidden = !goal && !duelRun;
       if (goal) goalEl.textContent = `of ${goal} · win ${fmt(winFor(ticket.amount, goal))}`;
+      else if (duelRun) goalEl.textContent = `1v1 · ${fmt(duelRun.ticket.amount)}${duelRun.role === 'guest' ? ` vs ${duelRun.duel.host}` : ''}`;
       quiet = reducedMotion();
       unlockAudio();
       show('ready');
@@ -354,6 +373,7 @@ export default {
     function crash() {
       show('falling');
       if (ticket) settle();
+      else if (duelRun) settleDuel();
       sfx.smack?.();
       if (!quiet) {
         flash.classList.remove('on');
@@ -405,14 +425,36 @@ export default {
       });
       return settlement;
     }
+    /** A 1v1 flight is in: hand it to the challenge. */
+    function settleDuel() {
+      const active = duelRun;
+      duelRun = null;
+      const s = course.state;
+      duelSettlement = duels.finish(active, { start: s.start, flaps: s.flaps.slice(), frames: s.flown });
+    }
     function showBoard(total, isBest, won) {
       show('over');
       cancelAnimationFrame(raf);
-      board.querySelector('h2').textContent = won ? 'Cleared!' : 'Flight over';
-      const betting = !!settlement;
+      board.querySelector('h2').textContent = won ? 'Cleared!' : duelSettlement ? '1v1 flight' : 'Flight over';
+      const betting = !!settlement || !!duelSettlement;
       result.hidden = !betting;
       result.className = 'nf-result';
-      if (betting) {
+      if (duelSettlement) {
+        result.textContent = 'Sending your flight…';
+        duelSettlement.then((d) => {
+          if (destroyed || phase !== 'over') return;
+          if (!d) return void (result.textContent = 'Flight not counted');
+          const o = duelOutcome(d, 'gates');
+          if (o.kind === 'posted') result.innerHTML = `Challenge posted <small>${esc(o.line)}</small>`;
+          else {
+            result.classList.add(o.kind === 'loss' ? 'is-loss' : 'is-win');
+            result.innerHTML = `${o.kind === 'win' ? `+${fmt(o.pay)}` : o.kind === 'tie' ? `${fmt(o.stake)} back` : `−${fmt(o.stake)}`} <small>${esc(o.title)} · ${esc(o.line)}</small>`;
+            if (o.kind === 'win') sfx.win?.(2);
+          }
+          status.textContent += o.kind === 'posted' ? ' Challenge posted.' : ` ${o.title}.`;
+        });
+      }
+      if (settlement) {
         result.textContent = 'Settling…';
         settlement.then((r) => {
           if (destroyed || phase !== 'over') return;
@@ -428,8 +470,8 @@ export default {
           status.textContent += r ? (r.payout > 0 ? ` Won ${fmt(r.payout)}.` : ' Bet lost.') : '';
         });
       }
-      againBtn.lastElementChild.textContent = betting ? `Bet again · ${fmt(bet.value)}` : 'Fly again';
-      changeBtn.hidden = !betting;
+      againBtn.lastElementChild.textContent = duelSettlement ? 'Challenges' : betting ? `Bet again · ${fmt(bet.value)}` : 'Fly again';
+      changeBtn.hidden = !betting || !!duelSettlement;
       boardLobby.hidden = betting;
       const medal = medalFor(total);
       const medalEl = board.querySelector('[data-medal]');
@@ -475,6 +517,10 @@ export default {
     }
     /** Leaving (or reloading) mid-flight gives the bet up. */
     function forfeit() {
+      if (duelRun) {
+        settleDuel();
+        return;
+      }
       const t = ticket;
       if (!t) return;
       ticket = null;
@@ -499,14 +545,17 @@ export default {
       run();
     }
     function primary() {
-      if (phase === 'title' || phase === 'over') mode === 'bet' ? startBet() : getReady();
+      if (phase === 'title' || phase === 'over') {
+        if (mode === 'duel') return; // a challenge is posted or accepted from its buttons only
+        mode === 'bet' ? startBet() : getReady();
+      }
       else if (phase === 'paused') resume();
       else if (phase === 'ready') takeOff();
       else if (phase === 'flying') flap();
     }
 
-    listen(startBtn, 'click', () => (phase === 'paused' ? resume() : mode === 'bet' ? startBet() : getReady()));
-    listen(againBtn, 'click', () => (mode === 'bet' ? startBet() : getReady()));
+    listen(startBtn, 'click', () => (phase === 'paused' ? resume() : mode === 'bet' ? startBet() : mode === 'duel' ? undefined : getReady()));
+    listen(againBtn, 'click', () => (mode === 'duel' ? (clearInterval(countTimer), show('title')) : mode === 'bet' ? startBet() : getReady()));
     listen(changeBtn, 'click', () => {
       clearInterval(countTimer);
       show('title');
@@ -565,10 +614,11 @@ export default {
 
     return () => {
       destroyed = true;
-      if (ticket) {
+      if (ticket || duelRun) {
         forfeit();
-        toast('You left the harbor, so that bet flight is over.', { iconName: 'info' });
+        toast('You left the harbor, so that flight is over.', { iconName: 'info' });
       }
+      duels.destroy();
       clearTimeout(winTimer);
       clearTimeout(boardTimer);
       clearInterval(countTimer);

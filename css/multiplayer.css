@@ -1,0 +1,159 @@
+/* ==========================================================================
+   Multiplayer · 1v1 challenges (Road Rooster, Night Flight) and shared Blackjack tables
+   ========================================================================== */
+
+/* ---------- 1v1 challenge panel ---------- */
+.duels { display: grid; gap: 12px; }
+.duels[hidden] { display: none; }
+.duels-rule { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; font-size: 13px; line-height: 1.35; color: var(--text-2);
+  background: color-mix(in oklab, var(--accent) 9%, var(--panel)); border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line)); }
+.duels-rule b { flex: none; display: grid; place-items: center; height: 26px; padding: 0 9px; border-radius: 8px; background: var(--accent); color: #06140f; font-weight: 900; letter-spacing: 0.04em; }
+.duels-rule strong { color: var(--text); }
+.duels-post { width: 100%; height: 60px; border-radius: 18px; display: grid; place-content: center; gap: 1px; font-size: 18px; }
+.duels-post .sub { font-size: 12.5px; font-weight: 650; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.duels-hint { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-3); }
+.duels-block h4 { margin: 2px 0 8px; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
+.duels-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; display: inline-grid; place-items: center; background: var(--accent); color: #06140f; font-size: 11px; letter-spacing: 0; }
+.duels-count:empty { display: none; }
+.duels-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 320px; overflow: auto; overscroll-behavior: contain; }
+.duel-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); animation: duel-in 0.35s var(--ease-out) both; }
+.duel-avatar { width: 34px; height: 34px; flex: none; border-radius: 11px; display: grid; place-items: center; font-weight: 850; color: var(--text);
+  background: linear-gradient(140deg, color-mix(in oklab, var(--accent) 45%, var(--panel-2)), var(--panel-3)); }
+.duel-who { flex: 1; min-width: 0; display: grid; }
+.duel-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel-who small { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.duel-accept { flex: none; height: 46px; padding: 0 14px; border-radius: 12px; display: grid; place-content: center; line-height: 1.1; font-weight: 800; }
+.duel-accept small { font-size: 11px; font-weight: 650; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.duel-tag { flex: none; min-width: 50px; padding: 4px 8px; border-radius: 8px; text-align: center; font-size: 10.5px; font-weight: 900; letter-spacing: 0.1em; background: var(--panel-3); color: var(--text-2); }
+.duel-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.duel-row.is-win .duel-tag { background: var(--win); color: #fff; }
+.duel-row.is-loss .duel-tag { background: var(--loss); color: #fff; }
+.duel-row.is-wait .duel-tag { background: color-mix(in oklab, var(--gold) 75%, var(--panel)); color: #fff; }
+.duel-row.is-live .duel-tag { background: var(--accent); color: #06140f; }
+.duels-empty { padding: 14px; border-radius: 14px; border: 1px dashed var(--line-2); color: var(--text-3); font-size: 13px; text-align: center; }
+@keyframes duel-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* Night Flight's title screen sits over the night harbor. */
+/* The 1v1 title holds a list, so it starts at the top and scrolls instead of centring. */
+.nf.is-dueling[data-phase="title"] .nf-panel { align-items: flex-start; overflow-y: auto; overscroll-behavior: contain; pointer-events: auto;
+  padding-top: max(70px, calc(env(safe-area-inset-top) + 60px)); padding-bottom: 24px; background: linear-gradient(90deg, #10162be6 0, #171c34b8 45%, #171c3433 85%); }
+.nf.is-dueling[data-phase="title"] h1 { font-size: clamp(2.6rem, 7vw, 5.6rem); }
+.nf.is-dueling[data-phase="title"] .nf-bet { width: min(100%, 380px); }
+@media (max-width: 580px) { .nf.is-dueling[data-phase="title"] :is(.nf-record, .nf-note) { display: none; } }
+.nf .duels-rule, .nf .duel-row, .nf .duels-empty { background: #0d1326d9; border-color: #e9dcc04d; color: #f4e4ca; }
+.nf .duels-rule strong, .nf .duel-who b { color: #fff4d8; }
+.nf .duels-hint, .nf .duels-block h4, .nf .duel-who small, .nf .duel-text { color: #d8ccb6; }
+.nf .duel-tag { background: #ffffff1f; color: #f4e4ca; }
+.nf .duel-avatar { background: linear-gradient(140deg, #3d4f86, #1a2140); color: #fff4d8; }
+@media (max-height: 700px) { .nf .duels-hint { display: none; } }
+
+/* ---------- Blackjack: solo or a shared table ---------- */
+.bj-solo-off { display: none !important; }
+.bj-modes { margin-top: 10px; }
+.bj-modes label:has(:checked) { border-color: var(--gold); }
+
+.bjt-felt { min-height: 560px; padding: 16px 12px 30px; border-radius: 26px 26px 50% 50% / 26px 26px 12% 12%; }
+.bjt-felt[hidden] { display: none; }
+@media (min-width: 700px) { .bjt-felt { min-height: 600px; padding-inline: 26px; } }
+.bjt-head { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 78px 0 10px;
+  font-size: 11.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 228, 170, 0.78); }
+.bjt-shoe-info { font-variant-numeric: tabular-nums; color: rgba(255, 228, 170, 0.5); }
+.bjt-felt .bjt-shoe { top: 14px; right: 18px; }
+.bjt-dealer { position: relative; z-index: 2; display: grid; justify-items: center; gap: 8px; margin-top: 16px; min-height: 140px; }
+.bjt-dealer .pcard { --cw: clamp(46px, 12vw, 72px); }
+.bjt-dealer .bj-hand { min-height: calc(clamp(46px, 12vw, 72px) * 1.4); }
+.bjt-felt:not(.is-seated) .bjt-dealer, .bjt-felt:not(.is-seated) .bjt-shoe { display: none; }
+
+.bjt-banner { position: relative; z-index: 4; display: grid; place-items: center; min-height: 52px; pointer-events: none; }
+.bjt-banner span { font-family: var(--font-neon); font-size: clamp(24px, 6.4vw, 40px); line-height: 1; color: #fff; white-space: nowrap; --neon: #8fd8ff;
+  text-shadow: 0 0 2px #fff, 0 0 10px var(--neon), 0 0 26px var(--neon); animation: msg-in 0.5s var(--ease-spring) both; }
+.bjt-banner.is-you span { --neon: #ffc94d; }
+.bjt-banner.is-win span { --neon: #4dffc3; }
+.bjt-banner.is-loss span { --neon: #ff4d6d; }
+
+.bjt-clock { position: absolute; z-index: 5; left: 16px; top: 52px; width: 56px; height: 56px; display: grid; place-items: center; }
+.bjt-clock[hidden] { display: none; }
+.bjt-clock svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.bjt-clock circle { fill: rgba(6, 18, 14, 0.72); stroke: rgba(255, 255, 255, 0.14); stroke-width: 3.5; }
+.bjt-clock .bjt-arc { fill: none; stroke: #8fd8ff; stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: calc(100 - var(--left, 100)); transition: stroke-dashoffset 0.25s linear, stroke 0.3s; }
+.bjt-clock.is-you .bjt-arc { stroke: #ffc94d; }
+.bjt-clock.is-done .bjt-arc { stroke: rgba(255, 255, 255, 0.5); }
+.bjt-clock.is-late .bjt-arc { stroke: #ff4d6d; }
+.bjt-clock.is-late { animation: bjt-throb 0.5s ease-in-out infinite alternate; }
+.bjt-clock b { position: relative; font-weight: 850; font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; }
+@keyframes bjt-throb { to { transform: scale(1.08); } }
+
+.bjt-seats { position: relative; z-index: 3; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; align-items: end; margin-top: 4px; }
+.bjt-seats[hidden] { display: none; }
+.bjt-seat { position: relative; min-width: 0; display: grid; justify-items: center; align-content: end; gap: 6px; min-height: 176px; transition: opacity 0.3s; }
+.bjt-seat:nth-child(1), .bjt-seat:nth-child(5) { transform: translateY(-30px); }
+.bjt-seat:nth-child(2), .bjt-seat:nth-child(4) { transform: translateY(-9px); }
+.bjt-hands { display: flex; justify-content: center; align-items: flex-end; gap: 6px; min-height: 92px; }
+.bjt-hand { position: relative; display: grid; justify-items: center; gap: 5px; padding: 3px; border-radius: 12px; }
+.bjt-hand.is-active { background: rgba(255, 201, 77, 0.1); box-shadow: 0 0 0 2px rgba(255, 201, 77, 0.85); }
+.bjt-seat .bj-hand { min-height: 0; }
+.bjt-seat .pcard { --cw: clamp(30px, 8.6vw, 52px); }
+.bjt-seat .bj-hand .pcard { margin-top: calc(var(--k, 0) * 2px); }
+.bjt-total { min-width: 30px; height: 20px; padding: 0 7px; border-radius: 99px; display: inline-grid; place-items: center; order: -1;
+  font-weight: 800; font-size: 11.5px; font-variant-numeric: tabular-nums; color: #fff; background: rgba(6, 18, 14, 0.78); border: 1px solid rgba(255, 255, 255, 0.2); animation: badge-in 0.35s var(--ease-spring); }
+.bjt-total[hidden] { display: none; }
+.bjt-total.bust { background: #c8102e; border-color: #ff8a9c; }
+.bjt-total.bj { background: var(--gold-grad); color: #2a1203; border-color: #fff1c1; }
+.bjt-seat .bj-stamp { top: 44%; font-size: clamp(10px, 2.6vw, 14px); padding: 2px 7px; border-width: 2px; border-radius: 8px; }
+
+.bjt-plate { width: 100%; max-width: 128px; display: grid; justify-items: center; gap: 3px; padding: 7px 4px 6px; border-radius: 14px; background: rgba(6, 18, 14, 0.55); border: 1px solid rgba(255, 214, 120, 0.22); transition: box-shadow 0.3s, border-color 0.3s, background 0.3s; }
+.bjt-avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 12.5px; color: #2a1203; background: linear-gradient(140deg, #ffd88a, #a86a1a); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
+.bjt-who { display: grid; justify-items: center; min-width: 0; max-width: 100%; line-height: 1.2; }
+.bjt-who b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #f7ead0; }
+.bjt-who small { font-size: 10px; color: rgba(247, 234, 208, 0.72); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bjt-bet { min-height: 16px; display: grid; place-items: center; }
+.bjt-bet .stack { transform: scale(0.72); transform-origin: center; }
+.bjt-seat.is-empty .bjt-plate { background: transparent; border-style: dashed; opacity: 0.6; }
+.bjt-seat.is-empty .bjt-avatar { background: transparent; color: rgba(255, 214, 120, 0.7); border: 1.5px dashed rgba(255, 214, 120, 0.5); box-shadow: none; }
+.bjt-seat.is-me .bjt-plate { border-color: #ffd979; background: rgba(255, 201, 77, 0.14); }
+.bjt-seat.is-me .bjt-avatar { background: linear-gradient(140deg, #fff1c1, #ffc94d); }
+.bjt-seat.is-turn .bjt-plate { border-color: #ffc94d; box-shadow: 0 0 0 2px #ffc94d, 0 0 28px -4px #ffc94d; }
+.bjt-seat.is-away, .bjt-seat.is-out { opacity: 0.55; }
+
+.bjt-lobby { position: relative; z-index: 3; width: min(100%, 520px); margin: 22px auto 0; display: grid; gap: 14px; }
+.bjt-lobby[hidden] { display: none; }
+.bjt-lobby-head { display: grid; justify-items: center; gap: 8px; text-align: center; }
+.bjt-lobby-head b { font-family: var(--font-display); font-size: clamp(22px, 6vw, 30px); color: #fff4d8; }
+.bjt-lobby-head p { margin: 0; font-size: 14px; color: rgba(247, 234, 208, 0.82); }
+.bjt-quick { height: 50px; padding: 0 30px; border-radius: 16px; font-size: 16px; }
+.bjt-tables { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bjt-tables li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 16px; background: rgba(6, 18, 14, 0.6); border: 1px solid rgba(255, 214, 120, 0.22); animation: duel-in 0.35s var(--ease-out) both; }
+.bjt-tname { flex: 1; min-width: 0; display: grid; }
+.bjt-tname b { color: #fff4d8; }
+.bjt-tname small { color: rgba(247, 234, 208, 0.72); font-variant-numeric: tabular-nums; }
+.bjt-tnames { display: flex; padding-left: 6px; }
+.bjt-tnames i { width: 24px; height: 24px; margin-left: -6px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 900; font-size: 11px; color: #2a1203; background: linear-gradient(140deg, #ffd88a, #a86a1a); border: 2px solid #0a4433; }
+.bjt-tables .btn { height: 40px; padding: 0 16px; border-radius: 12px; color: #fff4d8; border-color: rgba(255, 214, 120, 0.5); }
+.bjt-none, .bjt-empty { padding: 18px; border-radius: 16px; border: 1px dashed rgba(255, 214, 120, 0.32); text-align: center; color: rgba(247, 234, 208, 0.78); }
+.bjt-empty { display: grid; justify-items: center; gap: 8px; margin-top: 30px; }
+.bjt-empty b { font-family: var(--font-display); font-size: 22px; color: #fff4d8; }
+.bjt-empty p { margin: 0; }
+
+.bjt-dock { position: relative; z-index: 6; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; min-height: 48px; margin: 0 0 6px; }
+.bjt-dock.is-off { visibility: hidden; }
+.bjt-dock button { height: 46px; min-width: 74px; padding: 0 16px; border-radius: 14px; border: 0; font-weight: 850; font-size: 15px; color: #2a1203; cursor: pointer;
+  background: var(--gold-grad); box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.7), inset 0 -2px 0 rgba(0, 0, 0, 0.2); animation: badge-in 0.3s var(--ease-spring) both; touch-action: manipulation; }
+.bjt-dock button[data-a="hit"] { background: linear-gradient(#6dffcf, #08a874); color: #04261b; }
+.bjt-dock button[data-a="stand"] { background: linear-gradient(#fff7e6, #e6d3ad); }
+.bjt-dock button:active { transform: translateY(1px) scale(0.98); }
+.bjt-dock .bjt-dock-bet { min-width: 170px; font-size: 16px; }
+
+.bjt-controls { display: grid; gap: 12px; }
+.bjt-controls .bjt-place { display: grid; place-content: center; gap: 1px; }
+.bjt-controls .bjt-place .sub { font-size: 12.5px; }
+.bjt-controls[hidden], .bjt-controls [hidden] { display: none; }
+.bjt-where { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.bjt-where span { display: grid; min-width: 0; }
+.bjt-where small { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; color: var(--text-3); }
+.bjt-where b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bjt-leave { height: 36px; padding: 0 14px; border-radius: 11px; flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .duel-row, .bjt-tables li, .bjt-banner span, .bjt-total { animation: none; }
+  .bjt-clock.is-late { animation: none; }
+}

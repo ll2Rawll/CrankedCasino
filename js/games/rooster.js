@@ -5,17 +5,18 @@
 // the server hands out the seed that lays out the course, replays the moves, and pays
 // bet × that target's multiplier if the rooster reached it.
 
-import { h, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=2ed58281572d';
-import { icon } from '../icons.js?v=2ed58281572d';
-import { store } from '../store.js?v=2ed58281572d';
-import { engine, errorText } from '../engine.js?v=2ed58281572d';
-import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=2ed58281572d';
-import { sfx, haptic } from '../sound.js?v=2ed58281572d';
-import { burst, PALETTES, coinRain } from '../fx.js?v=2ed58281572d';
-import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=2ed58281572d';
-import { scoreLane, onPlatform, chaseLine, LINE_GRACE, HOP_AIR } from './rooster-course.js?v=2ed58281572d';
-import { landscape } from './rooster-landscape.js?v=2ed58281572d';
-import { loadArt } from './rooster-art.js?v=2ed58281572d';
+import { h, esc, fmt, fmtMult, round2, storage, clamp, reducedMotion } from '../util.js?v=9d49cab85bc5';
+import { icon } from '../icons.js?v=9d49cab85bc5';
+import { store } from '../store.js?v=9d49cab85bc5';
+import { engine, errorText } from '../engine.js?v=9d49cab85bc5';
+import { RR, rrHit, rrFront, RR_TARGETS, targetMult } from '../math.js?v=9d49cab85bc5';
+import { sfx, haptic } from '../sound.js?v=9d49cab85bc5';
+import { burst, PALETTES, coinRain } from '../fx.js?v=9d49cab85bc5';
+import { gameFrame, betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=9d49cab85bc5';
+import { duelPanel, duelOutcome } from './duels.js?v=9d49cab85bc5';
+import { scoreLane, onPlatform, chaseLine, LINE_GRACE, HOP_AIR } from './rooster-course.js?v=9d49cab85bc5';
+import { landscape } from './rooster-landscape.js?v=9d49cab85bc5';
+import { loadArt } from './rooster-art.js?v=9d49cab85bc5';
 
 const HOP_MS = 110;
 // Keep the initial toe-off inside the occupied tile until a tap or swipe resolves.
@@ -36,6 +37,11 @@ const RULES = `
     <li>Reach the target row and you’re paid on the spot: ${RR_TARGETS.map(([g, m]) => `row ${g} pays ${m}×`).join(', ')}.</li>
     <li>Get hit, fall in the river or let the red line catch you before the target, and the bet is lost.</li>
   </ol>
+  <h3>1v1</h3><ol class="rules">
+    <li><strong>Post a challenge</strong> with any bet and play straight away. Your score (the furthest row you reach) stays hidden.</li>
+    <li>Anyone can <strong>accept</strong> it with their own bet and play the exact same road.</li>
+    <li>The higher score wins <strong>2× their own bet</strong>; the other player loses theirs. A tie refunds both. Nobody accepts within 24 hours: you get your bet back.</li>
+  </ol>
   <p class="dim" style="margin-top:14px;font-size:14px">A skill game: how far you get is up to you. The server lays out the course and replays every run before it pays.</p>`;
 
 export default {
@@ -45,9 +51,12 @@ export default {
     const { stage, controls } = frame;
     const modePicker = h(`<fieldset class="rr-modes"><legend class="sr-only">Road Rooster mode</legend>
       <label><input type="radio" name="rr-mode" value="score" checked> Score run</label>
-      <label><input type="radio" name="rr-mode" value="bet"> Bet run</label></fieldset>`);
+      <label><input type="radio" name="rr-mode" value="bet"> Bet run</label>
+      <label><input type="radio" name="rr-mode" value="duel"> 1v1</label></fieldset>`);
     frame.el.querySelector('.game-head').append(modePicker);
-    let free = true; // a free score run; false for a bet run
+    let free = true; // a free score run; false for a bet run or a 1v1
+    let duelMode = false; // the 1v1 tab
+    let duelRun = null; // { duel, ticket, role } while a 1v1 run is in play
     let target = Number(storage.get('cc:rooster:target', 25)) || 25;
     if (!targetMult(RR_TARGETS, target)) target = 25;
     let record = Number(storage.get('cc:rooster:score', 0)) || 0;
@@ -97,7 +106,18 @@ export default {
       <button type="button" data-m="1" aria-label="Back">${icon('arrowRight')}</button>
       <button type="button" data-m="3" aria-label="Right">${icon('arrowRight')}</button>
     </div>`);
-    controls.append(bet.el, goal, readout, playBtn, pad, h(`<p class="hint">Tap or <kbd>↑</kbd> hop · swipe or <kbd>←</kbd><kbd>→</kbd><kbd>↓</kbd> dodge · <kbd>C</kbd> bank a score run</p>`));
+    const duels = duelPanel({
+      game: 'rooster', bet, unit: 'rows', label: 'run',
+      canStart: () => phase === 'idle' || phase === 'over',
+      onStart: (active) => {
+        duelRun = active;
+        seed = active.duel.seed;
+        goalRow = null;
+        begin();
+      },
+    });
+    duels.el.hidden = true;
+    controls.append(bet.el, goal, readout, playBtn, duels.el, pad, h(`<p class="hint">Tap or <kbd>↑</kbd> hop · swipe or <kbd>←</kbd><kbd>→</kbd><kbd>↓</kbd> dodge · <kbd>C</kbd> bank a score run</p>`));
     const gameDialog = h(`<dialog class="rr-dialog" aria-label="Road Rooster game view">
       <div class="rr-toolbar"><button type="button" data-exit aria-label="Exit game view">Exit</button></div>
     </dialog>`);
@@ -228,11 +248,13 @@ export default {
       viewEl.classList.toggle('rr-bet-mode', !free);
       viewEl.classList.toggle('rr-live', ['countdown', 'run', 'ending'].includes(phase));
       modePicker.disabled = phase !== 'idle' && phase !== 'over';
-      for (const field of [bet.el, goal, readout]) field.hidden = free;
+      bet.el.hidden = free;
+      for (const field of [goal, readout]) field.hidden = free || duelMode;
       viewEl.classList.toggle('rr-result', phase === 'over');
       if (phase !== 'run') stopHold();
       const live = phase === 'run' || phase === 'countdown';
       const ready = phase === 'idle' || phase === 'over';
+      playBtn.hidden = duelMode && ready;
       playBtn.disabled = phase === 'starting' || phase === 'ending' || (live && (!free || best < 1));
       if (ready) {
         playBtn.className = 'btn btn-primary btn-play';
@@ -248,10 +270,14 @@ export default {
       } else if (free) {
         playBtn.className = best >= 1 ? 'btn btn-play is-cash' : 'btn btn-outline btn-play';
         playBtn.innerHTML = best >= 1 ? `<span>Bank score</span><span class="sub">${bankLabel()}</span>` : '<span>Hop to start scoring</span>';
+      } else if (duelRun) {
+        playBtn.className = 'btn btn-outline btn-play';
+        playBtn.innerHTML = `<span>Row ${best}</span><span class="sub">1v1 · ${duelRun.role === 'guest' ? `vs ${esc(duelRun.duel.host)}` : 'score hidden until accepted'}</span>`;
       } else {
         playBtn.className = 'btn btn-outline btn-play';
         playBtn.innerHTML = `<span>Row ${best} of ${goalRow}</span><span class="sub">Win ${fmt(winValue())}</span>`;
       }
+      duels.setBusy(!ready);
       bet.disable(!ready);
       goalPicker.disable(!ready);
       goalPicker.set(target);
@@ -260,7 +286,7 @@ export default {
       if (ready) {
         fab.hidden = false;
         fab.className = 'rr-fab';
-        fab.innerHTML = phase === 'over' && gameDialog.open ? 'Continue' : free ? (phase === 'over' ? 'Run again' : 'Start run') : `Bet <span>${fmt(bet.value)}</span>`;
+        fab.innerHTML = phase === 'over' && gameDialog.open ? 'Continue' : free ? (phase === 'over' ? 'Run again' : 'Start run') : duelMode ? `1v1 <span>${fmt(bet.value)}</span>` : `Bet <span>${fmt(bet.value)}</span>`;
       } else if (free && live && best >= 1) {
         fab.hidden = false;
         fab.classList.add('is-cash');
@@ -268,8 +294,8 @@ export default {
       } else fab.hidden = true;
     }
     function renderHud() {
-      scoreEl.textContent = free ? String(best) : `${best} / ${goalRow ?? target}`;
-      multEl.textContent = free ? `Best ${record}` : `Win ${fmt(winValue())}`;
+      scoreEl.textContent = free || duelMode ? String(best) : `${best} / ${goalRow ?? target}`;
+      multEl.textContent = free ? `Best ${record}` : duelMode ? `1v1 · ${fmt(duelRun?.ticket.amount ?? bet.value)}` : `Win ${fmt(winValue())}`;
       goalEl.textContent = String(target);
       valueEl.textContent = fmt(round2(bet.value * targetMult(RR_TARGETS, target)));
     }
@@ -281,6 +307,11 @@ export default {
     // ---------------------------------------------------------- run flow
     async function start() {
       if (phase !== 'idle' && phase !== 'over') return;
+      if (duelMode) {
+        // From the road itself (the FAB or a tap): post a challenge.
+        if (phase === 'over' && gameDialog.open) return leaveGameView();
+        return duels.start(null);
+      }
       if (free) {
         seed = 1 + Math.floor(Math.random() * 2147483640);
         goalRow = null;
@@ -302,6 +333,11 @@ export default {
         seed = r.seed;
         goalRow = r.target;
       }
+      begin();
+    }
+
+    /** Countdown, then go: the course is laid out by seed (and goalRow for a bet run). */
+    function begin() {
       resetRun();
       runT0 = performance.now() + COUNTDOWN_MS;
       phase = 'countdown';
@@ -340,7 +376,7 @@ export default {
         die(t, L.kind === 'river' ? 'river' : L.kind);
         return true;
       }
-      if (!free && best >= goalRow) {
+      if (!free && goalRow != null && best >= goalRow) {
         win(t);
         return true;
       }
@@ -523,6 +559,25 @@ export default {
         reveal(() => center(`${badge(cashout)}<strong>${cashout ? 'Score banked' : CAUSES[deathAt?.cause] || 'Run ended'}</strong><b>${points}</b><small>Best ${record} · reached row ${best}</small>`, cashout ? 'win' : 'lose'));
         return;
       }
+      if (duelRun) {
+        const active = duelRun;
+        duelRun = null;
+        const d = await duels.finish(active, { moves: moves.slice(), end_ms: endMs });
+        if (destroyed) return;
+        if (!d) return reveal(() => center(`${badge(false)}<strong>Not sent</strong><b>${best}</b><small>The challenge didn’t get your run. Check your challenges.</small>`, 'lose'));
+        const o = duelOutcome(d, 'rows');
+        reveal(() => {
+          if (o.kind === 'posted') center(`${badge(true)}<strong>${o.title}</strong><b>${o.mine} ${o.mine === 1 ? 'row' : 'rows'}</b><small>${esc(o.line)}</small>`, 'win');
+          else if (o.kind === 'win') {
+            center(`${badge(true)}<strong>${esc(o.title)}</strong><b>+${fmt(o.pay)}</b><small>${esc(o.line)}</small>`, 'win');
+            const { x, y } = chickScreen(performance.now());
+            const rc = canvas.getBoundingClientRect();
+            burst(rc.left + x, rc.top + y, { count: 70, colors: PALETTES.gold, speed: [4, 12], kind: 'coin' });
+            sfx.win(2);
+          } else center(`${badge(o.kind === 'tie')}<strong>${esc(o.title)}</strong><b>${o.kind === 'tie' ? fmt(o.stake) : `−${fmt(o.stake)}`}</b><small>${esc(o.line)}</small>`, o.kind === 'tie' ? 'win' : 'lose');
+        });
+        return;
+      }
       const t = ticket;
       const goalWas = goalRow;
       const r = await engine.roosterEnd(moves.slice(), endMs);
@@ -557,6 +612,12 @@ export default {
 
     /** Leaving mid-run (or reloading) gives the run up. */
     function forfeit() {
+      if (duelRun) {
+        const active = duelRun;
+        duelRun = null;
+        duels.finish(active, { moves: moves.slice(), end_ms: moves.length ? moves[moves.length - 1][0] + 100 : 0 });
+        return;
+      }
       const t = ticket;
       ticket = null;
       const endMs = moves.length ? moves[moves.length - 1][0] : 0;
@@ -930,11 +991,14 @@ export default {
     // For automated play-tests (everything here is already on screen).
     modePicker.addEventListener('change', () => {
       if (modePicker.disabled) return;
-      free = modePicker.querySelector(':checked').value === 'score';
+      const picked = modePicker.querySelector(':checked').value;
+      free = picked === 'score';
+      duelMode = picked === 'duel';
+      duels.show(duelMode);
       goalRow = null;
       phase = 'idle';
       resetRun();
-      center(`<b>Road Rooster</b><small>${free ? 'Cross lanes and bank your points' : 'Pick a bet and a row to reach'}</small>`, 'intro');
+      center(`<b>Road Rooster</b><small>${free ? 'Cross lanes and bank your points' : duelMode ? 'Post a challenge or accept one · same road, higher score wins' : 'Pick a bet and a row to reach'}</small>`, 'intro');
       renderControls();
       renderHud();
     });
@@ -958,10 +1022,11 @@ export default {
       cancelAnimationFrame(raf);
       ro.disconnect();
       document.removeEventListener('keydown', onKey);
-      if (ticket && (phase === 'run' || phase === 'countdown')) {
+      if ((ticket || duelRun) && (phase === 'run' || phase === 'countdown')) {
         forfeit();
         toast('You left the road, so that run is over.', { iconName: 'info' });
       }
+      duels.destroy();
       frame.destroy();
     };
   },

@@ -1,4 +1,4 @@
-import { caseApi } from './cases-local.js?v=2ed58281572d';
+import { caseApi } from './cases-local.js?v=9d49cab85bc5';
 // On-device casino server.
 //
 // Used only when js/config.js has no Supabase project. It answers the same calls as
@@ -6,10 +6,10 @@ import { caseApi } from './cases-local.js?v=2ed58281572d';
 // accounts live in this browser's localStorage. Connect Supabase for accounts that
 // follow players to any browser and can't be reset by clearing site data.
 
-import { random, randInt, sample, weightedPick } from './rng.js?v=2ed58281572d';
-import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=2ed58281572d';
-import { scoreReplay } from './games/rooster-course.js?v=2ed58281572d';
-import { flightReplay, FPS } from './games/flight-course.js?v=2ed58281572d';
+import { random, randInt, sample, weightedPick } from './rng.js?v=9d49cab85bc5';
+import { PLINKO, SLOT_WEIGHTS, SLOT_TOTAL_W, slotEvaluate, unflatGrid, ROULETTE_KEY, rouletteMult, colorOf, minesMult, CRASH_K, crashPoint, FS_MULT, RR_TARGETS, NF_TARGETS, targetMult } from './math.js?v=9d49cab85bc5';
+import { scoreReplay } from './games/rooster-course.js?v=9d49cab85bc5';
+import { flightReplay, FPS } from './games/flight-course.js?v=9d49cab85bc5';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const err = (error, extra = {}) => ({ ok: false, error, ...extra });

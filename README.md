@@ -62,6 +62,14 @@ Tap a round or the Mythic cases button to open the visual case picker, or shuffl
 
 With Supabase connected, public rooms appear in the lobby and private rooms are shared by invite link. The server reserves the entry, starts both players on one clock, hides future rounds, and records each payout once using the two persisted wagers. Custom bets survive reloads and ambiguous network retries; old 50-chip battles retain their original amounts. A host can cancel an unjoined room for a refund. Waiting rooms expire after ten minutes, and their refunds are reconciled on the host’s next account or battle request. Started battles survive leaving the page and reloading.
 
+## Multiplayer
+
+**1v1 challenges (Road Rooster, Night Flight).** Pick **1v1**, set any bet and post a challenge: you play straight away on a server-chosen course and your score stays hidden. Anyone can accept with their own bet and play the exact same course. The higher score wins **2× their own bet** (not the other player's), the other player loses theirs, and a tie refunds both. Road Rooster scores the furthest row reached; Night Flight scores gates cleared. The server replays every run exactly like bet runs, so a run can't claim more than it did. A run left unfinished for 30 minutes scores 0, a challenge nobody accepts within 24 hours is refunded, and a player can have five open challenges at a time. Results that land while you're away show up in **Your challenges** with a toast.
+
+**Shared Blackjack tables.** Switch Blackjack to **Table · multiplayer** and take a seat (Quick seat, or pick a table). Up to five players share a six-deck shoe and each plays their own hand against one dealer with the solo rules and payouts (blackjack 3:2, dealer stands on all 17s and peeks, double on two cards, one split). The first bet opens a 15-second betting window that closes early once everyone is in; players act in seat order with 20 seconds per decision, and a hand that runs out of time stands. Bet and move buttons also appear on the felt so phones never scroll mid-turn. Leaving before the deal returns your bet; leaving mid-hand lets it play out and pay as usual. Insurance isn't offered at shared tables.
+
+Both need the casino server: run the updated `supabase/schema.sql`, or `supabase/multiplayer.sql` on a casino that already has the current schema. Device mode shows a note instead.
+
 The full `supabase/schema.sql` includes the battle upgrade. Run the updated schema when connecting or updating the casino. `supabase/case-battles.sql` contains the standalone battle tables and RPC functions for deployments that already have the current account functions.
 
 In device mode, paid bot battles use the existing browser account and balance. Free practice needs no account and never changes chips or stats. Bots are labeled and draw from the same item probabilities.
