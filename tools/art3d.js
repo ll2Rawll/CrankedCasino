@@ -2,8 +2,8 @@
 // Objects: mines (gem), plinko (pegs + ball), slots (gold 7), crash (rocket),
 // blackjack (cards + chips), roulette (wheel), logo (chrome C).
 
-import * as THREE from '../vendor/three.module.min.js?v=9f4a3c573590';
-import { toCreasedNormals } from '../vendor/BufferGeometryUtils.js?v=9f4a3c573590';
+import * as THREE from '../vendor/three.module.min.js?v=a65f52998e3f';
+import { toCreasedNormals } from '../vendor/BufferGeometryUtils.js?v=a65f52998e3f';
 
 const easeOutBack = (t) => {
   const c1 = 1.5;

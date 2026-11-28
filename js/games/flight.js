@@ -11,14 +11,14 @@
 
 import {
   flightCourse, FPS, VIEW_W, VIEW_H, FLOOR, BIRD_X, BIRD_W, BIRD_H, GATE_W, GAP, medalFor,
-} from './flight-course.js?v=9f4a3c573590';
-import { icon } from '../icons.js?v=9f4a3c573590';
-import { engine, errorText } from '../engine.js?v=9f4a3c573590';
-import { store } from '../store.js?v=9f4a3c573590';
-import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=9f4a3c573590';
-import { NF_TARGETS, targetMult } from '../math.js?v=9f4a3c573590';
-import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=9f4a3c573590';
-import { storage, reducedMotion, fmt, fmtMult, round2 } from '../util.js?v=9f4a3c573590';
+} from './flight-course.js?v=a65f52998e3f';
+import { icon } from '../icons.js?v=a65f52998e3f';
+import { engine, errorText } from '../engine.js?v=a65f52998e3f';
+import { store } from '../store.js?v=a65f52998e3f';
+import { betInput, tryBet, toast, serverRefused, segmented } from '../ui.js?v=a65f52998e3f';
+import { NF_TARGETS, targetMult } from '../math.js?v=a65f52998e3f';
+import { soundOn, setSound, sfx, unlockAudio } from '../sound.js?v=a65f52998e3f';
+import { storage, reducedMotion, fmt, fmtMult, round2 } from '../util.js?v=a65f52998e3f';
 
 const BEST = 'cc:flight:best';
 const STEP = 1000 / FPS;

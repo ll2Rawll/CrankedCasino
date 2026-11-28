@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   flightCourse, flightReplay, FLOOR, START_Y, BIRD_X, BIRD_W, BIRD_FOOT, GATE_W, GAP, SPEED, VIEW_W, MASKS, WINGS, SHAFT_INSET,
-  gateSolid, birdHitsGate, medalFor,
+  gateSolid, birdHitsGate, medalFor, stepFor,
 } from '../js/games/flight-course.js';
 
 function seeded(seed) {
@@ -54,7 +54,7 @@ function provable(seed, gatesWanted) {
   random(); // the two opening gates used these
   const Y0 = -120;
   const YN = 420;
-  const V = 20; // vy from -9 to 10
+  const V = 21; // vy from -9 to 11
   let reach = new Uint8Array((YN - Y0) * V);
   reach[(START_Y - Y0) * V + 0] = 1; // y = 244, vy = -9 (the opening kick)
   const wings = [0, 1, 2, 1];
@@ -80,7 +80,10 @@ function provable(seed, gatesWanted) {
           }
           if (y + BIRD_FOOT >= FLOOR - 1) continue;
           if (gates.some((g) => hitAt(y, frame, g))) continue;
-          if (vy < 10 && !flapped) vy += 1;
+          if (!flapped) {
+            if (vy < 11) vy += 1;
+            if (vy > 0 && vy < 11 && t % 6 === 5) vy += 1;
+          }
           y += Math.min(vy, FLOOR - y - BIRD_FOOT);
           if (y !== Math.round(y)) continue; // only the quay clamp makes fractions; that's a crash next frame
           next[(y - Y0) * V + vy + 9] = 1;
@@ -93,8 +96,9 @@ function provable(seed, gatesWanted) {
     frame = wings[wing];
     const mid = BIRD_X + BIRD_W / 2;
     for (const g of gates) if (!g.passed && g.x + GATE_W / 2 <= mid) (g.passed = true), cleared++;
-    for (const g of gates) g.x -= SPEED;
-    if (gates.length > 0 && gates.length < 3 && gates[0].x > 0 && gates[0].x < 5) gates.push({ x: VIEW_W + 10, gapTop: 80 + Math.floor(random() * 142), passed: false });
+    const step = stepFor(cleared, t);
+    for (const g of gates) g.x -= step;
+    if (gates.length > 0 && gates.length < 3 && gates[0].x < 5 && gates[0].x + step >= 5) gates.push({ x: VIEW_W + 10, gapTop: 80 + Math.floor(random() * 142), passed: false });
     if (gates.length && gates[0].x < -GATE_W) gates.shift();
     reach = next;
     if (!any || cleared >= gatesWanted) break;
@@ -159,7 +163,7 @@ function provable(seed, gatesWanted) {
     f.tick();
     speeds.push(f.state.vy);
   }
-  assert.equal(Math.max(...speeds), 10, 'falls no faster than 10 px a frame');
+  assert.equal(Math.max(...speeds), 11, 'falls no faster than 11 px a frame');
   const g = run();
   g.launch();
   clear(g);
@@ -204,8 +208,12 @@ function provable(seed, gatesWanted) {
       lastSpawned = tail;
     }
   }
-  // Gates spawn at x = 298 when the leader is 1–4 px from the left edge, stepping 4 px a frame.
-  assert([...spacing].every((d) => d >= 144 && d <= 152), `gates are 144–152 px apart (${[...spacing]})`);
+  // Gates spawn at x = 298 when the leader crosses x = 5. At 4 px a frame that keeps them 144–152 px
+  // apart; once the harbor speeds up (from 10 gates) the odd 5-pixel frame widens that a little.
+  assert([...spacing].every((d) => d >= 136 && d <= 158), `gates are 136–158 px apart (${[...spacing]})`);
+  assert.deepEqual([0, 1, 7, 8].map((f) => stepFor(9, f)), [4, 4, 4, 4], 'no speed-up before 10 gates');
+  assert.deepEqual([0, 1, 8].map((f) => stepFor(10, f)), [5, 4, 5], 'from 10 gates, one extra pixel every 8th frame');
+  assert.equal(Array.from({ length: 30 }, (_, f) => stepFor(55, f)).reduce((a, b) => a + b) / 30, 4 + 1 / 3, 'from 50 gates, about 8% faster');
   assert(Math.min(...gaps) >= 80 && Math.max(...gaps) <= 221, 'gap tops stay within 80–221 px');
   assert(f.state.score >= 60, `the course keeps coming (${f.state.score} gates)`);
 }

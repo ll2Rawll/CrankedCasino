@@ -1394,7 +1394,7 @@ declare
   wing integer := 0; fr integer := 0; lp integer := 0; score integer := 0; nxt integer := 2;
   gx integer[]; gtop integer[]; gpass boolean[];
   fi integer := 1; nflaps integer := coalesce(array_length(flaps, 1), 0);
-  py float8; x0 integer; x1 integer; lo integer; hi integer; bits bigint; gm integer; n integer;
+  py float8; x0 integer; x1 integer; lo integer; hi integer; bits bigint; gm integer; n integer; lvl integer; step integer;
 begin
   gx := array[488, 632];
   gtop := array[80 + floor(cc.hash01(seed, 0, 7) * 142::float8)::integer, 80 + floor(cc.hash01(seed, 1, 7) * 142::float8)::integer];
@@ -1431,7 +1431,7 @@ begin
     -- a point when the bird's centre (x = 73) reaches a gate's centre
     for j in 1..n loop
       gm := gx[j] + 26;
-      if not gpass[j] and gm <= 73 and 73 < gm + 4 then
+      if not gpass[j] and gm <= 73 then
         gpass[j] := true;
         score := score + 1;
         if score >= goal then return jsonb_build_object('reached', true, 'crashed', false, 'score', score, 'frames', k + 1); end if;
@@ -1439,11 +1439,18 @@ begin
     end loop;
     if (lp + 1) % 3 = 0 then wing := (wing + 1) % 4; fr := wings[wing + 1]; end if;
     lp := (lp + 1) % 30;
-    if vy < 10 and not flapped then vy := vy + 1; end if;
+    if not flapped then
+      if vy < 11 then vy := vy + 1; end if;
+      -- falling, the bird gathers a little more speed: an extra nudge every sixth frame
+      if vy > 0 and vy < 11 and k % 6 = 5 then vy := vy + 1; end if;
+    end if;
     flapped := false;
     y := y + least(vy::float8, 404.48::float8 - y - 18::float8);
-    for j in 1..n loop gx[j] := gx[j] - 4; end loop;
-    if n > 0 and n < 3 and gx[1] > 0 and gx[1] < 5 then
+    -- the harbor speeds up gently with the score (flight-course.js stepFor)
+    lvl := least(5, score / 10);
+    step := 4 + case when lvl > 0 and k % (array[8, 6, 5, 4, 3])[lvl] = 0 then 1 else 0 end;
+    for j in 1..n loop gx[j] := gx[j] - step; end loop;
+    if n > 0 and n < 3 and gx[1] < 5 and gx[1] + step >= 5 then
       gx := gx || 298;
       gtop := gtop || (80 + floor(cc.hash01(seed, nxt, 7) * 142::float8)::integer);
       gpass := gpass || false;

@@ -5,7 +5,7 @@
 // and the scoring window all come from whole-frame steps, so the browser renders between
 // frames instead of changing the physics.
 
-import { hash01 } from '../math.js?v=9f4a3c573590';
+import { hash01 } from '../math.js?v=a65f52998e3f';
 
 export const FPS = 30;
 export const VIEW_W = 288;
@@ -24,7 +24,7 @@ export const SPACING = VIEW_W / 2; // the first two gates are half a screen apar
 
 const FLAP_V = -9;
 const GRAVITY = 1;
-const MAX_FALL = 10;
+const MAX_FALL = 11; // a touch faster than the classic 10: the fall builds a little more momentum
 const CEILING = -2 * BIRD_H; // flaps do nothing this far above the screen
 const ROT_FLAP = 45; // degrees, nose up (counter-clockwise)
 const ROT_STEP = 3;
@@ -35,6 +35,15 @@ const CRASH_MAX = 15;
 const CRASH_ROT = 7;
 const GAP_RANGE = Math.floor(FLOOR * 0.6 - GAP); // 142 possible gap heights
 const GAP_MIN = Math.floor(FLOOR * 0.2); // 80
+
+// The harbor speeds up very gently as the score climbs: from 10 gates, the gates slide one
+// extra pixel on every 8th frame (≈3% faster), then every 6th, 5th, 4th and, from 50, every
+// 3rd (≈8%). Positions stay whole pixels, so a replay of the flight lands on the same frames.
+const EXTRA_EVERY = [0, 8, 6, 5, 4, 3];
+export const stepFor = (score, frame) => {
+  const level = Math.min(5, Math.floor(score / 10));
+  return SPEED + (level && frame % EXTRA_EVERY[level] === 0 ? 1 : 0);
+};
 
 export const MEDALS = [
   [40, 'platinum'],
@@ -191,7 +200,7 @@ export function flightCourse(random = Math.random) {
     const mid = BIRD_X + BIRD_W / 2;
     for (const gate of state.gates) {
       const gateMid = gate.x + GATE_W / 2;
-      if (!gate.passed && gateMid <= mid && mid < gateMid + SPEED) {
+      if (!gate.passed && gateMid <= mid) {
         gate.passed = true;
         state.score++;
         events.push('point');
@@ -199,16 +208,23 @@ export function flightCourse(random = Math.random) {
     }
     nextWing(3);
     state.rot = Math.max(ROT_MIN, state.rot - ROT_STEP);
-    if (state.vy < MAX_FALL && !flapped) state.vy += GRAVITY;
+    if (!flapped) {
+      if (state.vy < MAX_FALL) state.vy += GRAVITY;
+      // Falling, the bird gathers a little more speed: an extra nudge every sixth frame.
+      if (state.vy > 0 && state.vy < MAX_FALL && frame % 6 === 5) state.vy += 1;
+    }
     if (flapped) {
       flapped = false;
       state.rot = ROT_FLAP;
     }
     state.y += Math.min(state.vy, FLOOR - state.y - BIRD_FOOT);
-    for (const gate of state.gates) gate.x -= SPEED;
-    if (state.gates.length > 0 && state.gates.length < 3 && state.gates[0].x > 0 && state.gates[0].x < 5) state.gates.push(makeGate(VIEW_W + 10));
+    const step = stepFor(state.score, frame);
+    for (const gate of state.gates) gate.x -= step;
+    // A new gate when the first one crosses x = 5 (the classic trigger, safe for 5-pixel frames).
+    const lead = state.gates[0];
+    if (state.gates.length > 0 && state.gates.length < 3 && lead.x < 5 && lead.x + step >= 5) state.gates.push(makeGate(VIEW_W + 10));
     if (state.gates.length && state.gates[0].x < -GATE_W) state.gates.shift();
-    state.distance += SPEED;
+    state.distance += step;
     return events;
   }
 
