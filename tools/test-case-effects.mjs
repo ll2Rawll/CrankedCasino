@@ -15,7 +15,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('https://effects.test/**', route => {
     const pathname = new URL(route.request().url()).pathname;
-    if (pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/cases.css"><link rel="stylesheet" href="/css/cases-lobby.css"><style>body{margin:12px;background:#0d090f}#app{max-width:960px;margin:auto}</style><main id="app"></main>' });
+    if (pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/cases.css"><link rel="stylesheet" href="/css/cases-lobby.css"><link rel="stylesheet" href="/css/cases-arena.css"><style>body{margin:12px;background:#0d090f}#app{max-width:960px;margin:auto}</style><main id="app"></main>' });
     return route.fulfill({ path: join(repo, pathname) });
   });
   if (!perf) await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
@@ -25,9 +25,9 @@ try {
     window.art = await import('/js/games/cases-scene.js');
     await art.warmCaseArt(mythic ? ['dragonheart','starfall','leviathan'] : ['after-hours']);
     // Observe only work after assets have been decoded.
-    window.longTasks = [];
+    window.longTasks = []; window.taskDetails = [];
     if (PerformanceObserver.supportedEntryTypes.includes('longtask')) {
-      new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => entry.duration))).observe({ type: 'longtask' });
+      new PerformanceObserver(list => {longTasks.push(...list.getEntries().map(entry => entry.duration));taskDetails.push(...list.getEntries().map(entry=>({at:Math.round(entry.startTime-window.runAt),duration:Math.round(entry.duration)})))}).observe({ type: 'longtask' });
     }
   }, mythic);
   if (perf && engine === chromium) {
@@ -52,7 +52,7 @@ try {
     await page.getByRole('button', { name: 'Battle again', exact: true }).waitFor({ timeout: 25000 });
     const stats = await page.evaluate(() => {
       const samples = frameTimes.slice(5).sort((a, b) => a - b);
-      return { frames: samples.length, medianMs: samples[Math.floor(samples.length * .5)], p95Ms: samples[Math.floor(samples.length * .95)], framesOver50ms: samples.filter(ms => ms > 50).length, longTasks: longTasks.length, maxLongTaskMs: Math.max(0, ...longTasks), canvases: document.querySelectorAll('canvas').length };
+      return { frames: samples.length, medianMs: samples[Math.floor(samples.length * .5)], p95Ms: samples[Math.floor(samples.length * .95)], framesOver50ms: samples.filter(ms => ms > 50).length, longTasks: longTasks.length, maxLongTaskMs: Math.max(0, ...longTasks), taskDetails, canvases: document.querySelectorAll('canvas').length };
     });
     console.log('4x CPU, 390px, DPR 2:', JSON.stringify(stats));
     assert.equal(stats.canvases, 0);

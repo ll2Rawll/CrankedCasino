@@ -1,6 +1,6 @@
 // Screen-wide particle layer (confetti, coins, sparks) + small DOM effects.
 
-import { reducedMotion, fmt } from './util.js?v=8bbe697797bd';
+import { reducedMotion, fmt } from './util.js?v=e109ecc3244d';
 
 const canvas = document.getElementById('fx');
 const ctx = canvas.getContext('2d');

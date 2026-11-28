@@ -1,7 +1,7 @@
 // Playing cards: SVG faces (ivory stock, real pip layouts, art-deco court cards),
 // lacquered backs, and a crypto-shuffled multi-deck shoe.
 
-import { randInt } from '../rng.js?v=8bbe697797bd';
+import { randInt } from '../rng.js?v=e109ecc3244d';
 
 export const SUITS = ['spade', 'heart', 'diamond', 'club'];
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];

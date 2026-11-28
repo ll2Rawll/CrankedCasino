@@ -11,7 +11,7 @@ try {
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://victory.test/**',route=>{
    const path=new URL(route.request().url()).pathname;
-   if(path==='/') return route.fulfill({contentType:'text/html',body:'<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/cases.css"><link rel="stylesheet" href="/css/cases-lobby.css"><main id="app"></main>'});
+   if(path==='/') return route.fulfill({contentType:'text/html',body:'<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/cases.css"><link rel="stylesheet" href="/css/cases-lobby.css"><link rel="stylesheet" href="/css/cases-arena.css"><main id="app"></main>'});
    return route.fulfill({path:join(repo,path)});
  });
  await page.clock.install({time:new Date('2026-01-01T00:00:00Z')});

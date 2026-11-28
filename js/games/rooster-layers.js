@@ -1,7 +1,7 @@
 // Raster caches for the stationary ground and cast shadows.
 // All destinations in this module are expressed in backing pixels.
-import { RR } from '../math.js?v=8bbe697797bd';
-import { plane } from './rooster-models.js?v=8bbe697797bd';
+import { RR } from '../math.js?v=e109ecc3244d';
+import { plane } from './rooster-models.js?v=e109ecc3244d';
 
 const grass = ['#98af49', '#94ab47', '#a0b451'];
 const asphalt = ['#505961', '#586269'];

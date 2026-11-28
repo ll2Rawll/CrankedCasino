@@ -1,12 +1,12 @@
-import { caseVictory } from './cases-victory.js?v=8bbe697797bd';
-import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem, caseEntries } from './cases-data.js?v=8bbe697797bd';
-import { random } from '../rng.js?v=8bbe697797bd';
-import { esc, reducedMotion, fmt } from '../util.js?v=8bbe697797bd';
-import { sfx, soundOn, setSound, haptic } from '../sound.js?v=8bbe697797bd';
+import { caseVictory } from './cases-victory.js?v=e109ecc3244d';
+import { CASE_ROUND_MS, caseById, drawCase, itemsForCase, caseItem, caseEntries } from './cases-data.js?v=e109ecc3244d';
+import { random } from '../rng.js?v=e109ecc3244d';
+import { esc, reducedMotion, fmt } from '../util.js?v=e109ecc3244d';
+import { sfx, soundOn, setSound, haptic } from '../sound.js?v=e109ecc3244d';
 
-import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=8bbe697797bd';
+import { caseCover, warmCasePreview, caseEffectMarkup } from './cases-showcase.js?v=e109ecc3244d';
 
-import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=8bbe697797bd';
+import { caseOpeningSound, itemRevealSound, previewItemSound } from './cases-audio.js?v=e109ecc3244d';
 
 const art = (name) => `assets/cases/${name}.webp?v=2`;
 const STOP = 25;
@@ -30,9 +30,11 @@ function playerMarkup(player, side, seat, entry) {
   const name = player?.name || 'Open seat';
   return `<article class="cb-player" data-player="${side}" aria-label="${esc(name)} openings">
     <div class="cb-player-head"><span class="cb-avatar">${esc(name[0])}</span><div class="cb-identity"><b>${esc(name)}</b><span class="cb-player-state">${player?.bot ? 'Bot' : side === seat ? 'You' : 'Opponent'}</span></div><span class="cb-total">0<span> points</span></span></div>
-    ${entry == null ? '' : `<div class="cb-player-wager">BET <strong>${fmt(entry)}</strong> chips</div>`}<div class="cb-window"><div class="cb-track" aria-hidden="true"></div><div class="cb-pointer" aria-hidden="true"></div><div class="cb-impact" aria-hidden="true"></div><div class="cb-particles" aria-hidden="true"></div><span class="cb-drop-badge" aria-hidden="true"></span><span class="cb-score-flight" aria-hidden="true"></span></div>
+    <div class="cb-player-wager"><span>${entry == null ? 'PRACTICE' : `BET <strong>${fmt(entry)}</strong> chips`}</span><span class="ca-seat">0${side + 1}</span></div><div class="cb-window">
+      <div class="ca-chamber" aria-hidden="true"><div class="ca-horizon"></div><svg class="ca-gate" viewBox="0 0 240 240" fill="none"><circle class="ca-gate-rim" cx="120" cy="120" r="108"/><circle class="ca-gate-ticks" cx="120" cy="120" r="101"/><g class="ca-gate-rotor"><path d="M37 67A98 98 0 0 1 203 67M203 173A98 98 0 0 1 37 173"/><path d="M59 43 67 53M181 43 173 53M59 197 67 187M181 197 173 187"/></g><path class="ca-gate-inner" d="M64 173A77 77 0 1 1 176 173"/></svg><div class="ca-speed">${Array.from({length:5},(_,i)=>`<i style="--streak:${i}"></i>`).join('')}</div><div class="ca-plinth"><i></i><b></b></div><div class="ca-lock"><i></i><i></i></div></div>
+      <div class="cb-track" aria-hidden="true"></div><div class="cb-pointer" aria-hidden="true"></div><div class="cb-impact" aria-hidden="true"></div><div class="cb-particles" aria-hidden="true"></div><span class="cb-drop-badge" aria-hidden="true"></span><span class="cb-score-flight" aria-hidden="true"></span></div>
     <div class="cb-result"><span class="cb-result-tier">NEXT PULL</span><strong class="cb-result-name">Opening soon</strong><span class="cb-result-value">—</span></div>
-    <div class="cb-history" aria-label="Collected items">${Array.from({ length: 3 }, (_, i) => `<button class="cb-past" type="button" disabled aria-label="Round ${i + 1} unopened">·</button>`).join('')}</div>
+    <div class="ca-collection-label"><span>COLLECTION</span><i></i></div><div class="cb-history" aria-label="Collected items">${Array.from({ length: 3 }, (_, i) => `<button class="cb-past" type="button" disabled aria-label="Round ${i + 1} unopened"><span class="ca-empty">0${i + 1}</span></button>`).join('')}</div>
   </article>`;
 }
 
@@ -40,11 +42,11 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   const root = document.createElement('section');
   root.id = 'case-openings';
   root.setAttribute('aria-label', 'Case battle');
-  root.innerHTML = `<header class="cb-header"><div><div class="cb-brand">CRANKED CASINO</div><h2>Case battle</h2></div><span class="cb-mode">${initial.practice ? 'Practice' : '1 vs 1'}</span></header>
+  root.innerHTML = `<header class="cb-header"><div><div class="cb-brand"><i aria-hidden="true"></i> CRANKED ORIGINALS</div><h2>Case battle<span class="ca-title-mark" aria-hidden="true"> / </span><small>THE REVEAL</small></h2></div><span class="cb-mode">${initial.practice ? 'Practice' : '1 vs 1'}</span></header>
     <div class="cb-case-stage"><div class="cb-case-copy"><span class="cb-caption"></span><strong class="cb-round-label">Getting ready</strong><div class="cb-rounds" aria-label="Three cases"><span></span><span></span><span></span></div></div>
     ${caseEffectMarkup()}<div class="cb-case-rays" aria-hidden="true"></div><div class="cb-case-halo" aria-hidden="true"></div><div class="cb-case-sparks" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i style="--spark:${i}"></i>`).join('')}</div><img class="cb-case-art" src="${caseCover(initial.cases[0])}" alt="Cranked item case"><span class="cb-case-art cb-case-film" aria-hidden="true"></span><div class="cb-case-status"></div></div>
     <div class="cb-duel"><div class="cb-duel-caption"><span class="cb-momentum" role="status">Three cases. One winner.</span><span class="cb-pot">${initial.practice ? 'FREE PRACTICE' : `${fmt(initial.pot ?? 100)} CHIP POT`}</span></div><div class="cb-balance" aria-hidden="true"><i></i><b></b></div></div>
-    <div class="cb-battle">${initial.players.map((player, i) => playerMarkup(player, i, initial.seat, initial.practice ? null : caseEntries(initial)[i])).join('')}</div>
+    <div class="cb-battle"><span class="ca-versus" aria-hidden="true">VS</span>${initial.players.map((player, i) => playerMarkup(player, i, initial.seat, initial.practice ? null : caseEntries(initial)[i])).join('')}</div>
     <div class="cb-finale" hidden><span class="cb-finale-crown" aria-hidden="true">♛</span><div><span class="cb-finale-kicker"></span><strong></strong><p></p></div><div class="cb-confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--n:${i};--drift:${(i % 5 - 2) * 32}px"></i>`).join('')}</div></div>
     <div class="cb-footer"><div class="cb-verdict" role="status">${initial.practice ? 'Practice · no chips wagered' : `${fmt(initial.pot ?? 100)} chip pot · highest score wins`}</div><div class="cb-actions"><button class="cb-sound" type="button" aria-pressed="${soundOn()}">Sound ${soundOn() ? 'on' : 'off'}</button><button class="cb-start" type="button">Back to battles</button></div></div>`;
   container.replaceChildren(root);
@@ -62,8 +64,10 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   const finale = root.querySelector('.cb-finale');
   let closeVictory = null;
   let battle = initial, serverTime = Date.now(), receivedAt = performance.now(), hasClock = false;
-  let round = -1, phaseName = '', cards = [], starts = [], ends = [], widths = [];
+  let round = -1, phaseName = '', cards = [], orbitRadii = [];
   const trackPositions = [];
+  const orbitCards = [[], []], orbitVisible = [new Set(), new Set()];
+  let orbitDirty = true, currentTravel = 0;
   let raf = 0, destroyed = false, complete = false, lastFrame = -1, lastTick = -1, lastCountdown = -1;
   let lastVisible = -1, shownTotals = [0, 0], countFrom = [0, 0], countTo = [0, 0], countAt = 0;
   let hadPull = false;
@@ -94,14 +98,50 @@ export function caseScene(container, initial, { onBack, onFinish }) {
 
   function measure() {
     tracks.forEach((track, side) => {
-      if (!track.firstElementChild) return;
-      // Use layout pixels. The app's entry animation temporarily scales the view.
-      const width = track.firstElementChild.offsetWidth;
-      widths[side] = width + 6;
-      const center = track.parentElement.clientWidth / 2 - width / 2;
-      starts[side] = center - 2 * widths[side];
-      ends[side] = center - STOP * widths[side];
+      // Layout size controls culling only. CSS centers the item immediately on resize.
+      const width = parseFloat(getComputedStyle(track).getPropertyValue('--orbit-item-width')) || 176;
+      orbitRadii[side] = Math.ceil(track.parentElement.clientWidth / (2 * (width + 6))) + 1;
     });
+    orbitDirty = true;
+    positionTracks(currentTravel, reducedMotion());
+  }
+
+  // Accelerate, sweep, then brake to an exact stop. Integrating the velocity keeps
+  // both joins smooth; the server-selected item always lands at STOP.
+  function openingTravel(p) {
+    if (p < .12) return 1.5625 * p * p / .24;
+    if (p < .55) return 1.5625 * (p - .06);
+    return 1.5625 * (.49 + .15 * (1 - ((1 - p) / .45) ** 3));
+  }
+  function projectOrbit(side, travel, reduce) {
+    const center = 2 + (STOP - 2) * travel;
+    const radius = orbitRadii[side];
+    const first = Math.max(0, Math.floor(center - radius)), last = Math.min(28, Math.ceil(center + radius));
+    const visible = orbitVisible[side];
+    for (const index of visible) {
+      if (index < first || index > last) { orbitCards[side][index].remove(); visible.delete(index); }
+    }
+    for (let index = first; index <= last; index++) {
+      const card = orbitCards[side][index];
+      if (!visible.has(index)) card.style.left = `calc(${index} * (var(--orbit-item-width) + 6px))`;
+      if (!visible.has(index)) { tracks[side].append(card); visible.add(index); }
+      const distance = reduce ? 0 : Math.max(-2.5, Math.min(2.5, (index - center) / 1.65));
+      const depth = Math.min(1, Math.abs(distance));
+      // Transform only the handful of visible items, with no per-frame layout reads.
+      card.style.transform = `perspective(650px) translateY(${(distance * distance * 17).toFixed(1)}px) rotateY(${(-distance * 32).toFixed(1)}deg) rotateZ(${(distance * 6).toFixed(1)}deg) scale(${(1 - depth * .32).toFixed(3)})${side === 1 ? ' scaleX(-1)' : ''}`;
+    }
+  }
+  function positionTracks(travel, reduce) {
+    tracks.forEach((track, side) => {
+      const position = (2 + (STOP - 2) * travel).toFixed(5);
+      if (trackPositions[side] !== position || orbitDirty) {
+        trackPositions[side] = position;
+        const offset = `calc(.5 * var(--orbit-item-width) + ${position} * (var(--orbit-item-width) + 6px))`;
+        track.style.transform = side === 1 ? `translate3d(${offset},0,0) scaleX(-1)` : `translate3d(calc(-1 * ${offset}),0,0)`;
+        projectOrbit(side, travel, reduce);
+      }
+    });
+    orbitDirty = false;
   }
 
   function prepare(index) {
@@ -111,6 +151,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     revealSprites = [];
     spriteFrame = -1;
     hadPull = false;
+    currentTravel = 0;
     cards = [];
     root.classList.remove('cb-opening', 'cb-unlocking');
     const type = caseById(battle.cases[index]);
@@ -128,11 +169,14 @@ export function caseScene(container, initial, { onBack, onFinish }) {
       player.querySelector('.cb-score-flight').textContent = '';
       const track = tracks[side];
       track.replaceChildren();
+      orbitVisible[side].clear();
+      orbitCards[side] = [];
       for (let i = 0; i < 29; i++) {
         // Presentation filler has no role in the actual item selection.
         const item = drawCase(battle.cases[index], random);
         const card = cardFor(item);
-        track.append(card);
+        // Keep distant filler detached. Only nearby items enter the render tree.
+        orbitCards[side].push(card);
         if (i === STOP) cards[side] = card;
       }
       player.querySelector('.cb-result-tier').textContent = type.name.toUpperCase();
@@ -150,7 +194,10 @@ export function caseScene(container, initial, { onBack, onFinish }) {
       const replacement = cardFor(battle.pulls[round][side]);
       card.replaceWith(replacement);
       cards[side] = replacement;
+      orbitCards[side][STOP] = replacement;
+      orbitVisible[side].delete(STOP);
     });
+    orbitDirty = true;
   }
 
   function setPhase(next, quiet) {
@@ -164,11 +211,11 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     }
     if (next === 'spin') {
       root.classList.add('cb-opening');
-      status.textContent = 'Opening reels';
+      status.textContent = 'In orbit';
       players.forEach((player) => { player.querySelector('.cb-result-name').textContent = 'Opening…'; });
     }
     if (next === 'land') {
-      status.textContent = 'Revealing items';
+      status.textContent = 'Pull locked';
       cards.forEach((card) => card.classList.add('cb-landed'));
       players.forEach((player) => player.classList.add('cb-hit'));
       if (!quiet) { sfx.reelStop(); haptic(14); }
@@ -222,7 +269,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
         slot.disabled = false;
         slot.style.setProperty('--item-color', item.color);
         slot.setAttribute('aria-label', `Inspect ${item.name}, ${item.value} points, round ${i + 1}`);
-        slot.innerHTML = `<img src="${art(item.id)}" alt=""><small>${item.value}</small>`;
+        slot.innerHTML = `<span class="ca-slot-number">0${i + 1}</span><img src="${art(item.id)}" alt=""><small>${item.value}</small>`;
       });
     });
     countFrom = [...shownTotals];
@@ -317,11 +364,8 @@ export function caseScene(container, initial, { onBack, onFinish }) {
     }
     let spin = Math.max(0, Math.min(1, (time - 800) / 3500));
     if (!hadPull) spin = Math.min(spin, .65);
-    const travel = reduce ? (spin === 1 ? 1 : 0) : 1 - (1 - spin) ** 3.2;
-    tracks.forEach((track, side) => {
-      const position = (starts[side] + (ends[side] - starts[side]) * travel).toFixed(2);
-      if (trackPositions[side] !== position) { trackPositions[side] = position; track.style.transform = `translate3d(${position}px,0,0)`; }
-    });
+    const travel = currentTravel = reduce ? (spin === 1 ? 1 : 0) : openingTravel(spin);
+    positionTracks(travel, reduce);
     const tickIndex = Math.floor(travel * (STOP - 2));
     if (tickIndex !== lastTick && spin > 0 && spin < 1) { lastTick = tickIndex; if (!quiet) sfx.tick(tickIndex); }
     history(hadPull && time >= 4750 ? index : index - 1);
@@ -337,7 +381,7 @@ export function caseScene(container, initial, { onBack, onFinish }) {
   }
   function wake() { if (!raf && !destroyed && !document.hidden) raf = requestAnimationFrame(tick); }
   const resize = new ResizeObserver(() => { measure(); wake(); });
-  resize.observe(root);
+  tracks.forEach(track => resize.observe(track.parentElement));
   document.addEventListener('visibilitychange', wake);
   root.addEventListener('click', (event) => {
     const slot = event.target.closest('.cb-past[data-item]');
